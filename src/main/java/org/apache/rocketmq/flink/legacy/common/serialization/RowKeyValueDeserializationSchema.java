@@ -219,14 +219,14 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
             case SKIP_SILENT:
                 skip = true;
                 break;
+            case EXCEPTION:
+                throw new RuntimeException(e);
             case CUT:
             case NULL:
             case PAD:
+            default:
                 row.setField(index, null);
                 break;
-            case EXCEPTION:
-                throw new RuntimeException(e);
-            default:
         }
 
         return skip;
@@ -238,13 +238,6 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
                         "Field missing exception, table column number: %d, data column number: %d, data field number: %d, data: [%s].",
                         columnSize, columnSize, data.length, StringUtils.join(data, ","));
         switch (fieldMissingStrategy) {
-            case SKIP:
-                long now = System.currentTimeMillis();
-                if (columnErrorDebug || now - lastLogHandleFieldTime > DEFAULT_LOG_INTERVAL_MS) {
-                    LOGGER.warn(fieldMissingMessage);
-                    lastLogHandleFieldTime = now;
-                }
-                return null;
             case EXCEPTION:
                 LOGGER.error(fieldMissingMessage);
                 throw new RuntimeException(fieldMissingMessage);
@@ -252,8 +245,15 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
             case CUT:
             case NULL:
             case PAD:
-            default:
                 return data;
+            case SKIP:
+            default:
+                long now = System.currentTimeMillis();
+                if (columnErrorDebug || now - lastLogHandleFieldTime > DEFAULT_LOG_INTERVAL_MS) {
+                    LOGGER.warn(fieldMissingMessage);
+                    lastLogHandleFieldTime = now;
+                }
+                return null;
         }
     }
 

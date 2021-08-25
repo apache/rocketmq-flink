@@ -57,7 +57,7 @@ public class RowDeserializationSchema
         implements DeserializationSchema<List<BytesMessage>, RowData> {
 
     private static final long serialVersionUID = -1L;
-    private static final Logger LOG = LoggerFactory.getLogger(RowDeserializationSchema.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(RowDeserializationSchema.class);
 
     private transient TableSchema tableSchema;
     private final DirtyDataStrategy formatErrorStrategy;
@@ -180,7 +180,7 @@ public class RowDeserializationSchema
                 collector.collect(rowData);
             } else {
                 if (message.getData() == null) {
-                    LOG.info("Deserialize empty BytesMessage body, ignore the empty message.");
+                    LOGGER.info("Deserialize empty BytesMessage body, ignore the empty message.");
                     return;
                 }
                 deserializeBytesMessage(message, collector);
@@ -287,7 +287,7 @@ public class RowDeserializationSchema
             case SKIP:
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogExceptionTime > DEFAULT_LOG_INTERVAL_MS) {
-                    LOG.warn(
+                    LOGGER.warn(
                             "Data format error, field type: "
                                     + fieldTypes[index]
                                     + "field data: "
@@ -323,7 +323,7 @@ public class RowDeserializationSchema
             case SKIP:
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogHandleFieldTime > DEFAULT_LOG_INTERVAL_MS) {
-                    LOG.warn(
+                    LOGGER.warn(
                             "Field missing error, table column number: "
                                     + totalColumnSize
                                     + ", data column number: "
@@ -363,7 +363,7 @@ public class RowDeserializationSchema
             case SKIP:
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogHandleFieldTime > DEFAULT_LOG_INTERVAL_MS) {
-                    LOG.warn(
+                    LOGGER.warn(
                             "Field increment error, table column number: "
                                     + totalColumnSize
                                     + ", data column number: "
