@@ -25,7 +25,6 @@ import org.apache.flink.streaming.api.watermark.Watermark;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** 取每条队列中的最大eventTime的最小值作为当前source的watermark */
 public class BoundedOutOfOrdernessGeneratorPerQueue
         implements AssignerWithPeriodicWatermarks<MessageExt> {
 

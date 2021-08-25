@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory;
 
 public class SimpleConsumer {
 
-    private static final Logger log = LoggerFactory.getLogger(SimpleConsumer.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SimpleConsumer.class);
 
     // Consumer config
     private static final String NAME_SERVER_ADDR =
@@ -44,9 +44,9 @@ public class SimpleConsumer {
     private static final String TAGS = "*";
 
     private static RPCHook getAclRPCHook() {
-        final String ACCESS_KEY = "${AccessKey}";
-        final String SECRET_KEY = "${SecretKey}";
-        return new AclClientRPCHook(new SessionCredentials(ACCESS_KEY, SECRET_KEY));
+        final String accessKey = "${AccessKey}";
+        final String secretKey = "${SecretKey}";
+        return new AclClientRPCHook(new SessionCredentials(accessKey, secretKey));
     }
 
     public static void main(String[] args) {
@@ -82,7 +82,7 @@ public class SimpleConsumer {
         try {
             consumer.start();
         } catch (MQClientException e) {
-            log.info("send message failed. {}", e.toString());
+            LOGGER.info("send message failed. {}", e.toString());
         }
     }
 }

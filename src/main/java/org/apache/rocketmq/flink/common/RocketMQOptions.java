@@ -80,7 +80,6 @@ public class RocketMQOptions {
 
     public static final ConfigOption<Long> OPTIONAL_WRITE_SLEEP_TIME_MS =
             ConfigOptions.key("sleepTimeMs").longType().defaultValue(5000L);
-
     public static final ConfigOption<Boolean> OPTIONAL_WRITE_IS_DYNAMIC_TAG =
             ConfigOptions.key("isDynamicTag").booleanType().defaultValue(false);
 

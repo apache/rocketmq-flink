@@ -162,7 +162,7 @@ public class RocketMQConfig {
         client.setHeartbeatBrokerInterval(
                 getInteger(props, BROKER_HEART_BEAT_INTERVAL, DEFAULT_BROKER_HEART_BEAT_INTERVAL));
         // When using aliyun products, you need to set up channels
-        client.setAccessChannel((getAccessChannel(props, ACCESS_CHANNEL, DEFAULT_ACCESS_CHANNEL)));
+        client.setAccessChannel(getAccessChannel(props, ACCESS_CHANNEL, DEFAULT_ACCESS_CHANNEL));
         client.setUnitName(props.getProperty(UNIT_NAME, null));
     }
 

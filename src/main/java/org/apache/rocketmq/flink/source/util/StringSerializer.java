@@ -36,7 +36,7 @@ import java.util.Set;
 public class StringSerializer {
 
     public static TimestampConverter timestampConverter = new TimestampConverter(3);
-    private static final Base64.Decoder decoder = Base64.getDecoder();
+    private static final Base64.Decoder DECODER = Base64.getDecoder();
 
     public static Object deserialize(
             String value,
@@ -60,7 +60,7 @@ public class StringSerializer {
                 if (isRGData) {
                     byte[] bytes = null;
                     try {
-                        bytes = decoder.decode(value);
+                        bytes = DECODER.decode(value);
                     } catch (Exception e) {
                         //
                     }

@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
 
 public class SimpleProducer {
 
-    private static final Logger log = LoggerFactory.getLogger(SimpleProducer.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SimpleProducer.class);
 
     private static final int MESSAGE_NUM = 10000;
 
@@ -44,9 +44,9 @@ public class SimpleProducer {
     private static final String KEY_PREFIX = "KEY";
 
     private static RPCHook getAclRPCHook() {
-        final String ACCESS_KEY = "${AccessKey}";
-        final String SECRET_KEY = "${SecretKey}";
-        return new AclClientRPCHook(new SessionCredentials(ACCESS_KEY, SECRET_KEY));
+        final String accessKey = "${AccessKey}";
+        final String secretKey = "${SecretKey}";
+        return new AclClientRPCHook(new SessionCredentials(accessKey, secretKey));
     }
 
     public static void main(String[] args) {
@@ -74,7 +74,7 @@ public class SimpleProducer {
                         sendResult.getMsgId(), sendResult.getMessageQueue().toString());
                 Thread.sleep(50);
             } catch (Exception e) {
-                log.info("send message failed. {}", e.toString());
+                LOGGER.info("send message failed. {}", e.toString());
             }
         }
     }

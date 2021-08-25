@@ -1,12 +1,13 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -56,7 +57,7 @@ public class RowDeserializationSchema
         implements DeserializationSchema<List<BytesMessage>, RowData> {
 
     private static final long serialVersionUID = -1L;
-    private static final Logger logger = LoggerFactory.getLogger(RowDeserializationSchema.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RowDeserializationSchema.class);
 
     private transient TableSchema tableSchema;
     private final DirtyDataStrategy formatErrorStrategy;
@@ -179,7 +180,7 @@ public class RowDeserializationSchema
                 collector.collect(rowData);
             } else {
                 if (message.getData() == null) {
-                    logger.info("Deserialize empty BytesMessage body, ignore the empty message.");
+                    LOG.info("Deserialize empty BytesMessage body, ignore the empty message.");
                     return;
                 }
                 deserializeBytesMessage(message, collector);
@@ -286,7 +287,7 @@ public class RowDeserializationSchema
             case SKIP:
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogExceptionTime > DEFAULT_LOG_INTERVAL_MS) {
-                    logger.warn(
+                    LOG.warn(
                             "Data format error, field type: "
                                     + fieldTypes[index]
                                     + "field data: "
@@ -304,7 +305,6 @@ public class RowDeserializationSchema
             case SKIP_SILENT:
                 skip = true;
                 break;
-            default:
             case CUT:
             case NULL:
             case PAD:
@@ -312,6 +312,7 @@ public class RowDeserializationSchema
                 break;
             case EXCEPTION:
                 throw new RuntimeException(e);
+            default:
         }
 
         return skip;
@@ -319,11 +320,10 @@ public class RowDeserializationSchema
 
     private String[] handleFieldMissing(String[] data) {
         switch (fieldMissingStrategy) {
-            default:
             case SKIP:
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogHandleFieldTime > DEFAULT_LOG_INTERVAL_MS) {
-                    logger.warn(
+                    LOG.warn(
                             "Field missing error, table column number: "
                                     + totalColumnSize
                                     + ", data column number: "
@@ -353,6 +353,8 @@ public class RowDeserializationSchema
                 }
             case EXCEPTION:
                 throw new RuntimeException();
+            default:
+                return null;
         }
     }
 
@@ -361,7 +363,7 @@ public class RowDeserializationSchema
             case SKIP:
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogHandleFieldTime > DEFAULT_LOG_INTERVAL_MS) {
-                    logger.warn(
+                    LOG.warn(
                             "Field increment error, table column number: "
                                     + totalColumnSize
                                     + ", data column number: "
@@ -374,9 +376,6 @@ public class RowDeserializationSchema
                     lastLogHandleFieldTime = now;
                 }
                 return null;
-            case SKIP_SILENT:
-                return null;
-            default:
             case CUT:
             case NULL:
             case PAD:
@@ -392,6 +391,8 @@ public class RowDeserializationSchema
                 }
             case EXCEPTION:
                 throw new RuntimeException();
+            default:
+                return null;
         }
     }
 

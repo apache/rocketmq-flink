@@ -130,11 +130,15 @@
         <module name="GenericWhitespace"/>
         <!--<module name="NoWhitespaceBefore"/>-->
         <!--<module name="NoWhitespaceAfter"/>-->
+        <!--
         <module name="WhitespaceAround">
             <property name="allowEmptyConstructors" value="true"/>
             <property name="allowEmptyMethods" value="true"/>
         </module>
-        <module name="Indentation"/>
+        -->
+       <!--Lambda indentation should be changed for later update -->
+       <!-- <module name="Indentation"/>-->
+
         <module name="MethodParamPad"/>
         <module name="ParenPad"/>
         <module name="TypecastParenPad"/>

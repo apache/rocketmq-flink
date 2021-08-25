@@ -49,7 +49,7 @@ import java.util.Map;
 public class RowKeyValueDeserializationSchema implements KeyValueDeserializationSchema<RowData> {
 
     private static final long serialVersionUID = -1L;
-    private static final Logger logger =
+    private static final Logger LOGGER =
             LoggerFactory.getLogger(RowKeyValueDeserializationSchema.class);
 
     private transient TableSchema tableSchema;
@@ -111,7 +111,7 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
             return rowData;
         } else {
             if (value == null) {
-                logger.info("Deserialize empty BytesMessage body, ignore the empty message.");
+                LOGGER.info("Deserialize empty BytesMessage body, ignore the empty message.");
                 return null;
             }
             return deserializeValue(value);
@@ -201,7 +201,7 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
             case SKIP:
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogExceptionTime > DEFAULT_LOG_INTERVAL_MS) {
-                    logger.warn(
+                    LOGGER.warn(
                             "Data format error, field type: "
                                     + fieldTypes[index]
                                     + "field data: "
@@ -219,7 +219,6 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
             case SKIP_SILENT:
                 skip = true;
                 break;
-            default:
             case CUT:
             case NULL:
             case PAD:
@@ -227,6 +226,7 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
                 break;
             case EXCEPTION:
                 throw new RuntimeException(e);
+            default:
         }
 
         return skip;
@@ -238,23 +238,22 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
                         "Field missing exception, table column number: %d, data column number: %d, data field number: %d, data: [%s].",
                         columnSize, columnSize, data.length, StringUtils.join(data, ","));
         switch (fieldMissingStrategy) {
-            default:
             case SKIP:
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogHandleFieldTime > DEFAULT_LOG_INTERVAL_MS) {
-                    logger.warn(fieldMissingMessage);
+                    LOGGER.warn(fieldMissingMessage);
                     lastLogHandleFieldTime = now;
                 }
                 return null;
+            case EXCEPTION:
+                LOGGER.error(fieldMissingMessage);
+                throw new RuntimeException(fieldMissingMessage);
             case SKIP_SILENT:
-                return null;
             case CUT:
             case NULL:
             case PAD:
+            default:
                 return data;
-            case EXCEPTION:
-                logger.error(fieldMissingMessage);
-                throw new RuntimeException(fieldMissingMessage);
         }
     }
 
@@ -267,20 +266,20 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
             case SKIP:
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogHandleFieldTime > DEFAULT_LOG_INTERVAL_MS) {
-                    logger.warn(fieldIncrementMessage);
+                    LOGGER.warn(fieldIncrementMessage);
                     lastLogHandleFieldTime = now;
                 }
                 return null;
             case SKIP_SILENT:
                 return null;
-            default:
+            case EXCEPTION:
+                LOGGER.error(fieldIncrementMessage);
+                throw new RuntimeException(fieldIncrementMessage);
             case CUT:
             case NULL:
             case PAD:
+            default:
                 return data;
-            case EXCEPTION:
-                logger.error(fieldIncrementMessage);
-                throw new RuntimeException(fieldIncrementMessage);
         }
     }
 

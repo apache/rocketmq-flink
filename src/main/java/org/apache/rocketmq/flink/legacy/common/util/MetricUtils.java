@@ -32,7 +32,7 @@ public class MetricUtils {
     private static final String METRICS_SINK_IN_TPS = "inTps";
     private static final String METRICS_SINK_OUT_TPS = "outTps";
     private static final String METRICS_SINK_OUT_BPS = "outBps";
-    private static final String METRICS_SINK_OUT_Latency = "outLatency";
+    private static final String METRICS_SINK_OUT_LATENCY = "outLatency";
 
     public static Meter registerSinkInTps(RuntimeContext context) {
         Counter parserCounter =
@@ -67,7 +67,7 @@ public class MetricUtils {
     public static LatencyGauge registerOutLatency(RuntimeContext context) {
         return context.getMetricGroup()
                 .addGroup(METRIC_GROUP_SINK)
-                .gauge(METRICS_SINK_OUT_Latency, new LatencyGauge());
+                .gauge(METRICS_SINK_OUT_LATENCY, new LatencyGauge());
     }
 
     public static class LatencyGauge implements Gauge<Double> {
