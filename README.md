@@ -1,4 +1,8 @@
-# RocketMQ-Flink
+# RocketMQ-Flink[![Build Status](https://app.travis-ci.com/apache/rocketmq-flink.svg?branch=main)](https://app.travis-ci.com/apache/rocketmq-flink)[![Coverage Status](https://coveralls.io/repos/github/apache/rocketmq-flink/badge.svg?branch=master)](https://coveralls.io/github/apache/rocketmq-flink?branch=master)
+[![License](https://img.shields.io/badge/license-Apache%202-4EB1BA.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)
+[![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/apache/rocketmq-flink.svg)](http://isitmaintained.com/project/apache/rocketmq-flink "Average time to resolve an issue")
+[![Percentage of issues still open](http://isitmaintained.com/badge/open/apache/rocketmq-flink.svg)](http://isitmaintained.com/project/apache/rocketmq-flink "Percentage of issues still open")
+[![Twitter Follow](https://img.shields.io/twitter/follow/ApacheRocketMQ?style=social)](https://twitter.com/intent/follow?screen_name=ApacheRocketMQ)
 
 RocketMQ integration for [Apache Flink](https://flink.apache.org/). This module includes the RocketMQ source and sink that allows a flink job to either write messages into a topic or read from topics in a flink job.
 
