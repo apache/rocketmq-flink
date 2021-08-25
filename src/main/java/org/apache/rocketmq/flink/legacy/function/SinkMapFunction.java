@@ -17,11 +17,13 @@
 
 package org.apache.rocketmq.flink.legacy.function;
 
-import org.apache.commons.lang.Validate;
+import org.apache.rocketmq.common.message.Message;
+
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.util.Collector;
-import org.apache.rocketmq.common.message.Message;
+
+import org.apache.commons.lang.Validate;
 
 public class SinkMapFunction extends ProcessFunction<Tuple2<String, String>, Message> {
 
@@ -29,8 +31,7 @@ public class SinkMapFunction extends ProcessFunction<Tuple2<String, String>, Mes
 
     private String tag;
 
-    public SinkMapFunction() {
-    }
+    public SinkMapFunction() {}
 
     public SinkMapFunction(String topic, String tag) {
         this.topic = topic;
@@ -39,7 +40,7 @@ public class SinkMapFunction extends ProcessFunction<Tuple2<String, String>, Mes
 
     @Override
     public void processElement(Tuple2<String, String> tuple, Context ctx, Collector<Message> out)
-        throws Exception {
+            throws Exception {
         Validate.notNull(topic, "the message topic is null");
         Validate.notNull(tuple.f1.getBytes(), "the message body is null");
 

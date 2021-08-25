@@ -17,9 +17,10 @@
 
 package org.apache.rocketmq.flink.legacy.common.watermark;
 
+import org.apache.rocketmq.common.message.MessageExt;
+
 import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
 import org.apache.flink.streaming.api.watermark.Watermark;
-import org.apache.rocketmq.common.message.MessageExt;
 
 public class BoundedOutOfOrdernessGenerator implements AssignerWithPeriodicWatermarks<MessageExt> {
 
@@ -27,8 +28,7 @@ public class BoundedOutOfOrdernessGenerator implements AssignerWithPeriodicWater
 
     private long currentMaxTimestamp;
 
-    public BoundedOutOfOrdernessGenerator() {
-    }
+    public BoundedOutOfOrdernessGenerator() {}
 
     public BoundedOutOfOrdernessGenerator(long maxOutOfOrderness) {
         this.maxOutOfOrderness = maxOutOfOrderness;
@@ -50,10 +50,10 @@ public class BoundedOutOfOrdernessGenerator implements AssignerWithPeriodicWater
     @Override
     public String toString() {
         return "BoundedOutOfOrdernessGenerator{"
-            + "maxOutOfOrderness="
-            + maxOutOfOrderness
-            + ", currentMaxTimestamp="
-            + currentMaxTimestamp
-            + '}';
+                + "maxOutOfOrderness="
+                + maxOutOfOrderness
+                + ", currentMaxTimestamp="
+                + currentMaxTimestamp
+                + '}';
     }
 }

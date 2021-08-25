@@ -18,11 +18,6 @@
 
 package org.apache.rocketmq.flink.sink.table;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.TableSchema;
@@ -33,6 +28,12 @@ import org.apache.flink.table.factories.DynamicTableSinkFactory;
 import org.apache.flink.table.factories.Factory;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.utils.TableSchemaUtils;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.table.factories.FactoryUtil.createTableFactoryHelper;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.NAME_SERVER_ADDRESS;
@@ -50,7 +51,8 @@ import static org.apache.rocketmq.flink.common.RocketMQOptions.PRODUCER_GROUP;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.TOPIC;
 
 /**
- * Defines the {@link DynamicTableSinkFactory} implementation to create {@link RocketMQDynamicTableSink}.
+ * Defines the {@link DynamicTableSinkFactory} implementation to create {@link
+ * RocketMQDynamicTableSink}.
  */
 public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory {
 
@@ -102,7 +104,7 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
         long sleepTimeMs = properties.getLong(OPTIONAL_WRITE_SLEEP_TIME_MS);
         boolean isDynamicTag = properties.getBoolean(OPTIONAL_WRITE_IS_DYNAMIC_TAG);
         boolean isDynamicTagIncluded =
-            properties.getBoolean(OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN_WRITE_INCLUDED);
+                properties.getBoolean(OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN_WRITE_INCLUDED);
         boolean writeKeysToBody = properties.getBoolean(OPTIONAL_WRITE_KEYS_TO_BODY);
         String keyColumnsConfig = properties.getString(OPTIONAL_WRITE_KEY_COLUMNS);
         String[] keyColumns = new String[0];
@@ -112,30 +114,30 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
         DescriptorProperties descriptorProperties = new DescriptorProperties();
         descriptorProperties.putProperties(rawProperties);
         TableSchema physicalSchema =
-            TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
+                TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
         return new RocketMQDynamicTableSink(
-            descriptorProperties,
-            physicalSchema,
-            topicName,
-            producerGroup,
-            nameServerAddress,
-            tag,
-            dynamicColumn,
-            fieldDelimiter,
-            encoding,
-            sleepTimeMs,
-            retryTimes,
-            isDynamicTag,
-            isDynamicTagIncluded,
-            writeKeysToBody,
-            keyColumns);
+                descriptorProperties,
+                physicalSchema,
+                topicName,
+                producerGroup,
+                nameServerAddress,
+                tag,
+                dynamicColumn,
+                fieldDelimiter,
+                encoding,
+                sleepTimeMs,
+                retryTimes,
+                isDynamicTag,
+                isDynamicTagIncluded,
+                writeKeysToBody,
+                keyColumns);
     }
 
     private void transformContext(
-        DynamicTableFactory factory, DynamicTableFactory.Context context) {
+            DynamicTableFactory factory, DynamicTableFactory.Context context) {
         Map<String, String> catalogOptions = context.getCatalogTable().getOptions();
         Map<String, String> convertedOptions =
-            normalizeOptionCaseAsFactory(factory, catalogOptions);
+                normalizeOptionCaseAsFactory(factory, catalogOptions);
         catalogOptions.clear();
         for (Map.Entry<String, String> entry : convertedOptions.entrySet()) {
             catalogOptions.put(entry.getKey(), entry.getValue());
@@ -143,29 +145,29 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
     }
 
     private Map<String, String> normalizeOptionCaseAsFactory(
-        Factory factory, Map<String, String> options) {
+            Factory factory, Map<String, String> options) {
         Map<String, String> normalizedOptions = new HashMap<>();
         Map<String, String> requiredOptionKeysLowerCaseToOriginal =
-            factory.requiredOptions().stream()
-                .collect(
-                    Collectors.toMap(
-                        option -> option.key().toLowerCase(), ConfigOption::key));
+                factory.requiredOptions().stream()
+                        .collect(
+                                Collectors.toMap(
+                                        option -> option.key().toLowerCase(), ConfigOption::key));
         Map<String, String> optionalOptionKeysLowerCaseToOriginal =
-            factory.optionalOptions().stream()
-                .collect(
-                    Collectors.toMap(
-                        option -> option.key().toLowerCase(), ConfigOption::key));
+                factory.optionalOptions().stream()
+                        .collect(
+                                Collectors.toMap(
+                                        option -> option.key().toLowerCase(), ConfigOption::key));
         for (Map.Entry<String, String> entry : options.entrySet()) {
             final String catalogOptionKey = entry.getKey();
             final String catalogOptionValue = entry.getValue();
             normalizedOptions.put(
-                requiredOptionKeysLowerCaseToOriginal.containsKey(
-                    catalogOptionKey.toLowerCase())
-                    ? requiredOptionKeysLowerCaseToOriginal.get(
-                    catalogOptionKey.toLowerCase())
-                    : optionalOptionKeysLowerCaseToOriginal.getOrDefault(
-                    catalogOptionKey.toLowerCase(), catalogOptionKey),
-                catalogOptionValue);
+                    requiredOptionKeysLowerCaseToOriginal.containsKey(
+                                    catalogOptionKey.toLowerCase())
+                            ? requiredOptionKeysLowerCaseToOriginal.get(
+                                    catalogOptionKey.toLowerCase())
+                            : optionalOptionKeysLowerCaseToOriginal.getOrDefault(
+                                    catalogOptionKey.toLowerCase(), catalogOptionKey),
+                    catalogOptionValue);
         }
         return normalizedOptions;
     }

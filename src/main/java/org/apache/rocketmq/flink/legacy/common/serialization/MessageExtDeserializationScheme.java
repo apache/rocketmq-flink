@@ -17,9 +17,11 @@
 
 package org.apache.rocketmq.flink.legacy.common.serialization;
 
-import java.io.Serializable;
-import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.rocketmq.common.message.MessageExt;
+
+import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
+
+import java.io.Serializable;
 
 /**
  * The interface Message ext deserialization scheme.

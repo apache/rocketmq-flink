@@ -18,10 +18,8 @@
 
 package org.apache.rocketmq.flink.source.table;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import org.apache.rocketmq.flink.common.RocketMQOptions;
+
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.ValidationException;
@@ -32,23 +30,26 @@ import org.apache.flink.table.catalog.ResolvedCatalogTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.factories.FactoryUtil;
-import org.apache.rocketmq.flink.common.RocketMQOptions;
+
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.apache.flink.table.api.DataTypes.STRING;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-/**
- * Tests for {@link RocketMQDynamicTableSourceFactory}.
- */
+/** Tests for {@link RocketMQDynamicTableSourceFactory}. */
 public class RocketMQDynamicTableSourceFactoryTest {
 
     private static final ResolvedSchema SCHEMA =
-        new ResolvedSchema(
-            Collections.singletonList(Column.physical("name", STRING().notNull())),
-            new ArrayList<>(),
-            null);
+            new ResolvedSchema(
+                    Collections.singletonList(Column.physical("name", STRING().notNull())),
+                    new ArrayList<>(),
+                    null);
 
     private static final String IDENTIFIER = "rocketmq";
     private static final String TOPIC = "test_source";
@@ -88,20 +89,20 @@ public class RocketMQDynamicTableSourceFactoryTest {
     }
 
     private static DynamicTableSource createTableSource(
-        Map<String, String> options, Configuration conf) {
+            Map<String, String> options, Configuration conf) {
         return FactoryUtil.createTableSource(
-            null,
-            ObjectIdentifier.of("default", "default", IDENTIFIER),
-            new ResolvedCatalogTable(
-                CatalogTable.of(
-                    Schema.newBuilder().fromResolvedSchema(SCHEMA).build(),
-                    "mock source",
-                    Collections.emptyList(),
-                    options),
-                SCHEMA),
-            conf,
-            RocketMQDynamicTableSourceFactory.class.getClassLoader(),
-            false);
+                null,
+                ObjectIdentifier.of("default", "default", IDENTIFIER),
+                new ResolvedCatalogTable(
+                        CatalogTable.of(
+                                Schema.newBuilder().fromResolvedSchema(SCHEMA).build(),
+                                "mock source",
+                                Collections.emptyList(),
+                                options),
+                        SCHEMA),
+                conf,
+                RocketMQDynamicTableSourceFactory.class.getClassLoader(),
+                false);
     }
 
     private static DynamicTableSource createTableSource(Map<String, String> options) {

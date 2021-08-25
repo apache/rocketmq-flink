@@ -18,13 +18,6 @@
 
 package org.apache.rocketmq.flink.legacy;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext;
 import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
 import org.apache.rocketmq.client.consumer.MQPullConsumerScheduleService;
 import org.apache.rocketmq.client.consumer.PullResult;
@@ -33,9 +26,19 @@ import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.flink.legacy.common.serialization.KeyValueDeserializationSchema;
 import org.apache.rocketmq.flink.legacy.common.serialization.SimpleKeyValueDeserializationSchema;
+
+import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext;
+
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.rocketmq.flink.legacy.common.util.TestUtils.setFieldValue;
 import static org.mockito.Matchers.any;
@@ -88,7 +91,7 @@ public class RocketMQSourceTest {
 
         when(consumer.fetchConsumeOffset(any(MessageQueue.class), anyBoolean())).thenReturn(2L);
         when(consumer.pull(any(MessageQueue.class), anyString(), anyLong(), anyInt()))
-            .thenReturn(pullResult);
+                .thenReturn(pullResult);
 
         SourceContext context = mock(SourceContext.class);
         when(context.getCheckpointLock()).thenReturn(new Object());

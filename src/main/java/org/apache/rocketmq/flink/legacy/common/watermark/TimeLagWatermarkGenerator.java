@@ -17,19 +17,19 @@
 
 package org.apache.rocketmq.flink.legacy.common.watermark;
 
-import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
-import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.rocketmq.common.message.MessageExt;
 
+import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
+import org.apache.flink.streaming.api.watermark.Watermark;
+
 /**
- * This generator generates watermarks that are lagging behind processing time by a certain amount. It assumes that
- * elements arrive in Flink after at most a certain time.
+ * This generator generates watermarks that are lagging behind processing time by a certain amount.
+ * It assumes that elements arrive in Flink after at most a certain time.
  */
 public class TimeLagWatermarkGenerator implements AssignerWithPeriodicWatermarks<MessageExt> {
     private long maxTimeLag = 5000; // 5 seconds
 
-    TimeLagWatermarkGenerator() {
-    }
+    TimeLagWatermarkGenerator() {}
 
     TimeLagWatermarkGenerator(long maxTimeLag) {
         this.maxTimeLag = maxTimeLag;

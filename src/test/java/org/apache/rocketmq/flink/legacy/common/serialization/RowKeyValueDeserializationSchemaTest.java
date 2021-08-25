@@ -18,29 +18,30 @@
 
 package org.apache.rocketmq.flink.legacy.common.serialization;
 
-import java.util.HashMap;
+import org.apache.rocketmq.common.message.MessageExt;
+
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
-import org.apache.rocketmq.common.message.MessageExt;
+
 import org.junit.Test;
+
+import java.util.HashMap;
 
 import static org.junit.Assert.assertEquals;
 
-/**
- * Test for {@link RowKeyValueDeserializationSchema}.
- */
+/** Test for {@link RowKeyValueDeserializationSchema}. */
 public class RowKeyValueDeserializationSchemaTest {
 
     @Test
     public void testDeserializeKeyAndValue() {
         TableSchema tableSchema =
-            new TableSchema.Builder().field("varchar", DataTypes.VARCHAR(100)).build();
+                new TableSchema.Builder().field("varchar", DataTypes.VARCHAR(100)).build();
         RowKeyValueDeserializationSchema deserializationSchema =
-            new RowKeyValueDeserializationSchema.Builder()
-                .setTableSchema(tableSchema)
-                .setProperties(new HashMap<>())
-                .build();
+                new RowKeyValueDeserializationSchema.Builder()
+                        .setTableSchema(tableSchema)
+                        .setProperties(new HashMap<>())
+                        .build();
         MessageExt messageExt = new MessageExt();
         messageExt.setBody("test_deserialize_key_and_value".getBytes());
         RowData rowData = deserializationSchema.deserializeKeyAndValue(null, messageExt.getBody());

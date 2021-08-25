@@ -28,6 +28,7 @@ import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.remoting.RPCHook;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +38,7 @@ public class SimpleConsumer {
 
     // Consumer config
     private static final String NAME_SERVER_ADDR =
-        "http://${instanceId}.${region}.mq-internal.aliyuncs.com:8080";
+            "http://${instanceId}.${region}.mq-internal.aliyuncs.com:8080";
     private static final String GROUP = "GID_SIMPLE_CONSUMER";
     private static final String TOPIC = "SINK_TOPIC";
     private static final String TAGS = "*";
@@ -50,8 +51,8 @@ public class SimpleConsumer {
 
     public static void main(String[] args) {
         DefaultMQPushConsumer consumer =
-            new DefaultMQPushConsumer(
-                GROUP, getAclRPCHook(), new AllocateMessageQueueAveragely());
+                new DefaultMQPushConsumer(
+                        GROUP, getAclRPCHook(), new AllocateMessageQueueAveragely());
         consumer.setNamesrvAddr(NAME_SERVER_ADDR);
 
         // When using aliyun products, you need to set up channels
@@ -65,18 +66,18 @@ public class SimpleConsumer {
 
         consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
         consumer.registerMessageListener(
-            (MessageListenerConcurrently)
-                (msgs, context) -> {
-                    for (MessageExt msg : msgs) {
-                        System.out.printf(
-                            "%s %s %d %s\n",
-                            msg.getMsgId(),
-                            msg.getBrokerName(),
-                            msg.getQueueId(),
-                            new String(msg.getBody()));
-                    }
-                    return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
-                });
+                (MessageListenerConcurrently)
+                        (msgs, context) -> {
+                            for (MessageExt msg : msgs) {
+                                System.out.printf(
+                                        "%s %s %d %s\n",
+                                        msg.getMsgId(),
+                                        msg.getBrokerName(),
+                                        msg.getQueueId(),
+                                        new String(msg.getBody()));
+                            }
+                            return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+                        });
 
         try {
             consumer.start();

@@ -18,29 +18,30 @@
 
 package org.apache.rocketmq.flink.sink.table;
 
+import org.apache.rocketmq.common.message.Message;
+
+import org.apache.flink.api.java.typeutils.RowTypeInfo;
+import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.types.DataType;
+import org.apache.flink.types.RowKind;
+
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.flink.api.java.typeutils.RowTypeInfo;
-import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.types.DataType;
-import org.apache.flink.types.RowKind;
-import org.apache.rocketmq.common.message.Message;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static org.apache.flink.util.Preconditions.checkState;
 import static org.apache.rocketmq.flink.sink.table.RocketMQDynamicTableSink.WritableMetadata;
 import static org.apache.rocketmq.flink.sink.table.RocketMQDynamicTableSink.WritableMetadata.KEYS;
 import static org.apache.rocketmq.flink.sink.table.RocketMQDynamicTableSink.WritableMetadata.TAGS;
 
-/**
- * RocketMQRowDataConverter converts the row data of table to RocketMQ message pattern.
- */
+/** RocketMQRowDataConverter converts the row data of table to RocketMQ message pattern. */
 public class RocketMQRowDataConverter implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -71,19 +72,19 @@ public class RocketMQRowDataConverter implements Serializable {
     private final int[] metadataPositions;
 
     public RocketMQRowDataConverter(
-        String topic,
-        String tag,
-        String dynamicColumn,
-        String fieldDelimiter,
-        String encoding,
-        boolean isDynamicTag,
-        boolean isDynamicTagIncluded,
-        boolean writeKeysToBody,
-        String[] keyColumns,
-        RowTypeInfo rowTypeInfo,
-        DataType[] fieldDataTypes,
-        boolean hasMetadata,
-        int[] metadataPositions) {
+            String topic,
+            String tag,
+            String dynamicColumn,
+            String fieldDelimiter,
+            String encoding,
+            boolean isDynamicTag,
+            boolean isDynamicTagIncluded,
+            boolean writeKeysToBody,
+            String[] keyColumns,
+            RowTypeInfo rowTypeInfo,
+            DataType[] fieldDataTypes,
+            boolean hasMetadata,
+            int[] metadataPositions) {
         this.topic = topic;
         this.tag = tag;
         this.dynamicColumn = dynamicColumn;
@@ -101,7 +102,7 @@ public class RocketMQRowDataConverter implements Serializable {
 
     public void open() {
         if (rowTypeInfo.getArity() == 1
-            && rowTypeInfo.getFieldTypes()[0].getTypeClass().equals(byte[].class)) {
+                && rowTypeInfo.getFieldTypes()[0].getTypeClass().equals(byte[].class)) {
             onlyVarbinary = true;
         }
         Set<Integer> excludedFields = new HashSet<>();
@@ -110,10 +111,10 @@ public class RocketMQRowDataConverter implements Serializable {
             for (int index = 0; index < keyColumns.length; index++) {
                 int fieldIndex = rowTypeInfo.getFieldIndex(keyColumns[index]);
                 checkState(
-                    fieldIndex >= 0,
-                    String.format(
-                        "[MetaQConverter] Could not find the message-key column: %s.",
-                        keyColumns[index]));
+                        fieldIndex >= 0,
+                        String.format(
+                                "[MetaQConverter] Could not find the message-key column: %s.",
+                                keyColumns[index]));
                 keyFieldIndexes[index] = fieldIndex;
                 if (!writeKeysToBody) {
                     excludedFields.add(fieldIndex);
@@ -126,9 +127,9 @@ public class RocketMQRowDataConverter implements Serializable {
             tagFieldIndexes = new int[1];
             int fieldIndex = rowTypeInfo.getFieldIndex(dynamicColumn);
             checkState(
-                fieldIndex >= 0,
-                String.format(
-                    "[MetaQConverter] Could not find the tag column: %s.", dynamicColumn));
+                    fieldIndex >= 0,
+                    String.format(
+                            "[MetaQConverter] Could not find the tag column: %s.", dynamicColumn));
             tagFieldIndexes[0] = fieldIndex;
             if (!isDynamicTagIncluded) {
                 excludedFields.add(fieldIndex);
@@ -175,20 +176,20 @@ public class RocketMQRowDataConverter implements Serializable {
             Object[] values = new Object[bodyFieldIndexes.length];
             for (int index = 0; index < bodyFieldIndexes.length; index++) {
                 values[index] =
-                    RowData.createFieldGetter(
-                            bodyFieldTypes[index].getLogicalType(),
-                            bodyFieldIndexes[index])
-                        .getFieldOrNull(row);
+                        RowData.createFieldGetter(
+                                        bodyFieldTypes[index].getLogicalType(),
+                                        bodyFieldIndexes[index])
+                                .getFieldOrNull(row);
             }
             try {
                 message.setBody(StringUtils.join(values, fieldDelimiter).getBytes(encoding));
                 message.setWaitStoreMsgOK(true);
             } catch (UnsupportedEncodingException e) {
                 LOG.error(
-                    String.format(
-                        "Unsupported ''{%s}'' encoding charset. Check the encoding configItem in the DDL.",
-                        encoding),
-                    e);
+                        String.format(
+                                "Unsupported ''{%s}'' encoding charset. Check the encoding configItem in the DDL.",
+                                encoding),
+                        e);
             }
         }
         if (hasMetadata) {

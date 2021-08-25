@@ -18,13 +18,12 @@
 
 package org.apache.rocketmq.flink.source.split;
 
-import java.util.Objects;
 import org.apache.flink.api.connector.source.SourceSplit;
 import org.apache.flink.api.java.tuple.Tuple3;
 
-/**
- * A {@link SourceSplit} for a RocketMQ partition.
- */
+import java.util.Objects;
+
+/** A {@link SourceSplit} for a RocketMQ partition. */
 public class RocketMQPartitionSplit implements SourceSplit {
 
     private final String topic;
@@ -34,11 +33,11 @@ public class RocketMQPartitionSplit implements SourceSplit {
     private final long stoppingTimestamp;
 
     public RocketMQPartitionSplit(
-        String topic,
-        String broker,
-        int partition,
-        long startingOffset,
-        long stoppingTimestamp) {
+            String topic,
+            String broker,
+            int partition,
+            long startingOffset,
+            long stoppingTimestamp) {
         this.topic = topic;
         this.broker = broker;
         this.partition = partition;
@@ -74,8 +73,8 @@ public class RocketMQPartitionSplit implements SourceSplit {
     @Override
     public String toString() {
         return String.format(
-            "[Topic: %s, Broker: %s, Partition: %s, StartingOffset: %d, StoppingTimestamp: %d]",
-            topic, broker, partition, startingOffset, stoppingTimestamp);
+                "[Topic: %s, Broker: %s, Partition: %s, StartingOffset: %d, StoppingTimestamp: %d]",
+                topic, broker, partition, startingOffset, stoppingTimestamp);
     }
 
     @Override
@@ -90,10 +89,10 @@ public class RocketMQPartitionSplit implements SourceSplit {
         }
         RocketMQPartitionSplit other = (RocketMQPartitionSplit) obj;
         return topic.equals(other.topic)
-            && broker.equals(other.broker)
-            && partition == other.partition
-            && startingOffset == other.startingOffset
-            && stoppingTimestamp == other.stoppingTimestamp;
+                && broker.equals(other.broker)
+                && partition == other.partition
+                && startingOffset == other.startingOffset
+                && stoppingTimestamp == other.stoppingTimestamp;
     }
 
     public static String toSplitId(Tuple3<String, String, Integer> topicPartition) {

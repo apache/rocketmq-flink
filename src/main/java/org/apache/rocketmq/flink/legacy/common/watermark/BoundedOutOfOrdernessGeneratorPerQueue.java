@@ -17,23 +17,22 @@
 
 package org.apache.rocketmq.flink.legacy.common.watermark;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
-import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.rocketmq.common.message.MessageExt;
 
-/**
- * 取每条队列中的最大eventTime的最小值作为当前source的watermark
- */
+import org.apache.flink.streaming.api.functions.AssignerWithPeriodicWatermarks;
+import org.apache.flink.streaming.api.watermark.Watermark;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/** 取每条队列中的最大eventTime的最小值作为当前source的watermark */
 public class BoundedOutOfOrdernessGeneratorPerQueue
-    implements AssignerWithPeriodicWatermarks<MessageExt> {
+        implements AssignerWithPeriodicWatermarks<MessageExt> {
 
     private Map<String, Long> maxEventTimeTable;
     private long maxOutOfOrderness = 5000L; // 5 seconds
 
-    public BoundedOutOfOrdernessGeneratorPerQueue() {
-    }
+    public BoundedOutOfOrdernessGeneratorPerQueue() {}
 
     public BoundedOutOfOrdernessGeneratorPerQueue(long maxOutOfOrderness) {
         this.maxOutOfOrderness = maxOutOfOrderness;
@@ -62,10 +61,10 @@ public class BoundedOutOfOrdernessGeneratorPerQueue
     @Override
     public String toString() {
         return "BoundedOutOfOrdernessGeneratorPerQueue{"
-            + "maxEventTimeTable="
-            + maxEventTimeTable
-            + ", maxOutOfOrderness="
-            + maxOutOfOrderness
-            + '}';
+                + "maxEventTimeTable="
+                + maxEventTimeTable
+                + ", maxOutOfOrderness="
+                + maxOutOfOrderness
+                + '}';
     }
 }

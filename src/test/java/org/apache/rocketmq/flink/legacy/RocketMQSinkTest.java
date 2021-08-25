@@ -18,17 +18,20 @@
 
 package org.apache.rocketmq.flink.legacy;
 
-import java.util.Properties;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.flink.legacy.common.selector.DefaultTopicSelector;
 import org.apache.rocketmq.flink.legacy.common.selector.TopicSelector;
 import org.apache.rocketmq.flink.legacy.common.serialization.KeyValueSerializationSchema;
 import org.apache.rocketmq.flink.legacy.common.serialization.SimpleKeyValueSerializationSchema;
+
+import org.apache.flink.api.java.tuple.Tuple2;
+
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import java.util.Properties;
 
 import static org.apache.rocketmq.flink.legacy.common.util.TestUtils.setFieldValue;
 import static org.mockito.Mockito.mock;
@@ -43,11 +46,11 @@ public class RocketMQSinkTest {
     @Before
     public void setUp() throws Exception {
         KeyValueSerializationSchema serializationSchema =
-            new SimpleKeyValueSerializationSchema("id", "name");
+                new SimpleKeyValueSerializationSchema("id", "name");
         TopicSelector topicSelector = new DefaultTopicSelector("tpc");
         Properties props = new Properties();
         props.setProperty(
-            RocketMQConfig.MSG_DELAY_LEVEL, String.valueOf(RocketMQConfig.MSG_DELAY_LEVEL04));
+                RocketMQConfig.MSG_DELAY_LEVEL, String.valueOf(RocketMQConfig.MSG_DELAY_LEVEL04));
         rocketMQSink = new RocketMQSink(props);
 
         producer = mock(DefaultMQProducer.class);

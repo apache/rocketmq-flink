@@ -25,6 +25,7 @@ import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.remoting.RPCHook;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +37,7 @@ public class SimpleProducer {
 
     // Producer config
     private static final String NAME_SERVER_ADDR =
-        "http://${instanceId}.${region}.mq-internal.aliyuncs.com:8080";
+            "http://${instanceId}.${region}.mq-internal.aliyuncs.com:8080";
     private static final String PRODUCER_GROUP = "GID_SIMPLE_PRODUCER";
     private static final String TOPIC = "SOURCE_TOPIC";
     private static final String TAGS = "*";
@@ -50,7 +51,7 @@ public class SimpleProducer {
 
     public static void main(String[] args) {
         DefaultMQProducer producer =
-            new DefaultMQProducer(PRODUCER_GROUP, getAclRPCHook(), true, null);
+                new DefaultMQProducer(PRODUCER_GROUP, getAclRPCHook(), true, null);
         producer.setNamesrvAddr(NAME_SERVER_ADDR);
 
         // When using aliyun products, you need to set up channels
@@ -69,8 +70,8 @@ public class SimpleProducer {
                 SendResult sendResult = producer.send(msg);
                 assert sendResult != null;
                 System.out.printf(
-                    "send result: %s %s\n",
-                    sendResult.getMsgId(), sendResult.getMessageQueue().toString());
+                        "send result: %s %s\n",
+                        sendResult.getMsgId(), sendResult.getMessageQueue().toString());
                 Thread.sleep(50);
             } catch (Exception e) {
                 log.info("send message failed. {}", e.toString());

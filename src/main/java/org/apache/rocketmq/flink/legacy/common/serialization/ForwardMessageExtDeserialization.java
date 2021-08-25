@@ -17,14 +17,13 @@
 
 package org.apache.rocketmq.flink.legacy.common.serialization;
 
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.rocketmq.common.message.MessageExt;
 
-/**
- * A Forward messageExt deserialization.
- */
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+
+/** A Forward messageExt deserialization. */
 public class ForwardMessageExtDeserialization
-    implements MessageExtDeserializationScheme<MessageExt> {
+        implements MessageExtDeserializationScheme<MessageExt> {
 
     @Override
     public MessageExt deserializeMessageExt(MessageExt messageExt) {

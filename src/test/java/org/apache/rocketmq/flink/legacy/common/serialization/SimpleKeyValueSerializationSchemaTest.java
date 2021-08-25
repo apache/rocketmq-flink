@@ -18,9 +18,10 @@
 
 package org.apache.rocketmq.flink.legacy.common.serialization;
 
+import org.junit.Test;
+
 import java.util.HashMap;
 import java.util.Map;
-import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 
@@ -28,18 +29,18 @@ public class SimpleKeyValueSerializationSchemaTest {
     @Test
     public void serializeKeyAndValue() throws Exception {
         SimpleKeyValueSerializationSchema serializationSchema =
-            new SimpleKeyValueSerializationSchema("id", "name");
+                new SimpleKeyValueSerializationSchema("id", "name");
         SimpleKeyValueDeserializationSchema deserializationSchema =
-            new SimpleKeyValueDeserializationSchema("id", "name");
+                new SimpleKeyValueDeserializationSchema("id", "name");
 
         Map tuple = new HashMap();
         tuple.put("id", "x001");
         tuple.put("name", "vesense");
 
         assertEquals(
-            tuple,
-            deserializationSchema.deserializeKeyAndValue(
-                serializationSchema.serializeKey(tuple),
-                serializationSchema.serializeValue(tuple)));
+                tuple,
+                deserializationSchema.deserializeKeyAndValue(
+                        serializationSchema.serializeKey(tuple),
+                        serializationSchema.serializeValue(tuple)));
     }
 }

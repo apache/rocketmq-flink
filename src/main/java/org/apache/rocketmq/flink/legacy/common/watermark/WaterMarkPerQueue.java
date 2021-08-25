@@ -17,11 +17,13 @@
 
 package org.apache.rocketmq.flink.legacy.common.watermark;
 
+import org.apache.rocketmq.common.message.MessageQueue;
+
+import org.apache.flink.streaming.api.watermark.Watermark;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import org.apache.flink.streaming.api.watermark.Watermark;
-import org.apache.rocketmq.common.message.MessageQueue;
 
 public class WaterMarkPerQueue {
 
@@ -29,8 +31,7 @@ public class WaterMarkPerQueue {
 
     private long maxOutOfOrderness = 5000L; // 5 seconds
 
-    public WaterMarkPerQueue() {
-    }
+    public WaterMarkPerQueue() {}
 
     public WaterMarkPerQueue(long maxOutOfOrderness) {
         this.maxOutOfOrderness = maxOutOfOrderness;
@@ -54,10 +55,10 @@ public class WaterMarkPerQueue {
     @Override
     public String toString() {
         return "WaterMarkPerQueue{"
-            + "maxEventTimeTable="
-            + maxEventTimeTable
-            + ", maxOutOfOrderness="
-            + maxOutOfOrderness
-            + '}';
+                + "maxEventTimeTable="
+                + maxEventTimeTable
+                + ", maxOutOfOrderness="
+                + maxOutOfOrderness
+                + '}';
     }
 }

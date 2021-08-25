@@ -18,18 +18,19 @@
 
 package org.apache.rocketmq.flink.source.enumerator;
 
+import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
+
+import org.apache.flink.api.connector.source.SplitsAssignment;
+
+import org.junit.Test;
+
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
-import org.apache.flink.api.connector.source.SplitsAssignment;
-import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
-import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 
-/**
- * Test for {@link RocketMQSourceEnumStateSerializer}.
- */
+/** Test for {@link RocketMQSourceEnumStateSerializer}. */
 public class RocketMQSourceEnumStateSerializerTest {
 
     @Test
@@ -42,42 +43,42 @@ public class RocketMQSourceEnumStateSerializerTest {
 
     private RocketMQSourceEnumState prepareSourceEnumeratorState() {
         SplitsAssignment<RocketMQPartitionSplit> pendingAssignment =
-            new SplitsAssignment<>(new HashMap<>());
+                new SplitsAssignment<>(new HashMap<>());
         pendingAssignment
-            .assignment()
-            .put(
-                0,
-                Arrays.asList(
-                    new RocketMQPartitionSplit(
-                        "0", "taobaodaily-01", 1, 0, System.currentTimeMillis()),
-                    new RocketMQPartitionSplit(
-                        "3", "taobaodaily-01", 2, 0, System.currentTimeMillis()),
-                    new RocketMQPartitionSplit(
-                        "6", "taobaodaily-01", 3, 0, System.currentTimeMillis()),
-                    new RocketMQPartitionSplit(
-                        "9", "taobaodaily-01", 4, 0, System.currentTimeMillis())));
+                .assignment()
+                .put(
+                        0,
+                        Arrays.asList(
+                                new RocketMQPartitionSplit(
+                                        "0", "taobaodaily-01", 1, 0, System.currentTimeMillis()),
+                                new RocketMQPartitionSplit(
+                                        "3", "taobaodaily-01", 2, 0, System.currentTimeMillis()),
+                                new RocketMQPartitionSplit(
+                                        "6", "taobaodaily-01", 3, 0, System.currentTimeMillis()),
+                                new RocketMQPartitionSplit(
+                                        "9", "taobaodaily-01", 4, 0, System.currentTimeMillis())));
         pendingAssignment
-            .assignment()
-            .put(
-                1,
-                Arrays.asList(
-                    new RocketMQPartitionSplit(
-                        "1", "taobaodaily-02", 5, 0, System.currentTimeMillis()),
-                    new RocketMQPartitionSplit(
-                        "4", "taobaodaily-02", 6, 0, System.currentTimeMillis()),
-                    new RocketMQPartitionSplit(
-                        "7", "taobaodaily-02", 7, 0, System.currentTimeMillis())));
+                .assignment()
+                .put(
+                        1,
+                        Arrays.asList(
+                                new RocketMQPartitionSplit(
+                                        "1", "taobaodaily-02", 5, 0, System.currentTimeMillis()),
+                                new RocketMQPartitionSplit(
+                                        "4", "taobaodaily-02", 6, 0, System.currentTimeMillis()),
+                                new RocketMQPartitionSplit(
+                                        "7", "taobaodaily-02", 7, 0, System.currentTimeMillis())));
         pendingAssignment
-            .assignment()
-            .put(
-                2,
-                Arrays.asList(
-                    new RocketMQPartitionSplit(
-                        "2", "taobaodaily-03", 8, 0, System.currentTimeMillis()),
-                    new RocketMQPartitionSplit(
-                        "5", "taobaodaily-03", 9, 0, System.currentTimeMillis()),
-                    new RocketMQPartitionSplit(
-                        "8", "taobaodaily-03", 10, 0, System.currentTimeMillis())));
+                .assignment()
+                .put(
+                        2,
+                        Arrays.asList(
+                                new RocketMQPartitionSplit(
+                                        "2", "taobaodaily-03", 8, 0, System.currentTimeMillis()),
+                                new RocketMQPartitionSplit(
+                                        "5", "taobaodaily-03", 9, 0, System.currentTimeMillis()),
+                                new RocketMQPartitionSplit(
+                                        "8", "taobaodaily-03", 10, 0, System.currentTimeMillis())));
         return new RocketMQSourceEnumState(pendingAssignment.assignment());
     }
 }

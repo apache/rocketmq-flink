@@ -21,9 +21,7 @@ package org.apache.rocketmq.flink.source.reader.deserializer;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Message contains byte array.
- */
+/** Message contains byte array. */
 public class BytesMessage {
 
     private byte[] data;
