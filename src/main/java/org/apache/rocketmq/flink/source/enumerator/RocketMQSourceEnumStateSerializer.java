@@ -18,20 +18,20 @@
 
 package org.apache.rocketmq.flink.source.enumerator;
 
-import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
-import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplitSerializer;
-
-import org.apache.flink.connector.base.source.utils.SerdeUtils;
-import org.apache.flink.core.io.SimpleVersionedSerializer;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.apache.flink.connector.base.source.utils.SerdeUtils;
+import org.apache.flink.core.io.SimpleVersionedSerializer;
+import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
+import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplitSerializer;
 
-/** The {@link SimpleVersionedSerializer Serializer} for the enumerator state of RocketMQ source. */
+/**
+ * The {@link SimpleVersionedSerializer Serializer} for the enumerator state of RocketMQ source.
+ */
 public class RocketMQSourceEnumStateSerializer
-        implements SimpleVersionedSerializer<RocketMQSourceEnumState> {
+    implements SimpleVersionedSerializer<RocketMQSourceEnumState> {
 
     private static final int CURRENT_VERSION = 0;
 
@@ -43,7 +43,7 @@ public class RocketMQSourceEnumStateSerializer
     @Override
     public byte[] serialize(RocketMQSourceEnumState enumState) throws IOException {
         return SerdeUtils.serializeSplitAssignments(
-                enumState.getCurrentAssignment(), new RocketMQPartitionSplitSerializer());
+            enumState.getCurrentAssignment(), new RocketMQPartitionSplitSerializer());
     }
 
     @Override
@@ -51,14 +51,14 @@ public class RocketMQSourceEnumStateSerializer
         // Check whether the version of serialized bytes is supported.
         if (version == getVersion()) {
             Map<Integer, List<RocketMQPartitionSplit>> currentPartitionAssignment =
-                    SerdeUtils.deserializeSplitAssignments(
-                            serialized, new RocketMQPartitionSplitSerializer(), ArrayList::new);
+                SerdeUtils.deserializeSplitAssignments(
+                    serialized, new RocketMQPartitionSplitSerializer(), ArrayList::new);
             return new RocketMQSourceEnumState(currentPartitionAssignment);
         }
         throw new IOException(
-                String.format(
-                        "The bytes are serialized with version %d, "
-                                + "while this deserializer only supports version up to %d",
-                        version, getVersion()));
+            String.format(
+                "The bytes are serialized with version %d, "
+                    + "while this deserializer only supports version up to %d",
+                version, getVersion()));
     }
 }

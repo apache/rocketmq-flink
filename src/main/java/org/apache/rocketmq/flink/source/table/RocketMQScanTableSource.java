@@ -17,16 +17,12 @@
 
 package org.apache.rocketmq.flink.source.table;
 
-import org.apache.rocketmq.flink.legacy.RocketMQConfig;
-import org.apache.rocketmq.flink.legacy.RocketMQSourceFunction;
-import org.apache.rocketmq.flink.legacy.common.serialization.KeyValueDeserializationSchema;
-import org.apache.rocketmq.flink.legacy.common.serialization.RowKeyValueDeserializationSchema;
-import org.apache.rocketmq.flink.source.RocketMQSource;
-import org.apache.rocketmq.flink.source.reader.deserializer.BytesMessage;
-import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQDeserializationSchema;
-import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQRowDeserializationSchema;
-import org.apache.rocketmq.flink.source.reader.deserializer.RowDeserializationSchema.MetadataConverter;
-
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.stream.Stream;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
@@ -39,18 +35,22 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.descriptors.DescriptorProperties;
 import org.apache.flink.table.types.DataType;
-
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.stream.Stream;
+import org.apache.rocketmq.flink.legacy.RocketMQConfig;
+import org.apache.rocketmq.flink.legacy.RocketMQSourceFunction;
+import org.apache.rocketmq.flink.legacy.common.serialization.KeyValueDeserializationSchema;
+import org.apache.rocketmq.flink.legacy.common.serialization.RowKeyValueDeserializationSchema;
+import org.apache.rocketmq.flink.source.RocketMQSource;
+import org.apache.rocketmq.flink.source.reader.deserializer.BytesMessage;
+import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQDeserializationSchema;
+import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQRowDeserializationSchema;
+import org.apache.rocketmq.flink.source.reader.deserializer.RowDeserializationSchema.MetadataConverter;
 
 import static org.apache.flink.api.connector.source.Boundedness.BOUNDED;
 import static org.apache.flink.api.connector.source.Boundedness.CONTINUOUS_UNBOUNDED;
 
-/** Defines the scan table source of RocketMQ. */
+/**
+ * Defines the scan table source of RocketMQ.
+ */
 public class RocketMQScanTableSource implements ScanTableSource, SupportsReadingMetadata {
 
     private final DescriptorProperties properties;
@@ -70,17 +70,17 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     private List<String> metadataKeys;
 
     public RocketMQScanTableSource(
-            DescriptorProperties properties,
-            TableSchema schema,
-            String topic,
-            String consumerGroup,
-            String nameServerAddress,
-            String tag,
-            long stopInMs,
-            long startMessageOffset,
-            long startTime,
-            long partitionDiscoveryIntervalMs,
-            boolean useNewApi) {
+        DescriptorProperties properties,
+        TableSchema schema,
+        String topic,
+        String consumerGroup,
+        String nameServerAddress,
+        String tag,
+        long stopInMs,
+        long startMessageOffset,
+        long startTime,
+        long partitionDiscoveryIntervalMs,
+        boolean useNewApi) {
         this.properties = properties;
         this.schema = schema;
         this.topic = topic;
@@ -104,22 +104,22 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext scanContext) {
         if (useNewApi) {
             return SourceProvider.of(
-                    new RocketMQSource<>(
-                            topic,
-                            consumerGroup,
-                            nameServerAddress,
-                            tag,
-                            stopInMs,
-                            startTime,
-                            startMessageOffset < 0 ? 0 : startMessageOffset,
-                            partitionDiscoveryIntervalMs,
-                            isBounded() ? BOUNDED : CONTINUOUS_UNBOUNDED,
-                            createRocketMQDeserializationSchema()));
+                new RocketMQSource<>(
+                    topic,
+                    consumerGroup,
+                    nameServerAddress,
+                    tag,
+                    stopInMs,
+                    startTime,
+                    startMessageOffset < 0 ? 0 : startMessageOffset,
+                    partitionDiscoveryIntervalMs,
+                    isBounded() ? BOUNDED : CONTINUOUS_UNBOUNDED,
+                    createRocketMQDeserializationSchema()));
         } else {
             return SourceFunctionProvider.of(
-                    new RocketMQSourceFunction<>(
-                            createKeyValueDeserializationSchema(), getConsumerProps()),
-                    isBounded());
+                new RocketMQSourceFunction<>(
+                    createKeyValueDeserializationSchema(), getConsumerProps()),
+                isBounded());
         }
     }
 
@@ -127,7 +127,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     public Map<String, DataType> listReadableMetadata() {
         final Map<String, DataType> metadataMap = new LinkedHashMap<>();
         Stream.of(ReadableMetadata.values())
-                .forEachOrdered(m -> metadataMap.putIfAbsent(m.key, m.dataType));
+            .forEachOrdered(m -> metadataMap.putIfAbsent(m.key, m.dataType));
         return metadataMap;
     }
 
@@ -139,18 +139,18 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     @Override
     public DynamicTableSource copy() {
         RocketMQScanTableSource tableSource =
-                new RocketMQScanTableSource(
-                        properties,
-                        schema,
-                        topic,
-                        consumerGroup,
-                        nameServerAddress,
-                        tag,
-                        stopInMs,
-                        startMessageOffset,
-                        startTime,
-                        partitionDiscoveryIntervalMs,
-                        useNewApi);
+            new RocketMQScanTableSource(
+                properties,
+                schema,
+                topic,
+                consumerGroup,
+                nameServerAddress,
+                tag,
+                stopInMs,
+                startMessageOffset,
+                startTime,
+                partitionDiscoveryIntervalMs,
+                useNewApi);
         tableSource.metadataKeys = metadataKeys;
         return tableSource;
     }
@@ -162,17 +162,17 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
 
     private RocketMQDeserializationSchema<RowData> createRocketMQDeserializationSchema() {
         final MetadataConverter[] metadataConverters =
-                metadataKeys.stream()
-                        .map(
-                                k ->
-                                        Stream.of(ReadableMetadata.values())
-                                                .filter(rm -> rm.key.equals(k))
-                                                .findFirst()
-                                                .orElseThrow(IllegalStateException::new))
-                        .map(m -> m.converter)
-                        .toArray(MetadataConverter[]::new);
+            metadataKeys.stream()
+                .map(
+                    k ->
+                        Stream.of(ReadableMetadata.values())
+                            .filter(rm -> rm.key.equals(k))
+                            .findFirst()
+                            .orElseThrow(IllegalStateException::new))
+                .map(m -> m.converter)
+                .toArray(MetadataConverter[]::new);
         return new RocketMQRowDeserializationSchema(
-                schema, properties.asMap(), metadataKeys.size() > 0, metadataConverters);
+            schema, properties.asMap(), metadataKeys.size() > 0, metadataConverters);
     }
 
     private boolean isBounded() {
@@ -181,9 +181,9 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
 
     private KeyValueDeserializationSchema<RowData> createKeyValueDeserializationSchema() {
         return new RowKeyValueDeserializationSchema.Builder()
-                .setProperties(properties.asMap())
-                .setTableSchema(schema)
-                .build();
+            .setProperties(properties.asMap())
+            .setTableSchema(schema)
+            .build();
     }
 
     private Properties getConsumerProps() {
@@ -201,17 +201,17 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
 
     enum ReadableMetadata {
         TOPIC(
-                "topic",
-                DataTypes.STRING().notNull(),
-                new MetadataConverter() {
-                    private static final long serialVersionUID = 1L;
+            "topic",
+            DataTypes.STRING().notNull(),
+            new MetadataConverter() {
+                private static final long serialVersionUID = 1L;
 
-                    @Override
-                    public Object read(BytesMessage message) {
-                        return StringData.fromString(
-                                String.valueOf(message.getProperty("__topic__")));
-                    }
-                });
+                @Override
+                public Object read(BytesMessage message) {
+                    return StringData.fromString(
+                        String.valueOf(message.getProperty("__topic__")));
+                }
+            });
 
         final String key;
 

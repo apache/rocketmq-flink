@@ -18,17 +18,18 @@
 
 package org.apache.rocketmq.flink.source.split;
 
-import org.apache.flink.core.io.SimpleVersionedSerializer;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import org.apache.flink.core.io.SimpleVersionedSerializer;
 
-/** The {@link SimpleVersionedSerializer serializer} for {@link RocketMQPartitionSplit}. */
+/**
+ * The {@link SimpleVersionedSerializer serializer} for {@link RocketMQPartitionSplit}.
+ */
 public class RocketMQPartitionSplitSerializer
-        implements SimpleVersionedSerializer<RocketMQPartitionSplit> {
+    implements SimpleVersionedSerializer<RocketMQPartitionSplit> {
 
     private static final int CURRENT_VERSION = 0;
 
@@ -40,7 +41,7 @@ public class RocketMQPartitionSplitSerializer
     @Override
     public byte[] serialize(RocketMQPartitionSplit split) throws IOException {
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                DataOutputStream out = new DataOutputStream(baos)) {
+             DataOutputStream out = new DataOutputStream(baos)) {
             out.writeUTF(split.getTopic());
             out.writeUTF(split.getBroker());
             out.writeInt(split.getPartition());
@@ -54,7 +55,7 @@ public class RocketMQPartitionSplitSerializer
     @Override
     public RocketMQPartitionSplit deserialize(int version, byte[] serialized) throws IOException {
         try (ByteArrayInputStream bais = new ByteArrayInputStream(serialized);
-                DataInputStream in = new DataInputStream(bais)) {
+             DataInputStream in = new DataInputStream(bais)) {
             String topic = in.readUTF();
             String broker = in.readUTF();
             int partition = in.readInt();

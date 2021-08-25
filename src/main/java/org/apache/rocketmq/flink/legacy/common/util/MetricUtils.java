@@ -23,7 +23,9 @@ import org.apache.flink.metrics.Meter;
 import org.apache.flink.metrics.MeterView;
 import org.apache.flink.metrics.SimpleCounter;
 
-/** RocketMQ connector metrics. */
+/**
+ * RocketMQ connector metrics.
+ */
 public class MetricUtils {
 
     public static final String METRICS_TPS = "tps";
@@ -36,38 +38,38 @@ public class MetricUtils {
 
     public static Meter registerSinkInTps(RuntimeContext context) {
         Counter parserCounter =
-                context.getMetricGroup()
-                        .addGroup(METRIC_GROUP_SINK)
-                        .counter(METRICS_SINK_IN_TPS + "_counter", new SimpleCounter());
-        return context.getMetricGroup()
+            context.getMetricGroup()
                 .addGroup(METRIC_GROUP_SINK)
-                .meter(METRICS_SINK_IN_TPS, new MeterView(parserCounter, 60));
+                .counter(METRICS_SINK_IN_TPS + "_counter", new SimpleCounter());
+        return context.getMetricGroup()
+            .addGroup(METRIC_GROUP_SINK)
+            .meter(METRICS_SINK_IN_TPS, new MeterView(parserCounter, 60));
     }
 
     public static Meter registerOutTps(RuntimeContext context) {
         Counter parserCounter =
-                context.getMetricGroup()
-                        .addGroup(METRIC_GROUP_SINK)
-                        .counter(METRICS_SINK_OUT_TPS + "_counter", new SimpleCounter());
-        return context.getMetricGroup()
+            context.getMetricGroup()
                 .addGroup(METRIC_GROUP_SINK)
-                .meter(METRICS_SINK_OUT_TPS, new MeterView(parserCounter, 60));
+                .counter(METRICS_SINK_OUT_TPS + "_counter", new SimpleCounter());
+        return context.getMetricGroup()
+            .addGroup(METRIC_GROUP_SINK)
+            .meter(METRICS_SINK_OUT_TPS, new MeterView(parserCounter, 60));
     }
 
     public static Meter registerOutBps(RuntimeContext context) {
         Counter bpsCounter =
-                context.getMetricGroup()
-                        .addGroup(METRIC_GROUP_SINK)
-                        .counter(METRICS_SINK_OUT_BPS + "_counter", new SimpleCounter());
-        return context.getMetricGroup()
+            context.getMetricGroup()
                 .addGroup(METRIC_GROUP_SINK)
-                .meter(METRICS_SINK_OUT_BPS, new MeterView(bpsCounter, 60));
+                .counter(METRICS_SINK_OUT_BPS + "_counter", new SimpleCounter());
+        return context.getMetricGroup()
+            .addGroup(METRIC_GROUP_SINK)
+            .meter(METRICS_SINK_OUT_BPS, new MeterView(bpsCounter, 60));
     }
 
     public static LatencyGauge registerOutLatency(RuntimeContext context) {
         return context.getMetricGroup()
-                .addGroup(METRIC_GROUP_SINK)
-                .gauge(METRICS_SINK_OUT_Latency, new LatencyGauge());
+            .addGroup(METRIC_GROUP_SINK)
+            .gauge(METRICS_SINK_OUT_Latency, new LatencyGauge());
     }
 
     public static class LatencyGauge implements Gauge<Double> {

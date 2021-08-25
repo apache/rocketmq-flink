@@ -32,7 +32,9 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.Period;
 
-/** BytesSerializer is responsible to deserialize field from byte array. */
+/**
+ * BytesSerializer is responsible to deserialize field from byte array.
+ */
 public class ByteSerializer {
 
     public static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
@@ -129,7 +131,9 @@ public class ByteSerializer {
         }
     }
 
-    /** Value Type. */
+    /**
+     * Value Type.
+     */
     public enum ValueType {
         V_ByteArray,
         V_String,

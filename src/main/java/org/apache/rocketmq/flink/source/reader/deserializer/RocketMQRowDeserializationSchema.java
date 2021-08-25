@@ -18,23 +18,20 @@
 
 package org.apache.rocketmq.flink.source.reader.deserializer;
 
-import org.apache.rocketmq.common.message.MessageExt;
-import org.apache.rocketmq.flink.source.reader.deserializer.RowDeserializationSchema.MetadataConverter;
-
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.serialization.DeserializationSchema.InitializationContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.util.Collector;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import org.apache.rocketmq.common.message.MessageExt;
+import org.apache.rocketmq.flink.source.reader.deserializer.RowDeserializationSchema.MetadataConverter;
 
 /**
- * A row data wrapper class that wraps a {@link RocketMQDeserializationSchema} to deserialize {@link
- * MessageExt}.
+ * A row data wrapper class that wraps a {@link RocketMQDeserializationSchema} to deserialize {@link MessageExt}.
  */
 public class RocketMQRowDeserializationSchema implements RocketMQDeserializationSchema<RowData> {
 
@@ -45,17 +42,17 @@ public class RocketMQRowDeserializationSchema implements RocketMQDeserialization
     private transient List<BytesMessage> bytesMessages = new ArrayList<>(1);
 
     public RocketMQRowDeserializationSchema(
-            TableSchema tableSchema,
-            Map<String, String> properties,
-            boolean hasMetadata,
-            MetadataConverter[] metadataConverters) {
+        TableSchema tableSchema,
+        Map<String, String> properties,
+        boolean hasMetadata,
+        MetadataConverter[] metadataConverters) {
         deserializationSchema =
-                new RowDeserializationSchema.Builder()
-                        .setProperties(properties)
-                        .setTableSchema(tableSchema)
-                        .setHasMetadata(hasMetadata)
-                        .setMetadataConverters(metadataConverters)
-                        .build();
+            new RowDeserializationSchema.Builder()
+                .setProperties(properties)
+                .setTableSchema(tableSchema)
+                .setHasMetadata(hasMetadata)
+                .setMetadataConverters(metadataConverters)
+                .build();
     }
 
     @Override
@@ -85,9 +82,9 @@ public class RocketMQRowDeserializationSchema implements RocketMQDeserialization
             }
             bytesMessage.setProperty("__topic__", message.getTopic());
             bytesMessage.setProperty(
-                    "__store_timestamp__", String.valueOf(message.getStoreTimestamp()));
+                "__store_timestamp__", String.valueOf(message.getStoreTimestamp()));
             bytesMessage.setProperty(
-                    "__born_timestamp__", String.valueOf(message.getBornTimestamp()));
+                "__born_timestamp__", String.valueOf(message.getBornTimestamp()));
             bytesMessage.setProperty("__queue_id__", String.valueOf(message.getQueueId()));
             bytesMessage.setProperty("__queue_offset__", String.valueOf(message.getQueueOffset()));
             bytesMessage.setProperty("__msg_id__", message.getMsgId());

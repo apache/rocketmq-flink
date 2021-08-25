@@ -1,16 +1,22 @@
 # RocketMQ-Flink
 
-RocketMQ integration for [Apache Flink](https://flink.apache.org/). This module includes the RocketMQ source and sink that allows a flink job to either write messages into a topic or read from topics in a flink job.
+RocketMQ integration for [Apache Flink](https://flink.apache.org/). This module includes the RocketMQ source and sink
+that allows a flink job to either write messages into a topic or read from topics in a flink job.
 
 ## RocketMQSource
-To use the `RocketMQSource`,  you construct an instance of it by specifying a KeyValueDeserializationSchema instance and a Properties instance which including rocketmq configs.
+
+To use the `RocketMQSource`, you construct an instance of it by specifying a KeyValueDeserializationSchema instance and
+a Properties instance which including rocketmq configs.
 `RocketMQSource(KeyValueDeserializationSchema<OUT> schema, Properties props)`
-The RocketMQSource is based on RocketMQ pull consumer mode, and provides exactly once reliability guarantees when checkpoints are enabled.
-Otherwise, the source doesn't provide any reliability guarantees.
+The RocketMQSource is based on RocketMQ pull consumer mode, and provides exactly once reliability guarantees when
+checkpoints are enabled. Otherwise, the source doesn't provide any reliability guarantees.
 
 ### KeyValueDeserializationSchema
-The main API for deserializing topic and tags is the `org.apache.rocketmq.flink.legacy.common.serialization.KeyValueDeserializationSchema` interface.
-`rocketmq-flink` includes general purpose `KeyValueDeserializationSchema` implementations called `SimpleKeyValueDeserializationSchema`.
+
+The main API for deserializing topic and tags is
+the `org.apache.rocketmq.flink.legacy.common.serialization.KeyValueDeserializationSchema` interface.
+`rocketmq-flink` includes general purpose `KeyValueDeserializationSchema` implementations
+called `SimpleKeyValueDeserializationSchema`.
 
 ```java
 public interface KeyValueDeserializationSchema<T> extends ResultTypeQueryable<T>, Serializable {
@@ -19,15 +25,21 @@ public interface KeyValueDeserializationSchema<T> extends ResultTypeQueryable<T>
 ```
 
 ## RocketMQSink
-To use the `RocketMQSink`,  you construct an instance of it by specifying KeyValueSerializationSchema & TopicSelector instances and a Properties instance which including rocketmq configs.
+
+To use the `RocketMQSink`, you construct an instance of it by specifying KeyValueSerializationSchema & TopicSelector
+instances and a Properties instance which including rocketmq configs.
 `RocketMQSink(KeyValueSerializationSchema<IN> schema, TopicSelector<IN> topicSelector, Properties props)`
-The RocketMQSink provides at-least-once reliability guarantees when checkpoints are enabled and `withBatchFlushOnCheckpoint(true)` is set.
-Otherwise, the sink reliability guarantees depends on rocketmq producer's retry policy, for this case, the messages sending way is sync by default,
-but you can change it by invoking `withAsync(true)`. 
+The RocketMQSink provides at-least-once reliability guarantees when checkpoints are enabled
+and `withBatchFlushOnCheckpoint(true)` is set. Otherwise, the sink reliability guarantees depends on rocketmq producer's
+retry policy, for this case, the messages sending way is sync by default, but you can change it by
+invoking `withAsync(true)`.
 
 ### KeyValueSerializationSchema
-The main API for serializing topic and tags is the `org.apache.rocketmq.flink.legacy.common.serialization.KeyValueSerializationSchema` interface.
-`rocketmq-flink` includes general purpose `KeyValueSerializationSchema` implementations called `SimpleKeyValueSerializationSchema`.
+
+The main API for serializing topic and tags is
+the `org.apache.rocketmq.flink.legacy.common.serialization.KeyValueSerializationSchema` interface.
+`rocketmq-flink` includes general purpose `KeyValueSerializationSchema` implementations
+called `SimpleKeyValueSerializationSchema`.
 
 ```java
 public interface KeyValueSerializationSchema<T> extends Serializable {
@@ -39,8 +51,11 @@ public interface KeyValueSerializationSchema<T> extends Serializable {
 ```
 
 ### TopicSelector
-The main API for selecting topic and tags is the `org.apache.rocketmq.flink.legacy.common.selector.TopicSelector` interface.
-`rocketmq-flink` includes general purpose `TopicSelector` implementations called `DefaultTopicSelector` and `SimpleTopicSelector`.
+
+The main API for selecting topic and tags is the `org.apache.rocketmq.flink.legacy.common.selector.TopicSelector`
+interface.
+`rocketmq-flink` includes general purpose `TopicSelector` implementations called `DefaultTopicSelector`
+and `SimpleTopicSelector`.
 
 ```java
 public interface TopicSelector<T> extends Serializable {
@@ -52,53 +67,56 @@ public interface TopicSelector<T> extends Serializable {
 ```
 
 ## Examples
+
 The following is an example which receive messages from RocketMQ brokers and send messages to broker after processing.
 
  ```java
-StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+StreamExecutionEnvironment env=StreamExecutionEnvironment.getExecutionEnvironment();
 
-        // enable checkpoint
-        env.enableCheckpointing(3000);
+    // enable checkpoint
+    env.enableCheckpointing(3000);
 
-        Properties consumerProps = new Properties();
-        consumerProps.setProperty(RocketMqConfig.NAME_SERVER_ADDR, "localhost:9876");
-        consumerProps.setProperty(RocketMqConfig.CONSUMER_GROUP, "c002");
-        consumerProps.setProperty(RocketMqConfig.CONSUMER_TOPIC, "flink-source2");
+    Properties consumerProps=new Properties();
+    consumerProps.setProperty(RocketMqConfig.NAME_SERVER_ADDR,"localhost:9876");
+    consumerProps.setProperty(RocketMqConfig.CONSUMER_GROUP,"c002");
+    consumerProps.setProperty(RocketMqConfig.CONSUMER_TOPIC,"flink-source2");
 
-        Properties producerProps = new Properties();
-        producerProps.setProperty(RocketMqConfig.NAME_SERVER_ADDR, "localhost:9876");
+    Properties producerProps=new Properties();
+    producerProps.setProperty(RocketMqConfig.NAME_SERVER_ADDR,"localhost:9876");
 
-        env.addSource(new RocketMQSource(new SimpleKeyValueDeserializationSchema("id", "address"), consumerProps))
-            .name("rocketmq-source")
-            .setParallelism(2)
-            .process(new ProcessFunction<Map, Map>() {
-                @Override
-                public void processElement(Map in, Context ctx, Collector<Map> out) throws Exception {
-                    HashMap result = new HashMap();
-                    result.put("id", in.get("id"));
-                    String[] arr = in.get("address").toString().split("\\s+");
-                    result.put("province", arr[arr.length-1]);
-                    out.collect(result);
-                }
-            })
-            .name("upper-processor")
-            .setParallelism(2)
-            .addSink(new RocketMQSink(new SimpleKeyValueSerializationSchema("id", "province"),
-                new DefaultTopicSelector("flink-sink2"), producerProps).withBatchFlushOnCheckpoint(true))
-            .name("rocketmq-sink")
-            .setParallelism(2);
+    env.addSource(new RocketMQSource(new SimpleKeyValueDeserializationSchema("id","address"),consumerProps))
+    .name("rocketmq-source")
+    .setParallelism(2)
+    .process(new ProcessFunction<Map, Map>(){
+@Override
+public void processElement(Map in,Context ctx,Collector<Map> out)throws Exception{
+    HashMap result=new HashMap();
+    result.put("id",in.get("id"));
+    String[]arr=in.get("address").toString().split("\\s+");
+    result.put("province",arr[arr.length-1]);
+    out.collect(result);
+    }
+    })
+    .name("upper-processor")
+    .setParallelism(2)
+    .addSink(new RocketMQSink(new SimpleKeyValueSerializationSchema("id","province"),
+    new DefaultTopicSelector("flink-sink2"),producerProps).withBatchFlushOnCheckpoint(true))
+    .name("rocketmq-sink")
+    .setParallelism(2);
 
-        try {
-            env.execute("rocketmq-flink-example");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+    try{
+    env.execute("rocketmq-flink-example");
+    }catch(Exception e){
+    e.printStackTrace();
+    }
  ```
 
 ## Configurations
+
 The following configurations are all from the class `org.apache.rocketmq.flink.legacy.RocketMQConfig`.
 
 ### Producer Configurations
+
 | NAME        | DESCRIPTION           | DEFAULT  |
 | ------------- |:-------------:|:------:|
 | nameserver.address      | name server address *Required* | null |
@@ -108,8 +126,8 @@ The following configurations are all from the class `org.apache.rocketmq.flink.l
 | producer.retry.times | producer send messages retry times      |    3 |
 | producer.timeout | producer send messages timeout      |    3000 |
 
-
 ### Consumer Configurations
+
 | NAME        | DESCRIPTION           | DEFAULT  |
 | ------------- |:-------------:|:------:|
 | nameserver.address      | name server address *Required* | null |
@@ -125,7 +143,6 @@ The following configurations are all from the class `org.apache.rocketmq.flink.l
 | consumer.batch.size | consumer messages batch size      |    32 |
 | consumer.delay.when.message.not.found | the delay time when messages were not found      |    10 |
 
-
 ## RocketMQ SQL Connector
 
 ### How to create a RocketMQ table
@@ -133,35 +150,37 @@ The following configurations are all from the class `org.apache.rocketmq.flink.l
 The example below shows how to create a RocketMQ table:
 
 ```sql
-CREATE TABLE rocketmq_source (
-  `user_id` BIGINT,
-  `item_id` BIGINT,
-  `behavior` STRING
+CREATE TABLE rocketmq_source
+(
+    `user_id`  BIGINT,
+    `item_id`  BIGINT,
+    `behavior` STRING
 ) WITH (
-  'connector' = 'rocketmq',
-  'topic' = 'user_behavior',
-  'consumeGroup' = 'behavior_consume_group',
-  'nameServerAddress' = '127.0.0.1:9876'
-);
+      'connector' = 'rocketmq',
+      'topic' = 'user_behavior',
+      'consumeGroup' = 'behavior_consume_group',
+      'nameServerAddress' = '127.0.0.1:9876'
+      );
 
-CREATE TABLE rocketmq_sink (
-  `user_id` BIGINT,
-  `item_id` BIGINT,
-  `behavior` STRING
+CREATE TABLE rocketmq_sink
+(
+    `user_id`  BIGINT,
+    `item_id`  BIGINT,
+    `behavior` STRING
 ) WITH (
-  'connector' = 'rocketmq',
-  'topic' = 'user_behavior',
-  'produceGroup' = 'behavior_produce_group',
-  'nameServerAddress' = '127.0.0.1:9876'
-);
+      'connector' = 'rocketmq',
+      'topic' = 'user_behavior',
+      'produceGroup' = 'behavior_produce_group',
+      'nameServerAddress' = '127.0.0.1:9876'
+      );
 ```
 
 ### Available Metadata
 
 The following connector metadata can be accessed as metadata columns in a table definition.
 
-The `R/W` column defines whether a metadata field is readable (`R`) and/or writable (`W`).
-Read-only columns must be declared `VIRTUAL` to exclude them during an `INSERT INTO` operation.
+The `R/W` column defines whether a metadata field is readable (`R`) and/or writable (`W`). Read-only columns must be
+declared `VIRTUAL` to exclude them during an `INSERT INTO` operation.
 
 | KEY            | DATA TYPE              | DESCRIPTION                                     | DEFAULT       |
 | --------------   |:-----------------------------:|:---------------------------------------------------:|:--------------------:|
@@ -170,34 +189,29 @@ Read-only columns must be declared `VIRTUAL` to exclude them during an `INSERT I
 The extended `CREATE TABLE` example demonstrates the syntax for exposing these metadata fields:
 
 ```sql
-CREATE TABLE rocketmq_source (
-  `topic` STRING METADATA VIRTUAL,
-  `user_id` BIGINT,
-  `item_id` BIGINT,
-  `behavior` STRING
+CREATE TABLE rocketmq_source
+(
+    `topic`    STRING METADATA VIRTUAL,
+    `user_id`  BIGINT,
+    `item_id`  BIGINT,
+    `behavior` STRING
 ) WITH (
-  'connector' = 'rocketmq',
-  'topic' = 'user_behavior',
-  'consumeGroup' = 'behavior_consume_group',
-  'nameServerAddress' = '127.0.0.1:9876'
-);
+      'connector' = 'rocketmq',
+      'topic' = 'user_behavior',
+      'consumeGroup' = 'behavior_consume_group',
+      'nameServerAddress' = '127.0.0.1:9876'
+      );
 ```
 
 ## License
 
-Licensed to the Apache Software Foundation (ASF) under one
-or more contributor license agreements.  See the NOTICE file
-distributed with this work for additional information
-regarding copyright ownership.  The ASF licenses this file
-to you under the Apache License, Version 2.0 (the
-"License"); you may not use this file except in compliance
-with the License.  You may obtain a copy of the License at
+Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the NOTICE file
+distributed with this work for additional information regarding copyright ownership. The ASF licenses this file to you
+under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
 
-  http://www.apache.org/licenses/LICENSE-2.0
+http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing,
-software distributed under the License is distributed on an
-"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-KIND, either express or implied.  See the License for the
-specific language governing permissions and limitations
-under the License.
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific
+language governing permissions and limitations under the License.

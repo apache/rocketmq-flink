@@ -17,13 +17,6 @@
 
 package org.apache.rocketmq.flink.source.util;
 
-import org.apache.flink.table.data.DecimalData;
-import org.apache.flink.table.data.binary.BinaryStringData;
-import org.apache.flink.table.data.util.DataFormatConverters;
-import org.apache.flink.table.data.util.DataFormatConverters.TimestampConverter;
-import org.apache.flink.table.types.DataType;
-import org.apache.flink.table.types.logical.DecimalType;
-
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.sql.Date;
@@ -31,27 +24,35 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.Base64;
 import java.util.Set;
+import org.apache.flink.table.data.DecimalData;
+import org.apache.flink.table.data.binary.BinaryStringData;
+import org.apache.flink.table.data.util.DataFormatConverters;
+import org.apache.flink.table.data.util.DataFormatConverters.TimestampConverter;
+import org.apache.flink.table.types.DataType;
+import org.apache.flink.table.types.logical.DecimalType;
 
-/** String serializer. */
+/**
+ * String serializer.
+ */
 public class StringSerializer {
 
     public static TimestampConverter timestampConverter = new TimestampConverter(3);
     private static final Base64.Decoder decoder = Base64.getDecoder();
 
     public static Object deserialize(
-            String value,
-            ByteSerializer.ValueType type,
-            DataType dataType,
-            Set<String> nullValues) {
+        String value,
+        ByteSerializer.ValueType type,
+        DataType dataType,
+        Set<String> nullValues) {
         return deserialize(value, type, dataType, nullValues, false);
     }
 
     public static Object deserialize(
-            String value,
-            ByteSerializer.ValueType type,
-            DataType dataType,
-            Set<String> nullValues,
-            Boolean isRGData) {
+        String value,
+        ByteSerializer.ValueType type,
+        DataType dataType,
+        Set<String> nullValues,
+        Boolean isRGData) {
         if (null != nullValues && nullValues.contains(value)) {
             return null;
         }
@@ -102,25 +103,25 @@ public class StringSerializer {
                     return null == value ? null : Long.parseLong(value);
                 }
                 return null == value
-                        ? null
-                        : DataFormatConverters.DateConverter.INSTANCE.toInternal(
-                                Date.valueOf(value));
+                    ? null
+                    : DataFormatConverters.DateConverter.INSTANCE.toInternal(
+                    Date.valueOf(value));
             case V_Time: // sql.Time encoded as long
                 if (isRGData) {
                     return null == value ? null : Long.parseLong(value);
                 }
                 return null == value
-                        ? null
-                        : DataFormatConverters.TimeConverter.INSTANCE.toInternal(
-                                new Time(Long.parseLong(value)));
+                    ? null
+                    : DataFormatConverters.TimeConverter.INSTANCE.toInternal(
+                    new Time(Long.parseLong(value)));
             case V_BigDecimal:
                 DecimalType decimalType = (DecimalType) dataType.getLogicalType();
                 return value == null
-                        ? null
-                        : DecimalData.fromBigDecimal(
-                                new BigDecimal(value),
-                                decimalType.getPrecision(),
-                                decimalType.getScale());
+                    ? null
+                    : DecimalData.fromBigDecimal(
+                    new BigDecimal(value),
+                    decimalType.getPrecision(),
+                    decimalType.getScale());
             case V_BigInteger:
                 return null == value ? null : new BigInteger(value);
 
@@ -130,7 +131,7 @@ public class StringSerializer {
     }
 
     public static Object deserialize(
-            String value, ByteSerializer.ValueType type, DataType dataType, Boolean isRGData) {
+        String value, ByteSerializer.ValueType type, DataType dataType, Boolean isRGData) {
         return deserialize(value, type, dataType, null, isRGData);
     }
 

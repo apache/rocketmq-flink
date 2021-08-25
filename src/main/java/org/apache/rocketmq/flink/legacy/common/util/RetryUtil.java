@@ -16,10 +16,9 @@
  */
 package org.apache.rocketmq.flink.legacy.common.util;
 
+import java.util.concurrent.Callable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.concurrent.Callable;
 
 public class RetryUtil {
     private static final Logger log = LoggerFactory.getLogger(RetryUtil.class);
@@ -28,7 +27,8 @@ public class RetryUtil {
     private static final long MAX_BACKOFF = 5000;
     private static final int MAX_ATTEMPTS = 5;
 
-    private RetryUtil() {}
+    private RetryUtil() {
+    }
 
     public static void waitForMs(long sleepMs) {
         try {
@@ -53,6 +53,7 @@ public class RetryUtil {
             }
             waitForMs(backoff);
             backoff = Math.min(backoff * 2, MAX_BACKOFF);
-        } while (true);
+        }
+        while (true);
     }
 }

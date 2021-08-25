@@ -16,11 +16,10 @@
  */
 package org.apache.rocketmq.flink.legacy.common.serialization;
 
-import org.apache.flink.api.common.typeinfo.TypeInformation;
-
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 
 public class SimpleKeyValueDeserializationSchema implements KeyValueDeserializationSchema<Map> {
     public static final String DEFAULT_KEY_FIELD = "key";
@@ -36,7 +35,7 @@ public class SimpleKeyValueDeserializationSchema implements KeyValueDeserializat
     /**
      * SimpleKeyValueDeserializationSchema Constructor.
      *
-     * @param keyField tuple field for selecting the key
+     * @param keyField   tuple field for selecting the key
      * @param valueField tuple field for selecting the value
      */
     public SimpleKeyValueDeserializationSchema(String keyField, String valueField) {

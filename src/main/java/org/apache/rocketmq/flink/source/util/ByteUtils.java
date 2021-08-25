@@ -21,7 +21,9 @@ package org.apache.rocketmq.flink.source.util;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
-/** Utility class to for operations related to bytes. */
+/**
+ * Utility class to for operations related to bytes.
+ */
 public class ByteUtils {
 
     /**
@@ -37,11 +39,10 @@ public class ByteUtils {
     /**
      * Converts a byte array to an int value.
      *
-     * @param bytes byte array
+     * @param bytes  byte array
      * @param offset offset into array
      * @return the int value
-     * @throws IllegalArgumentException if there's not enough room in the array at the offset
-     *     indicated.
+     * @throws IllegalArgumentException if there's not enough room in the array at the offset indicated.
      */
     public static int toInt(byte[] bytes, int offset) {
         if (offset + Integer.BYTES > bytes.length) {
@@ -68,7 +69,7 @@ public class ByteUtils {
     /**
      * Convert a byte array to a boolean.
      *
-     * @param b array
+     * @param b      array
      * @param offset offset into array
      * @return True or false.
      */
@@ -92,11 +93,10 @@ public class ByteUtils {
     /**
      * Converts a byte array to a long value.
      *
-     * @param bytes array of bytes
+     * @param bytes  array of bytes
      * @param offset offset into array
      * @return the long value
-     * @throws IllegalArgumentException if there's not enough room in the array at the offset
-     *     indicated.
+     * @throws IllegalArgumentException if there's not enough room in the array at the offset indicated.
      */
     public static long toLong(byte[] bytes, int offset) {
         if (offset + Long.BYTES > bytes.length) {
@@ -123,7 +123,7 @@ public class ByteUtils {
     /**
      * Presumes float encoded as IEEE 754 floating-point "single format".
      *
-     * @param bytes array to convert
+     * @param bytes  array to convert
      * @param offset offset into array
      * @return Float made from passed byte array.
      */
@@ -144,7 +144,7 @@ public class ByteUtils {
     /**
      * Parse a byte array to double.
      *
-     * @param bytes byte array
+     * @param bytes  byte array
      * @param offset offset where double is
      * @return Return double made from passed bytes.
      */
@@ -165,11 +165,10 @@ public class ByteUtils {
     /**
      * Converts a byte array to a short value.
      *
-     * @param bytes byte array
+     * @param bytes  byte array
      * @param offset offset into array
      * @return the short value
-     * @throws IllegalArgumentException if there's not enough room in the array at the offset
-     *     indicated.
+     * @throws IllegalArgumentException if there's not enough room in the array at the offset indicated.
      */
     public static short toShort(byte[] bytes, int offset) {
         if (offset + Short.BYTES > bytes.length) {
@@ -185,19 +184,19 @@ public class ByteUtils {
     // ---------------------------------------------------------------------------------------------------------
 
     private static IllegalArgumentException explainWrongLengthOrOffset(
-            final byte[] bytes, final int offset, final int length, final int expectedLength) {
+        final byte[] bytes, final int offset, final int length, final int expectedLength) {
         String exceptionMessage;
         if (length != expectedLength) {
             exceptionMessage = "Wrong length: " + length + ", expected " + expectedLength;
         } else {
             exceptionMessage =
-                    "offset ("
-                            + offset
-                            + ") + length ("
-                            + length
-                            + ") exceed the"
-                            + " capacity of the array: "
-                            + bytes.length;
+                "offset ("
+                    + offset
+                    + ") + length ("
+                    + length
+                    + ") exceed the"
+                    + " capacity of the array: "
+                    + bytes.length;
         }
         return new IllegalArgumentException(exceptionMessage);
     }

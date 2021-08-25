@@ -16,12 +16,13 @@
  */
 package org.apache.rocketmq.flink.legacy.common.selector;
 
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-
-/** Uses field name to select topic and tag name from tuple. */
+/**
+ * Uses field name to select topic and tag name from tuple.
+ */
 public class SimpleTopicSelector implements TopicSelector<Map> {
     private static final Logger LOG = LoggerFactory.getLogger(SimpleTopicSelector.class);
 
@@ -34,16 +35,16 @@ public class SimpleTopicSelector implements TopicSelector<Map> {
     /**
      * SimpleTopicSelector Constructor.
      *
-     * @param topicFieldName field name used for selecting topic
+     * @param topicFieldName   field name used for selecting topic
      * @param defaultTopicName default field name used for selecting topic
-     * @param tagFieldName field name used for selecting tag
-     * @param defaultTagName default field name used for selecting tag
+     * @param tagFieldName     field name used for selecting tag
+     * @param defaultTagName   default field name used for selecting tag
      */
     public SimpleTopicSelector(
-            String topicFieldName,
-            String defaultTopicName,
-            String tagFieldName,
-            String defaultTagName) {
+        String topicFieldName,
+        String defaultTopicName,
+        String tagFieldName,
+        String defaultTagName) {
         this.topicFieldName = topicFieldName;
         this.defaultTopicName = defaultTopicName;
         this.tagFieldName = tagFieldName;
@@ -57,9 +58,9 @@ public class SimpleTopicSelector implements TopicSelector<Map> {
             return topic != null ? topic.toString() : defaultTopicName;
         } else {
             LOG.warn(
-                    "Field {} Not Found. Returning default topic {}",
-                    topicFieldName,
-                    defaultTopicName);
+                "Field {} Not Found. Returning default topic {}",
+                topicFieldName,
+                defaultTopicName);
             return defaultTopicName;
         }
     }

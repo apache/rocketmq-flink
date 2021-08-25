@@ -17,14 +17,7 @@
 
 package org.apache.rocketmq.flink.legacy.example;
 
-import org.apache.rocketmq.client.AccessChannel;
-import org.apache.rocketmq.flink.legacy.RocketMQConfig;
-import org.apache.rocketmq.flink.legacy.RocketMQSink;
-import org.apache.rocketmq.flink.legacy.RocketMQSourceFunction;
-import org.apache.rocketmq.flink.legacy.common.serialization.SimpleTupleDeserializationSchema;
-import org.apache.rocketmq.flink.legacy.function.SinkMapFunction;
-import org.apache.rocketmq.flink.legacy.function.SourceMapFunction;
-
+import java.util.Properties;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.runtime.state.memory.MemoryStateBackend;
@@ -33,8 +26,13 @@ import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-
-import java.util.Properties;
+import org.apache.rocketmq.client.AccessChannel;
+import org.apache.rocketmq.flink.legacy.RocketMQConfig;
+import org.apache.rocketmq.flink.legacy.RocketMQSink;
+import org.apache.rocketmq.flink.legacy.RocketMQSourceFunction;
+import org.apache.rocketmq.flink.legacy.common.serialization.SimpleTupleDeserializationSchema;
+import org.apache.rocketmq.flink.legacy.function.SinkMapFunction;
+import org.apache.rocketmq.flink.legacy.function.SourceMapFunction;
 
 import static org.apache.rocketmq.flink.legacy.RocketMQConfig.CONSUMER_OFFSET_LATEST;
 import static org.apache.rocketmq.flink.legacy.RocketMQConfig.DEFAULT_CONSUMER_TAG;
@@ -49,8 +47,8 @@ public class RocketMQFlinkExample {
     private static Properties getConsumerProps() {
         Properties consumerProps = new Properties();
         consumerProps.setProperty(
-                RocketMQConfig.NAME_SERVER_ADDR,
-                "http://${instanceId}.${region}.mq-internal.aliyuncs.com:8080");
+            RocketMQConfig.NAME_SERVER_ADDR,
+            "http://${instanceId}.${region}.mq-internal.aliyuncs.com:8080");
         consumerProps.setProperty(RocketMQConfig.CONSUMER_GROUP, "${ConsumerGroup}");
         consumerProps.setProperty(RocketMQConfig.CONSUMER_TOPIC, "${SourceTopic}");
         consumerProps.setProperty(RocketMQConfig.CONSUMER_TAG, DEFAULT_CONSUMER_TAG);
@@ -69,8 +67,8 @@ public class RocketMQFlinkExample {
     private static Properties getProducerProps() {
         Properties producerProps = new Properties();
         producerProps.setProperty(
-                RocketMQConfig.NAME_SERVER_ADDR,
-                "http://${instanceId}.${region}.mq-internal.aliyuncs.com:8080");
+            RocketMQConfig.NAME_SERVER_ADDR,
+            "http://${instanceId}.${region}.mq-internal.aliyuncs.com:8080");
         producerProps.setProperty(RocketMQConfig.PRODUCER_GROUP, "${ProducerGroup}");
         producerProps.setProperty(RocketMQConfig.ACCESS_KEY, "${AccessKey}");
         producerProps.setProperty(RocketMQConfig.SECRET_KEY, "${SecretKey}");
@@ -105,8 +103,8 @@ public class RocketMQFlinkExample {
         env.getCheckpointConfig().setMaxConcurrentCheckpoints(1);
         // enable externalized checkpoints which are retained after job cancellation
         env.getCheckpointConfig()
-                .enableExternalizedCheckpoints(
-                        CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
+            .enableExternalizedCheckpoints(
+                CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
 
         Properties consumerProps = getConsumerProps();
         Properties producerProps = getProducerProps();
@@ -114,18 +112,18 @@ public class RocketMQFlinkExample {
         SimpleTupleDeserializationSchema schema = new SimpleTupleDeserializationSchema();
 
         DataStreamSource<Tuple2<String, String>> source =
-                env.addSource(new RocketMQSourceFunction<>(schema, consumerProps))
-                        .setParallelism(2);
+            env.addSource(new RocketMQSourceFunction<>(schema, consumerProps))
+                .setParallelism(2);
 
         source.print();
         source.process(new SourceMapFunction())
-                .process(new SinkMapFunction("FLINK_SINK", "*"))
-                .addSink(
-                        new RocketMQSink(producerProps)
-                                .withBatchFlushOnCheckpoint(true)
-                                .withBatchSize(32)
-                                .withAsync(true))
-                .setParallelism(2);
+            .process(new SinkMapFunction("FLINK_SINK", "*"))
+            .addSink(
+                new RocketMQSink(producerProps)
+                    .withBatchFlushOnCheckpoint(true)
+                    .withBatchSize(32)
+                    .withAsync(true))
+            .setParallelism(2);
 
         env.execute("rocketmq-connect-flink");
     }

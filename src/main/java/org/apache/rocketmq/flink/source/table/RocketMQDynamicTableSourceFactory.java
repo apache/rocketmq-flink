@@ -18,6 +18,14 @@
 
 package org.apache.rocketmq.flink.source.table;
 
+import java.text.ParseException;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.TimeZone;
+import java.util.stream.Collectors;
+import org.apache.commons.lang3.time.FastDateFormat;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.TableSchema;
@@ -30,16 +38,6 @@ import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.utils.TableSchemaUtils;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StringUtils;
-
-import org.apache.commons.lang3.time.FastDateFormat;
-
-import java.text.ParseException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.TimeZone;
-import java.util.stream.Collectors;
 
 import static org.apache.flink.table.factories.FactoryUtil.createTableFactoryHelper;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.CONSUMER_GROUP;
@@ -60,8 +58,7 @@ import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_USE_NEW_
 import static org.apache.rocketmq.flink.common.RocketMQOptions.TOPIC;
 
 /**
- * Defines the {@link DynamicTableSourceFactory} implementation to create {@link
- * RocketMQScanTableSource}.
+ * Defines the {@link DynamicTableSourceFactory} implementation to create {@link RocketMQScanTableSource}.
  */
 public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFactory {
 
@@ -122,11 +119,11 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                     startTime = parseDateString(startDateTime, timeZone);
                 } catch (ParseException e) {
                     throw new RuntimeException(
-                            String.format(
-                                    "Incorrect datetime format: %s, pls use ISO-8601 "
-                                            + "complete date plus hours, minutes and seconds format:%s.",
-                                    startDateTime, DATE_FORMAT),
-                            e);
+                        String.format(
+                            "Incorrect datetime format: %s, pls use ISO-8601 "
+                                + "complete date plus hours, minutes and seconds format:%s.",
+                            startDateTime, DATE_FORMAT),
+                        e);
                 }
             }
         }
@@ -137,42 +134,42 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                 stopInMs = parseDateString(endDateTime, timeZone);
             } catch (ParseException e) {
                 throw new RuntimeException(
-                        String.format(
-                                "Incorrect datetime format: %s, pls use ISO-8601 "
-                                        + "complete date plus hours, minutes and seconds format:%s.",
-                                endDateTime, DATE_FORMAT),
-                        e);
+                    String.format(
+                        "Incorrect datetime format: %s, pls use ISO-8601 "
+                            + "complete date plus hours, minutes and seconds format:%s.",
+                        endDateTime, DATE_FORMAT),
+                    e);
             }
             Preconditions.checkArgument(
-                    stopInMs >= startTime, "Start time should be less than stop time.");
+                stopInMs >= startTime, "Start time should be less than stop time.");
         }
         long partitionDiscoveryIntervalMs =
-                configuration.getLong(OPTIONAL_PARTITION_DISCOVERY_INTERVAL_MS);
+            configuration.getLong(OPTIONAL_PARTITION_DISCOVERY_INTERVAL_MS);
         boolean useNewApi = configuration.getBoolean(OPTIONAL_USE_NEW_API);
         DescriptorProperties descriptorProperties = new DescriptorProperties();
         descriptorProperties.putProperties(rawProperties);
         TableSchema physicalSchema =
-                TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
+            TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
         descriptorProperties.putTableSchema("schema", physicalSchema);
         return new RocketMQScanTableSource(
-                descriptorProperties,
-                physicalSchema,
-                topic,
-                consumerGroup,
-                nameServerAddress,
-                tag,
-                stopInMs,
-                startMessageOffset,
-                startMessageOffset < 0 ? startTime : -1L,
-                partitionDiscoveryIntervalMs,
-                useNewApi);
+            descriptorProperties,
+            physicalSchema,
+            topic,
+            consumerGroup,
+            nameServerAddress,
+            tag,
+            stopInMs,
+            startMessageOffset,
+            startMessageOffset < 0 ? startTime : -1L,
+            partitionDiscoveryIntervalMs,
+            useNewApi);
     }
 
     private void transformContext(
-            DynamicTableFactory factory, DynamicTableFactory.Context context) {
+        DynamicTableFactory factory, DynamicTableFactory.Context context) {
         Map<String, String> catalogOptions = context.getCatalogTable().getOptions();
         Map<String, String> convertedOptions =
-                normalizeOptionCaseAsFactory(factory, catalogOptions);
+            normalizeOptionCaseAsFactory(factory, catalogOptions);
         catalogOptions.clear();
         for (Map.Entry<String, String> entry : convertedOptions.entrySet()) {
             catalogOptions.put(entry.getKey(), entry.getValue());
@@ -180,36 +177,36 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
     }
 
     private Map<String, String> normalizeOptionCaseAsFactory(
-            Factory factory, Map<String, String> options) {
+        Factory factory, Map<String, String> options) {
         Map<String, String> normalizedOptions = new HashMap<>();
         Map<String, String> requiredOptionKeysLowerCaseToOriginal =
-                factory.requiredOptions().stream()
-                        .collect(
-                                Collectors.toMap(
-                                        option -> option.key().toLowerCase(), ConfigOption::key));
+            factory.requiredOptions().stream()
+                .collect(
+                    Collectors.toMap(
+                        option -> option.key().toLowerCase(), ConfigOption::key));
         Map<String, String> optionalOptionKeysLowerCaseToOriginal =
-                factory.optionalOptions().stream()
-                        .collect(
-                                Collectors.toMap(
-                                        option -> option.key().toLowerCase(), ConfigOption::key));
+            factory.optionalOptions().stream()
+                .collect(
+                    Collectors.toMap(
+                        option -> option.key().toLowerCase(), ConfigOption::key));
         for (Map.Entry<String, String> entry : options.entrySet()) {
             final String catalogOptionKey = entry.getKey();
             final String catalogOptionValue = entry.getValue();
             normalizedOptions.put(
-                    requiredOptionKeysLowerCaseToOriginal.containsKey(
-                                    catalogOptionKey.toLowerCase())
-                            ? requiredOptionKeysLowerCaseToOriginal.get(
-                                    catalogOptionKey.toLowerCase())
-                            : optionalOptionKeysLowerCaseToOriginal.getOrDefault(
-                                    catalogOptionKey.toLowerCase(), catalogOptionKey),
-                    catalogOptionValue);
+                requiredOptionKeysLowerCaseToOriginal.containsKey(
+                    catalogOptionKey.toLowerCase())
+                    ? requiredOptionKeysLowerCaseToOriginal.get(
+                    catalogOptionKey.toLowerCase())
+                    : optionalOptionKeysLowerCaseToOriginal.getOrDefault(
+                    catalogOptionKey.toLowerCase(), catalogOptionKey),
+                catalogOptionValue);
         }
         return normalizedOptions;
     }
 
     private Long parseDateString(String dateString, String timeZone) throws ParseException {
         FastDateFormat simpleDateFormat =
-                FastDateFormat.getInstance(DATE_FORMAT, TimeZone.getTimeZone(timeZone));
+            FastDateFormat.getInstance(DATE_FORMAT, TimeZone.getTimeZone(timeZone));
         return simpleDateFormat.parse(dateString).getTime();
     }
 }

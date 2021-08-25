@@ -1,13 +1,12 @@
 package org.apache.rocketmq.flink.legacy.common.serialization;
 
+import java.nio.charset.StandardCharsets;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple2;
 
-import java.nio.charset.StandardCharsets;
-
 public class SimpleTupleDeserializationSchema
-        implements KeyValueDeserializationSchema<Tuple2<String, String>> {
+    implements KeyValueDeserializationSchema<Tuple2<String, String>> {
 
     @Override
     public Tuple2<String, String> deserializeKeyAndValue(byte[] key, byte[] value) {
@@ -18,6 +17,7 @@ public class SimpleTupleDeserializationSchema
 
     @Override
     public TypeInformation<Tuple2<String, String>> getProducedType() {
-        return TypeInformation.of(new TypeHint<Tuple2<String, String>>() {});
+        return TypeInformation.of(new TypeHint<Tuple2<String, String>>() {
+        });
     }
 }

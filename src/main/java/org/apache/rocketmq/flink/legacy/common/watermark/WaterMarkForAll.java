@@ -25,7 +25,8 @@ public class WaterMarkForAll {
 
     private long maxTimestamp = 0L;
 
-    public WaterMarkForAll() {}
+    public WaterMarkForAll() {
+    }
 
     public WaterMarkForAll(long maxOutOfOrderness) {
         this.maxOutOfOrderness = maxOutOfOrderness;

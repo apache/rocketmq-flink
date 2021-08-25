@@ -16,6 +16,18 @@
  */
 package org.apache.rocketmq.flink.legacy;
 
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Properties;
+import java.util.UUID;
+import org.apache.commons.lang.Validate;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.metrics.Meter;
+import org.apache.flink.runtime.state.FunctionInitializationContext;
+import org.apache.flink.runtime.state.FunctionSnapshotContext;
+import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
+import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
+import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendCallback;
@@ -24,28 +36,13 @@ import org.apache.rocketmq.client.producer.SendStatus;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.flink.legacy.common.util.MetricUtils;
 import org.apache.rocketmq.remoting.exception.RemotingException;
-
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.metrics.Meter;
-import org.apache.flink.runtime.state.FunctionInitializationContext;
-import org.apache.flink.runtime.state.FunctionSnapshotContext;
-import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
-import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
-import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
-
-import org.apache.commons.lang.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Properties;
-import java.util.UUID;
-
 /**
  * The RocketMQSink provides at-least-once reliability guarantees when checkpoints are enabled and
- * batchFlushOnCheckpoint(true) is set. Otherwise, the sink reliability guarantees depends on
- * rocketmq producer's retry policy.
+ * batchFlushOnCheckpoint(true) is set. Otherwise, the sink reliability guarantees depends on rocketmq producer's retry
+ * policy.
  */
 public class RocketMQSink extends RichSinkFunction<Message> implements CheckpointedFunction {
 
@@ -78,16 +75,16 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
         // with authentication hook
         producer = new DefaultMQProducer(RocketMQConfig.buildAclRPCHook(props));
         producer.setInstanceName(
-                getRuntimeContext().getIndexOfThisSubtask() + "_" + UUID.randomUUID());
+            getRuntimeContext().getIndexOfThisSubtask() + "_" + UUID.randomUUID());
 
         RocketMQConfig.buildProducerConfigs(props, producer);
 
         batchList = new LinkedList<>();
 
         if (batchFlushOnCheckpoint
-                && !((StreamingRuntimeContext) getRuntimeContext()).isCheckpointingEnabled()) {
+            && !((StreamingRuntimeContext) getRuntimeContext()).isCheckpointingEnabled()) {
             LOG.info(
-                    "Flushing on checkpoint is enabled, but checkpointing is not enabled. Disabling flushing.");
+                "Flushing on checkpoint is enabled, but checkpointing is not enabled. Disabling flushing.");
             batchFlushOnCheckpoint = false;
         }
 
@@ -119,24 +116,24 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
         if (async) {
             try {
                 producer.send(
-                        input,
-                        new SendCallback() {
-                            @Override
-                            public void onSuccess(SendResult sendResult) {
-                                LOG.debug("Async send message success! result: {}", sendResult);
-                                long end = System.currentTimeMillis();
-                                latencyGauge.report(end - timeStartWriting, 1);
-                                outTps.markEvent();
-                                outBps.markEvent(input.getBody().length);
-                            }
+                    input,
+                    new SendCallback() {
+                        @Override
+                        public void onSuccess(SendResult sendResult) {
+                            LOG.debug("Async send message success! result: {}", sendResult);
+                            long end = System.currentTimeMillis();
+                            latencyGauge.report(end - timeStartWriting, 1);
+                            outTps.markEvent();
+                            outBps.markEvent(input.getBody().length);
+                        }
 
-                            @Override
-                            public void onException(Throwable throwable) {
-                                if (throwable != null) {
-                                    LOG.error("Async send message failure!", throwable);
-                                }
+                        @Override
+                        public void onException(Throwable throwable) {
+                            if (throwable != null) {
+                                LOG.error("Async send message failure!", throwable);
                             }
-                        });
+                        }
+                    });
             } catch (Exception e) {
                 LOG.error("Async send message failure!", e);
             }

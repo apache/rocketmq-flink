@@ -33,7 +33,7 @@ public class SimpleKeyValueSerializationSchema implements KeyValueSerializationS
     /**
      * SimpleKeyValueSerializationSchema Constructor.
      *
-     * @param keyField tuple field for selecting the key
+     * @param keyField   tuple field for selecting the key
      * @param valueField tuple field for selecting the value
      */
     public SimpleKeyValueSerializationSchema(String keyField, String valueField) {

@@ -18,16 +18,7 @@
 
 package org.apache.rocketmq.flink.source;
 
-import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumState;
-import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumStateSerializer;
-import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumerator;
-import org.apache.rocketmq.flink.source.reader.RocketMQPartitionSplitReader;
-import org.apache.rocketmq.flink.source.reader.RocketMQRecordEmitter;
-import org.apache.rocketmq.flink.source.reader.RocketMQSourceReader;
-import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQDeserializationSchema;
-import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
-import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplitSerializer;
-
+import java.util.function.Supplier;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.Boundedness;
@@ -45,13 +36,22 @@ import org.apache.flink.connector.base.source.reader.synchronization.FutureCompl
 import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.UserCodeClassLoader;
+import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumState;
+import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumStateSerializer;
+import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumerator;
+import org.apache.rocketmq.flink.source.reader.RocketMQPartitionSplitReader;
+import org.apache.rocketmq.flink.source.reader.RocketMQRecordEmitter;
+import org.apache.rocketmq.flink.source.reader.RocketMQSourceReader;
+import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQDeserializationSchema;
+import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
+import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplitSerializer;
 
-import java.util.function.Supplier;
-
-/** The Source implementation of RocketMQ. */
+/**
+ * The Source implementation of RocketMQ.
+ */
 public class RocketMQSource<OUT>
-        implements Source<OUT, RocketMQPartitionSplit, RocketMQSourceEnumState>,
-                ResultTypeQueryable<OUT> {
+    implements Source<OUT, RocketMQPartitionSplit, RocketMQSourceEnumState>,
+    ResultTypeQueryable<OUT> {
     private static final long serialVersionUID = -1L;
 
     private final String topic;
@@ -68,16 +68,16 @@ public class RocketMQSource<OUT>
     private final RocketMQDeserializationSchema<OUT> deserializationSchema;
 
     public RocketMQSource(
-            String topic,
-            String consumerGroup,
-            String nameServerAddress,
-            String tag,
-            long stopInMs,
-            long startTime,
-            long startOffset,
-            long partitionDiscoveryIntervalMs,
-            Boundedness boundedness,
-            RocketMQDeserializationSchema<OUT> deserializationSchema) {
+        String topic,
+        String consumerGroup,
+        String nameServerAddress,
+        String tag,
+        long stopInMs,
+        long startTime,
+        long startOffset,
+        long partitionDiscoveryIntervalMs,
+        Boundedness boundedness,
+        RocketMQDeserializationSchema<OUT> deserializationSchema) {
         this.topic = topic;
         this.consumerGroup = consumerGroup;
         this.nameServerAddress = nameServerAddress;
@@ -97,71 +97,71 @@ public class RocketMQSource<OUT>
 
     @Override
     public SourceReader<OUT, RocketMQPartitionSplit> createReader(
-            SourceReaderContext readerContext) {
+        SourceReaderContext readerContext) {
         FutureCompletingBlockingQueue<RecordsWithSplitIds<Tuple3<OUT, Long, Long>>> elementsQueue =
-                new FutureCompletingBlockingQueue<>();
+            new FutureCompletingBlockingQueue<>();
         deserializationSchema.open(
-                new DeserializationSchema.InitializationContext() {
-                    @Override
-                    public MetricGroup getMetricGroup() {
-                        return readerContext.metricGroup();
-                    }
+            new DeserializationSchema.InitializationContext() {
+                @Override
+                public MetricGroup getMetricGroup() {
+                    return readerContext.metricGroup();
+                }
 
-                    @Override
-                    public UserCodeClassLoader getUserCodeClassLoader() {
-                        return null;
-                    }
-                });
+                @Override
+                public UserCodeClassLoader getUserCodeClassLoader() {
+                    return null;
+                }
+            });
 
         Supplier<SplitReader<Tuple3<OUT, Long, Long>, RocketMQPartitionSplit>> splitReaderSupplier =
-                () ->
-                        new RocketMQPartitionSplitReader<>(
-                                topic,
-                                consumerGroup,
-                                nameServerAddress,
-                                tag,
-                                stopInMs,
-                                startTime,
-                                startOffset,
-                                deserializationSchema);
+            () ->
+                new RocketMQPartitionSplitReader<>(
+                    topic,
+                    consumerGroup,
+                    nameServerAddress,
+                    tag,
+                    stopInMs,
+                    startTime,
+                    startOffset,
+                    deserializationSchema);
         RocketMQRecordEmitter<OUT> recordEmitter = new RocketMQRecordEmitter<>();
 
         return new RocketMQSourceReader<>(
-                elementsQueue,
-                splitReaderSupplier,
-                recordEmitter,
-                new Configuration(),
-                readerContext);
+            elementsQueue,
+            splitReaderSupplier,
+            recordEmitter,
+            new Configuration(),
+            readerContext);
     }
 
     @Override
     public SplitEnumerator<RocketMQPartitionSplit, RocketMQSourceEnumState> createEnumerator(
-            SplitEnumeratorContext<RocketMQPartitionSplit> enumContext) {
+        SplitEnumeratorContext<RocketMQPartitionSplit> enumContext) {
         return new RocketMQSourceEnumerator(
-                topic,
-                consumerGroup,
-                nameServerAddress,
-                stopInMs,
-                startOffset,
-                partitionDiscoveryIntervalMs,
-                boundedness,
-                enumContext);
+            topic,
+            consumerGroup,
+            nameServerAddress,
+            stopInMs,
+            startOffset,
+            partitionDiscoveryIntervalMs,
+            boundedness,
+            enumContext);
     }
 
     @Override
     public SplitEnumerator<RocketMQPartitionSplit, RocketMQSourceEnumState> restoreEnumerator(
-            SplitEnumeratorContext<RocketMQPartitionSplit> enumContext,
-            RocketMQSourceEnumState checkpoint) {
+        SplitEnumeratorContext<RocketMQPartitionSplit> enumContext,
+        RocketMQSourceEnumState checkpoint) {
         return new RocketMQSourceEnumerator(
-                topic,
-                consumerGroup,
-                nameServerAddress,
-                stopInMs,
-                startOffset,
-                partitionDiscoveryIntervalMs,
-                boundedness,
-                enumContext,
-                checkpoint.getCurrentAssignment());
+            topic,
+            consumerGroup,
+            nameServerAddress,
+            stopInMs,
+            startOffset,
+            partitionDiscoveryIntervalMs,
+            boundedness,
+            enumContext,
+            checkpoint.getCurrentAssignment());
     }
 
     @Override

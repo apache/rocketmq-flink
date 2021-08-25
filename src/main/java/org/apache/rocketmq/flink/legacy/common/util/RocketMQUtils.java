@@ -16,15 +16,14 @@
  */
 package org.apache.rocketmq.flink.legacy.common.util;
 
-import org.apache.rocketmq.client.AccessChannel;
-import org.apache.rocketmq.common.message.MessageQueue;
-
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import org.apache.rocketmq.client.AccessChannel;
+import org.apache.rocketmq.common.message.MessageQueue;
 
 public final class RocketMQUtils {
 
@@ -41,7 +40,7 @@ public final class RocketMQUtils {
     }
 
     public static AccessChannel getAccessChannel(
-            Properties props, String key, AccessChannel defaultValue) {
+        Properties props, String key, AccessChannel defaultValue) {
         return AccessChannel.valueOf(props.getProperty(key, String.valueOf(defaultValue)));
     }
 
@@ -53,25 +52,24 @@ public final class RocketMQUtils {
     }
 
     /**
-     * Average Hashing queue algorithm Refer:
-     * org.apache.rocketmq.client.consumer.rebalance.AllocateMessageQueueAveragely
+     * Average Hashing queue algorithm Refer: org.apache.rocketmq.client.consumer.rebalance.AllocateMessageQueueAveragely
      */
     public static List<MessageQueue> allocate(
-            Collection<MessageQueue> mqSet, int numberOfParallelTasks, int indexOfThisTask) {
+        Collection<MessageQueue> mqSet, int numberOfParallelTasks, int indexOfThisTask) {
         ArrayList<MessageQueue> mqAll = new ArrayList<>(mqSet);
         Collections.sort(mqAll);
         List<MessageQueue> result = new ArrayList<>();
         int mod = mqAll.size() % numberOfParallelTasks;
         int averageSize =
-                mqAll.size() <= numberOfParallelTasks
-                        ? 1
-                        : (mod > 0 && indexOfThisTask < mod
-                                ? mqAll.size() / numberOfParallelTasks + 1
-                                : mqAll.size() / numberOfParallelTasks);
+            mqAll.size() <= numberOfParallelTasks
+                ? 1
+                : (mod > 0 && indexOfThisTask < mod
+                ? mqAll.size() / numberOfParallelTasks + 1
+                : mqAll.size() / numberOfParallelTasks);
         int startIndex =
-                (mod > 0 && indexOfThisTask < mod)
-                        ? indexOfThisTask * averageSize
-                        : indexOfThisTask * averageSize + mod;
+            (mod > 0 && indexOfThisTask < mod)
+                ? indexOfThisTask * averageSize
+                : indexOfThisTask * averageSize + mod;
         int range = Math.min(averageSize, mqAll.size() - startIndex);
         for (int i = 0; i < range; i++) {
             result.add(mqAll.get((startIndex + i) % mqAll.size()));

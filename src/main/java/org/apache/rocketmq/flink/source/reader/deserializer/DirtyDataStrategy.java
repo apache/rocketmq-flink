@@ -17,7 +17,9 @@
 
 package org.apache.rocketmq.flink.source.reader.deserializer;
 
-/** Dirty data process strategy. */
+/**
+ * Dirty data process strategy.
+ */
 public enum DirtyDataStrategy {
     SKIP,
     SKIP_SILENT,

@@ -18,8 +18,10 @@
 
 package org.apache.rocketmq.flink.sink.table;
 
-import org.apache.rocketmq.flink.common.RocketMQOptions;
-
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.ValidationException;
@@ -30,32 +32,29 @@ import org.apache.flink.table.catalog.ResolvedCatalogTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.factories.FactoryUtil;
-
+import org.apache.rocketmq.flink.common.RocketMQOptions;
 import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.apache.flink.table.api.DataTypes.STRING;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-/** Tests for {@link org.apache.rocketmq.flink.sink.table.RocketMQDynamicTableSinkFactory}. */
+/**
+ * Tests for {@link org.apache.rocketmq.flink.sink.table.RocketMQDynamicTableSinkFactory}.
+ */
 public class RocketMQDynamicTableSinkFactoryTest {
 
     private static final ResolvedSchema SCHEMA =
-            new ResolvedSchema(
-                    Collections.singletonList(Column.physical("name", STRING().notNull())),
-                    new ArrayList<>(),
-                    null);
+        new ResolvedSchema(
+            Collections.singletonList(Column.physical("name", STRING().notNull())),
+            new ArrayList<>(),
+            null);
 
     private static final String IDENTIFIER = "rocketmq";
     private static final String TOPIC = "test_sink";
     private static final String PRODUCER_GROUP = "test_producer";
     private static final String NAME_SERVER_ADDRESS =
-            "http://${instanceId}.${region}.mq-internal.aliyuncs.com:8080";
+        "http://${instanceId}.${region}.mq-internal.aliyuncs.com:8080";
 
     @Test
     public void testRocketMQDynamicTableSinkWithLegalOption() {
@@ -91,17 +90,17 @@ public class RocketMQDynamicTableSinkFactoryTest {
 
     private static DynamicTableSink createDynamicTableSink(Map<String, String> options) {
         return FactoryUtil.createTableSink(
-                null,
-                ObjectIdentifier.of("default", "default", "mq"),
-                new ResolvedCatalogTable(
-                        CatalogTable.of(
-                                Schema.newBuilder().fromResolvedSchema(SCHEMA).build(),
-                                "mock sink",
-                                Collections.emptyList(),
-                                options),
-                        SCHEMA),
-                new Configuration(),
-                RocketMQDynamicTableSinkFactory.class.getClassLoader(),
-                false);
+            null,
+            ObjectIdentifier.of("default", "default", "mq"),
+            new ResolvedCatalogTable(
+                CatalogTable.of(
+                    Schema.newBuilder().fromResolvedSchema(SCHEMA).build(),
+                    "mock sink",
+                    Collections.emptyList(),
+                    options),
+                SCHEMA),
+            new Configuration(),
+            RocketMQDynamicTableSinkFactory.class.getClassLoader(),
+            false);
     }
 }
