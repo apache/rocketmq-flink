@@ -17,10 +17,15 @@
 
 package org.apache.rocketmq.flink.source.reader.deserializer;
 
-import org.apache.rocketmq.flink.source.util.ByteSerializer;
-import org.apache.rocketmq.flink.source.util.ByteSerializer.ValueType;
-import org.apache.rocketmq.flink.source.util.StringSerializer;
-
+import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.apache.commons.lang3.StringEscapeUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.serialization.DeserializationSchema.InitializationContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.configuration.ConfigOption;
@@ -35,25 +40,17 @@ import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.util.Collector;
-
-import org.apache.commons.lang3.StringEscapeUtils;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.rocketmq.flink.source.util.ByteSerializer;
+import org.apache.rocketmq.flink.source.util.ByteSerializer.ValueType;
+import org.apache.rocketmq.flink.source.util.StringSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.Serializable;
-import java.io.UnsupportedEncodingException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * The row based implementation of {@link DeserializationSchema} for the deserialization of records.
  */
 public class RowDeserializationSchema
-        implements DeserializationSchema<List<BytesMessage>, RowData> {
+    implements DeserializationSchema<List<BytesMessage>, RowData> {
 
     private static final long serialVersionUID = -1L;
     private static final Logger logger = LoggerFactory.getLogger(RowDeserializationSchema.class);
@@ -81,18 +78,18 @@ public class RowDeserializationSchema
     private static final int DEFAULT_LOG_INTERVAL_MS = 60 * 1000;
 
     public RowDeserializationSchema(
-            TableSchema tableSchema,
-            DirtyDataStrategy formatErrorStrategy,
-            DirtyDataStrategy fieldMissingStrategy,
-            DirtyDataStrategy fieldIncrementStrategy,
-            String encoding,
-            String fieldDelimiter,
-            String lineDelimiter,
-            boolean columnErrorDebug,
-            boolean hasMetadata,
-            MetadataConverter[] metadataConverters,
-            List<String> headerFields,
-            Map<String, String> properties) {
+        TableSchema tableSchema,
+        DirtyDataStrategy formatErrorStrategy,
+        DirtyDataStrategy fieldMissingStrategy,
+        DirtyDataStrategy fieldIncrementStrategy,
+        String encoding,
+        String fieldDelimiter,
+        String lineDelimiter,
+        boolean columnErrorDebug,
+        boolean hasMetadata,
+        MetadataConverter[] metadataConverters,
+        List<String> headerFields,
+        Map<String, String> properties) {
         this.tableSchema = tableSchema;
         this.formatErrorStrategy = formatErrorStrategy;
         this.fieldMissingStrategy = fieldMissingStrategy;
@@ -114,7 +111,7 @@ public class RowDeserializationSchema
         }
         for (int index = 0; index < totalColumnSize; index++) {
             ValueType type =
-                    ByteSerializer.getTypeIndex(tableSchema.getFieldTypes()[index].getTypeClass());
+                ByteSerializer.getTypeIndex(tableSchema.getFieldTypes()[index].getTypeClass());
             this.fieldTypes[index] = type;
             if (!isHeaderField(index)) {
                 dataIndexMapping.put(dataColumnSize, index);
@@ -156,12 +153,12 @@ public class RowDeserializationSchema
                     }
                     String headerValue = getHeaderValue(message, index);
                     rowData.setField(
-                            index,
-                            StringSerializer.deserialize(
-                                    headerValue,
-                                    fieldTypes[index],
-                                    fieldDataTypes[index],
-                                    new HashSet<>()));
+                        index,
+                        StringSerializer.deserialize(
+                            headerValue,
+                            fieldTypes[index],
+                            fieldDataTypes[index],
+                            new HashSet<>()));
                 }
                 collector.collect(rowData);
             } else if (isAllHeaderField()) {
@@ -169,12 +166,12 @@ public class RowDeserializationSchema
                 for (int index = 0; index < totalColumnSize; index++) {
                     String headerValue = getHeaderValue(message, index);
                     rowData.setField(
-                            index,
-                            StringSerializer.deserialize(
-                                    headerValue,
-                                    fieldTypes[index],
-                                    fieldDataTypes[index],
-                                    new HashSet<>()));
+                        index,
+                        StringSerializer.deserialize(
+                            headerValue,
+                            fieldTypes[index],
+                            fieldDataTypes[index],
+                            new HashSet<>()));
                 }
                 collector.collect(rowData);
             } else {
@@ -227,12 +224,12 @@ public class RowDeserializationSchema
                 try {
                     String fieldValue = getValue(message, data, line, index);
                     rowData.setField(
-                            index,
-                            StringSerializer.deserialize(
-                                    fieldValue,
-                                    fieldTypes[index],
-                                    fieldDataTypes[index],
-                                    new HashSet<>()));
+                        index,
+                        StringSerializer.deserialize(
+                            fieldValue,
+                            fieldTypes[index],
+                            fieldDataTypes[index],
+                            new HashSet<>()));
                 } catch (Exception e) {
                     skip = handleException(rowData, index, data, e);
                 }
@@ -272,7 +269,7 @@ public class RowDeserializationSchema
 
     private boolean isByteArrayType(String fieldName) {
         TypeInformation<?> typeInformation =
-                tableSchema.getFieldTypes()[columnIndexMapping.get(fieldName)];
+            tableSchema.getFieldTypes()[columnIndexMapping.get(fieldName)];
         if (typeInformation != null) {
             ValueType valueType = ByteSerializer.getTypeIndex(typeInformation.getTypeClass());
             return valueType == ValueType.V_ByteArray;
@@ -287,16 +284,16 @@ public class RowDeserializationSchema
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogExceptionTime > DEFAULT_LOG_INTERVAL_MS) {
                     logger.warn(
-                            "Data format error, field type: "
-                                    + fieldTypes[index]
-                                    + "field data: "
-                                    + data[index]
-                                    + ", index: "
-                                    + index
-                                    + ", data: ["
-                                    + StringUtils.join(data, ",")
-                                    + "]",
-                            e);
+                        "Data format error, field type: "
+                            + fieldTypes[index]
+                            + "field data: "
+                            + data[index]
+                            + ", index: "
+                            + index
+                            + ", data: ["
+                            + StringUtils.join(data, ",")
+                            + "]",
+                        e);
                     lastLogExceptionTime = now;
                 }
                 skip = true;
@@ -324,15 +321,15 @@ public class RowDeserializationSchema
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogHandleFieldTime > DEFAULT_LOG_INTERVAL_MS) {
                     logger.warn(
-                            "Field missing error, table column number: "
-                                    + totalColumnSize
-                                    + ", data column number: "
-                                    + dataColumnSize
-                                    + ", data field number: "
-                                    + data.length
-                                    + ", data: ["
-                                    + StringUtils.join(data, ",")
-                                    + "]");
+                        "Field missing error, table column number: "
+                            + totalColumnSize
+                            + ", data column number: "
+                            + dataColumnSize
+                            + ", data field number: "
+                            + data.length
+                            + ", data: ["
+                            + StringUtils.join(data, ",")
+                            + "]");
                     lastLogHandleFieldTime = now;
                 }
                 return null;
@@ -340,17 +337,16 @@ public class RowDeserializationSchema
                 return null;
             case CUT:
             case NULL:
-            case PAD:
-                {
-                    String[] res = new String[totalColumnSize];
-                    for (int i = 0; i < data.length; ++i) {
-                        Object dataIndex = dataIndexMapping.get(i);
-                        if (dataIndex != null) {
-                            res[(int) dataIndex] = data[i];
-                        }
+            case PAD: {
+                String[] res = new String[totalColumnSize];
+                for (int i = 0; i < data.length; ++i) {
+                    Object dataIndex = dataIndexMapping.get(i);
+                    if (dataIndex != null) {
+                        res[(int) dataIndex] = data[i];
                     }
-                    return res;
                 }
+                return res;
+            }
             case EXCEPTION:
                 throw new RuntimeException();
         }
@@ -362,15 +358,15 @@ public class RowDeserializationSchema
                 long now = System.currentTimeMillis();
                 if (columnErrorDebug || now - lastLogHandleFieldTime > DEFAULT_LOG_INTERVAL_MS) {
                     logger.warn(
-                            "Field increment error, table column number: "
-                                    + totalColumnSize
-                                    + ", data column number: "
-                                    + dataColumnSize
-                                    + ", data field number: "
-                                    + data.length
-                                    + ", data: ["
-                                    + StringUtils.join(data, ",")
-                                    + "]");
+                        "Field increment error, table column number: "
+                            + totalColumnSize
+                            + ", data column number: "
+                            + dataColumnSize
+                            + ", data field number: "
+                            + data.length
+                            + ", data: ["
+                            + StringUtils.join(data, ",")
+                            + "]");
                     lastLogHandleFieldTime = now;
                 }
                 return null;
@@ -379,17 +375,16 @@ public class RowDeserializationSchema
             default:
             case CUT:
             case NULL:
-            case PAD:
-                {
-                    String[] res = new String[totalColumnSize];
-                    for (int i = 0; i < dataColumnSize; ++i) {
-                        Object dataIndex = dataIndexMapping.get(i);
-                        if (dataIndex != null) {
-                            res[(int) dataIndex] = data[i];
-                        }
+            case PAD: {
+                String[] res = new String[totalColumnSize];
+                for (int i = 0; i < dataColumnSize; ++i) {
+                    Object dataIndex = dataIndexMapping.get(i);
+                    if (dataIndex != null) {
+                        res[(int) dataIndex] = data[i];
                     }
-                    return res;
                 }
+                return res;
+            }
             case EXCEPTION:
                 throw new RuntimeException();
         }
@@ -402,14 +397,18 @@ public class RowDeserializationSchema
 
     // --------------------------------------------------------------------------------------------
 
-    /** Source metadata converter interface. */
+    /**
+     * Source metadata converter interface.
+     */
     public interface MetadataConverter extends Serializable {
         Object read(BytesMessage message);
     }
 
     // --------------------------------------------------------------------------------------------
 
-    /** Metadata of RowData collector. */
+    /**
+     * Metadata of RowData collector.
+     */
     public static final class MetadataCollector implements Collector<RowData>, Serializable {
 
         private static final long serialVersionUID = 1L;
@@ -431,14 +430,14 @@ public class RowDeserializationSchema
                 final int physicalArity = physicalRow.getArity();
                 final int metadataArity = metadataConverters.length;
                 final GenericRowData producedRow =
-                        new GenericRowData(physicalRow.getRowKind(), physicalArity + metadataArity);
+                    new GenericRowData(physicalRow.getRowKind(), physicalArity + metadataArity);
                 final GenericRowData genericPhysicalRow = (GenericRowData) physicalRow;
                 for (int index = 0; index < physicalArity; index++) {
                     producedRow.setField(index, genericPhysicalRow.getField(index));
                 }
                 for (int index = 0; index < metadataArity; index++) {
                     producedRow.setField(
-                            index + physicalArity, metadataConverters[index].read(message));
+                        index + physicalArity, metadataConverters[index].read(message));
                 }
                 collector.collect(producedRow);
             } else {
@@ -452,7 +451,9 @@ public class RowDeserializationSchema
         }
     }
 
-    /** Builder of {@link RowDeserializationSchema}. */
+    /**
+     * Builder of {@link RowDeserializationSchema}.
+     */
     public static class Builder {
 
         private TableSchema schema;
@@ -468,7 +469,8 @@ public class RowDeserializationSchema
         private List<String> headerFields;
         private Map<String, String> properties;
 
-        public Builder() {}
+        public Builder() {
+        }
 
         public Builder setTableSchema(TableSchema tableSchema) {
             this.schema = tableSchema;
@@ -536,34 +538,30 @@ public class RowDeserializationSchema
             }
             String lengthCheck = configuration.get(CollectorOption.LENGTH_CHECK);
             switch (lengthCheck.toUpperCase()) {
-                case "SKIP":
-                    {
-                        this.setFormatErrorStrategy(DirtyDataStrategy.SKIP);
-                        this.setFieldMissingStrategy(DirtyDataStrategy.SKIP);
-                        this.setFieldIncrementStrategy(DirtyDataStrategy.SKIP);
-                    }
-                    break;
-                case "PAD":
-                    {
-                        this.setFormatErrorStrategy(DirtyDataStrategy.SKIP);
-                        this.setFieldMissingStrategy(DirtyDataStrategy.PAD);
-                        this.setFieldIncrementStrategy(DirtyDataStrategy.CUT);
-                    }
-                    break;
-                case "EXCEPTION":
-                    {
-                        this.setFormatErrorStrategy(DirtyDataStrategy.EXCEPTION);
-                        this.setFieldMissingStrategy(DirtyDataStrategy.EXCEPTION);
-                        this.setFieldIncrementStrategy(DirtyDataStrategy.EXCEPTION);
-                    }
-                    break;
-                case "SKIP_SILENT":
-                    {
-                        this.setFormatErrorStrategy(DirtyDataStrategy.SKIP_SILENT);
-                        this.setFieldMissingStrategy(DirtyDataStrategy.SKIP_SILENT);
-                        this.setFieldIncrementStrategy(DirtyDataStrategy.SKIP_SILENT);
-                    }
-                    break;
+                case "SKIP": {
+                    this.setFormatErrorStrategy(DirtyDataStrategy.SKIP);
+                    this.setFieldMissingStrategy(DirtyDataStrategy.SKIP);
+                    this.setFieldIncrementStrategy(DirtyDataStrategy.SKIP);
+                }
+                break;
+                case "PAD": {
+                    this.setFormatErrorStrategy(DirtyDataStrategy.SKIP);
+                    this.setFieldMissingStrategy(DirtyDataStrategy.PAD);
+                    this.setFieldIncrementStrategy(DirtyDataStrategy.CUT);
+                }
+                break;
+                case "EXCEPTION": {
+                    this.setFormatErrorStrategy(DirtyDataStrategy.EXCEPTION);
+                    this.setFieldMissingStrategy(DirtyDataStrategy.EXCEPTION);
+                    this.setFieldIncrementStrategy(DirtyDataStrategy.EXCEPTION);
+                }
+                break;
+                case "SKIP_SILENT": {
+                    this.setFormatErrorStrategy(DirtyDataStrategy.SKIP_SILENT);
+                    this.setFieldMissingStrategy(DirtyDataStrategy.SKIP_SILENT);
+                    this.setFieldIncrementStrategy(DirtyDataStrategy.SKIP_SILENT);
+                }
+                break;
                 default:
             }
             this.setEncoding(configuration.getString(CollectorOption.ENCODING));
@@ -575,32 +573,34 @@ public class RowDeserializationSchema
 
         public RowDeserializationSchema build() {
             return new RowDeserializationSchema(
-                    schema,
-                    formatErrorStrategy,
-                    fieldMissingStrategy,
-                    fieldIncrementStrategy,
-                    encoding,
-                    fieldDelimiter,
-                    lineDelimiter,
-                    columnErrorDebug,
-                    hasMetadata,
-                    metadataConverters,
-                    headerFields,
-                    properties);
+                schema,
+                formatErrorStrategy,
+                fieldMissingStrategy,
+                fieldIncrementStrategy,
+                encoding,
+                fieldDelimiter,
+                lineDelimiter,
+                columnErrorDebug,
+                hasMetadata,
+                metadataConverters,
+                headerFields,
+                properties);
         }
     }
 
-    /** Options for {@link RowDeserializationSchema}. */
+    /**
+     * Options for {@link RowDeserializationSchema}.
+     */
     public static class CollectorOption {
         public static final ConfigOption<String> ENCODING =
-                ConfigOptions.key("encoding".toLowerCase()).defaultValue("UTF-8");
+            ConfigOptions.key("encoding".toLowerCase()).defaultValue("UTF-8");
         public static final ConfigOption<String> FIELD_DELIMITER =
-                ConfigOptions.key("fieldDelimiter".toLowerCase()).defaultValue("\u0001");
+            ConfigOptions.key("fieldDelimiter".toLowerCase()).defaultValue("\u0001");
         public static final ConfigOption<String> LINE_DELIMITER =
-                ConfigOptions.key("lineDelimiter".toLowerCase()).defaultValue("\n");
+            ConfigOptions.key("lineDelimiter".toLowerCase()).defaultValue("\n");
         public static final ConfigOption<Boolean> COLUMN_ERROR_DEBUG =
-                ConfigOptions.key("columnErrorDebug".toLowerCase()).defaultValue(true);
+            ConfigOptions.key("columnErrorDebug".toLowerCase()).defaultValue(true);
         public static final ConfigOption<String> LENGTH_CHECK =
-                ConfigOptions.key("lengthCheck".toLowerCase()).defaultValue("NONE");
+            ConfigOptions.key("lengthCheck".toLowerCase()).defaultValue("NONE");
     }
 }
