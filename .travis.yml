@@ -22,5 +22,5 @@ jdk:
 #   - if [ "$TRAVIS_OS_NAME" == "linux" ]; then jdk_switcher use "$CUSTOM_JDK"; fi
 
 script:
-  - travis_retry mvn -B clean apache-rat:check
+  - travis_retry mvn -B clean apache-rat:check -debug
   - travis_retry mvn -B clean install jacoco:report coveralls:report
