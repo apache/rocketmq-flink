@@ -31,3 +31,6 @@ nohup.out
 *.classpath
 *.factorypath
 .vscode/
+
+# Ignore it while not disable for some reason.
+dependency-reduced-pom.xml
