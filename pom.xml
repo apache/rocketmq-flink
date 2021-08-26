@@ -38,7 +38,7 @@
         <commons-lang.version>2.5</commons-lang.version>
         <scala.binary.version>2.11</scala.binary.version>
         <spotless.version>2.4.2</spotless.version>
-	<jaxb-api.version>2.3.1</jaxb-api.version>
+	    <jaxb-api.version>2.3.1</jaxb-api.version>
     </properties>
 
     <dependencies>
@@ -198,7 +198,6 @@
                 <configuration>
                     <source>${maven.compiler.source}</source>
                     <target>${maven.compiler.target}</target>
-                    <encoding>UTF-8</encoding>
                     <compilerVersion>${maven.compiler.source}</compilerVersion>
                     <showDeprecation>true</showDeprecation>
                     <showWarnings>true</showWarnings>
@@ -222,7 +221,6 @@
                         <exclude>.travis.yml</exclude>
                         <exclude>.asf.yaml</exclude>
                         <exclude>README.md</exclude>
-			<exclude>dependency-reduced-pom.xml</exclude>
                     </excludes>
                 </configuration>
             </plugin>
