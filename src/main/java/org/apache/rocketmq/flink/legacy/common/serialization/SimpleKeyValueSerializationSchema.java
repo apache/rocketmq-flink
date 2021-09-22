@@ -23,8 +23,8 @@ public class SimpleKeyValueSerializationSchema implements KeyValueSerializationS
     public static final String DEFAULT_KEY_FIELD = "key";
     public static final String DEFAULT_VALUE_FIELD = "value";
 
-    public String keyField;
-    public String valueField;
+    private final String keyField;
+    private final String valueField;
 
     public SimpleKeyValueSerializationSchema() {
         this(DEFAULT_KEY_FIELD, DEFAULT_VALUE_FIELD);
