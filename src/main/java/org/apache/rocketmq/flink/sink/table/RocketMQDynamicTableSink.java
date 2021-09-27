@@ -186,7 +186,7 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
                 isDynamicTagIncluded,
                 writeKeysToBody,
                 keyColumns,
-                convertToRowTypeInfo(schema.toRowDataType()),
+                convertToRowTypeInfo(schema.toRowDataType(), schema.getFieldNames()),
                 schema.getFieldDataTypes(),
                 metadataKeys.size() > 0,
                 metadataPositions);
@@ -199,12 +199,12 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
         return producerProps;
     }
 
-    protected static RowTypeInfo convertToRowTypeInfo(DataType fieldsDataType) {
+    protected static RowTypeInfo convertToRowTypeInfo(DataType fieldsDataType, String[] fieldNames) {
         final TypeInformation<?>[] fieldTypes =
                 fieldsDataType.getChildren().stream()
                         .map(LegacyTypeInfoDataTypeConverter::toLegacyTypeInfo)
                         .toArray(TypeInformation[]::new);
-        return new RowTypeInfo(fieldTypes);
+        return new RowTypeInfo(fieldTypes, fieldNames);
     }
 
     // --------------------------------------------------------------------------------------------
