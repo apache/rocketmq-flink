@@ -65,12 +65,12 @@ StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironm
         env.enableCheckpointing(3000);
 
         Properties consumerProps = new Properties();
-        consumerProps.setProperty(RocketMqConfig.NAME_SERVER_ADDR, "localhost:9876");
-        consumerProps.setProperty(RocketMqConfig.CONSUMER_GROUP, "c002");
-        consumerProps.setProperty(RocketMqConfig.CONSUMER_TOPIC, "flink-source2");
+        consumerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, "localhost:9876");
+        consumerProps.setProperty(RocketMQConfig.CONSUMER_GROUP, "c002");
+        consumerProps.setProperty(RocketMQConfig.CONSUMER_TOPIC, "flink-source2");
 
         Properties producerProps = new Properties();
-        producerProps.setProperty(RocketMqConfig.NAME_SERVER_ADDR, "localhost:9876");
+        producerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, "localhost:9876");
 
         env.addSource(new RocketMQSource(new SimpleKeyValueDeserializationSchema("id", "address"), consumerProps))
             .name("rocketmq-source")
