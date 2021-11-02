@@ -199,7 +199,8 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
         return producerProps;
     }
 
-    protected static RowTypeInfo convertToRowTypeInfo(DataType fieldsDataType, String[] fieldNames) {
+    protected static RowTypeInfo convertToRowTypeInfo(
+            DataType fieldsDataType, String[] fieldNames) {
         final TypeInformation<?>[] fieldTypes =
                 fieldsDataType.getChildren().stream()
                         .map(LegacyTypeInfoDataTypeConverter::toLegacyTypeInfo)
