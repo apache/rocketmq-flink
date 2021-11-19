@@ -88,6 +88,9 @@ public class RocketMQRecordEmitterTest {
             throw new UnsupportedOperationException();
         }
 
+        @Override
+        public void markActive() {}
+
         public SourceOutput<E> createOutputForSplit(String splitId) {
             return this;
         }
