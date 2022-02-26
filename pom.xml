@@ -33,9 +33,9 @@
         <!-- compiler settings properties -->
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <rocketmq.version>4.7.1</rocketmq.version>
-        <flink.version>1.14.0</flink.version>
-        <commons-lang.version>2.5</commons-lang.version>
+        <rocketmq.version>4.9.2</rocketmq.version>
+        <flink.version>1.14.3</flink.version>
+        <commons-lang.version>2.6</commons-lang.version>
         <scala.binary.version>2.11</scala.binary.version>
         <spotless.version>2.4.2</spotless.version>
 	    <jaxb-api.version>2.3.1</jaxb-api.version>
