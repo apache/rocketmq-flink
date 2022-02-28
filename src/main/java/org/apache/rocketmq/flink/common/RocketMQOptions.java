@@ -39,6 +39,9 @@ public class RocketMQOptions {
     public static final ConfigOption<String> OPTIONAL_TAG =
             ConfigOptions.key("tag").stringType().noDefaultValue();
 
+    public static final ConfigOption<String> OPTIONAL_SQL =
+            ConfigOptions.key("sql").stringType().noDefaultValue();
+
     public static final ConfigOption<Integer> OPTIONAL_START_MESSAGE_OFFSET =
             ConfigOptions.key("startMessageOffset").intType().defaultValue(-1);
 

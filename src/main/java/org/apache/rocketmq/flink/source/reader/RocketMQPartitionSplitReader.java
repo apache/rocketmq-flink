@@ -19,6 +19,7 @@
 package org.apache.rocketmq.flink.source.reader;
 
 import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
+import org.apache.rocketmq.client.consumer.MessageSelector;
 import org.apache.rocketmq.client.consumer.PullResult;
 import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
@@ -36,6 +37,7 @@ import org.apache.flink.connector.base.source.reader.splitreader.SplitsChange;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.Preconditions;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +68,7 @@ public class RocketMQPartitionSplitReader<T>
 
     private final String topic;
     private final String tag;
+    private final String sql;
     private final long stopInMs;
     private final long startTime;
     private final long startOffset;
@@ -86,12 +89,14 @@ public class RocketMQPartitionSplitReader<T>
             String consumerGroup,
             String nameServerAddress,
             String tag,
+            String sql,
             long stopInMs,
             long startTime,
             long startOffset,
             RocketMQDeserializationSchema<T> deserializationSchema) {
         this.topic = topic;
         this.tag = tag;
+        this.sql = sql;
         this.stopInMs = stopInMs;
         this.startTime = startTime;
         this.startOffset = startOffset;
@@ -148,30 +153,44 @@ public class RocketMQPartitionSplitReader<T>
                     if (wakeup) {
                         LOG.info(
                                 String.format(
-                                        "Wake up pulling messages of topic[%s] broker[%s] queue[%d] tag[%s] from offset[%d].",
+                                        "Wake up pulling messages of topic[%s] broker[%s] queue[%d] tag[%s] sql[%s] from offset[%d].",
                                         messageQueue.getTopic(),
                                         messageQueue.getBrokerName(),
                                         messageQueue.getQueueId(),
                                         tag,
+                                        sql,
                                         messageOffset));
                         wakeup = false;
                         recordsBySplits.prepareForRead();
                         return recordsBySplits;
                     }
-                    pullResult =
-                            consumer.pull(
-                                    messageQueue, tag, messageOffset, MAX_MESSAGE_NUMBER_PER_BLOCK);
+                    if (StringUtils.isNotEmpty(tag)) {
+                        pullResult =
+                                consumer.pull(
+                                        messageQueue,
+                                        tag,
+                                        messageOffset,
+                                        MAX_MESSAGE_NUMBER_PER_BLOCK);
+                    } else {
+                        pullResult =
+                                consumer.pull(
+                                        messageQueue,
+                                        MessageSelector.bySql(sql),
+                                        messageOffset,
+                                        MAX_MESSAGE_NUMBER_PER_BLOCK);
+                    }
                 } catch (MQClientException
                         | RemotingException
                         | MQBrokerException
                         | InterruptedException e) {
                     LOG.warn(
                             String.format(
-                                    "Pull RocketMQ messages of topic[%s] broker[%s] queue[%d] tag[%s] from offset[%d] exception.",
+                                    "Pull RocketMQ messages of topic[%s] broker[%s] queue[%d] tag[%s] sql[%s] from offset[%d] exception.",
                                     messageQueue.getTopic(),
                                     messageQueue.getBrokerName(),
                                     messageQueue.getQueueId(),
                                     tag,
+                                    sql,
                                     messageOffset),
                             e);
                 }

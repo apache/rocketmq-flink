@@ -58,6 +58,8 @@ public class RocketMQSource<OUT>
     private final String consumerGroup;
     private final String nameServerAddress;
     private final String tag;
+    private final String sql;
+
     private final long stopInMs;
     private final long startTime;
     private final long startOffset;
@@ -72,6 +74,7 @@ public class RocketMQSource<OUT>
             String consumerGroup,
             String nameServerAddress,
             String tag,
+            String sql,
             long stopInMs,
             long startTime,
             long startOffset,
@@ -82,6 +85,7 @@ public class RocketMQSource<OUT>
         this.consumerGroup = consumerGroup;
         this.nameServerAddress = nameServerAddress;
         this.tag = tag;
+        this.sql = sql;
         this.stopInMs = stopInMs;
         this.startTime = startTime;
         this.startOffset = startOffset;
@@ -120,6 +124,7 @@ public class RocketMQSource<OUT>
                                 consumerGroup,
                                 nameServerAddress,
                                 tag,
+                                sql,
                                 stopInMs,
                                 startTime,
                                 startOffset,

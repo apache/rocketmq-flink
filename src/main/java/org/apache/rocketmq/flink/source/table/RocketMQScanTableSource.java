@@ -60,6 +60,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     private final String consumerGroup;
     private final String nameServerAddress;
     private final String tag;
+    private final String sql;
 
     private final long stopInMs;
     private final long partitionDiscoveryIntervalMs;
@@ -76,6 +77,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             String consumerGroup,
             String nameServerAddress,
             String tag,
+            String sql,
             long stopInMs,
             long startMessageOffset,
             long startTime,
@@ -87,6 +89,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         this.consumerGroup = consumerGroup;
         this.nameServerAddress = nameServerAddress;
         this.tag = tag;
+        this.sql = sql;
         this.stopInMs = stopInMs;
         this.startMessageOffset = startMessageOffset;
         this.startTime = startTime;
@@ -109,6 +112,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                             consumerGroup,
                             nameServerAddress,
                             tag,
+                            sql,
                             stopInMs,
                             startTime,
                             startMessageOffset < 0 ? 0 : startMessageOffset,
@@ -146,6 +150,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                         consumerGroup,
                         nameServerAddress,
                         tag,
+                        sql,
                         stopInMs,
                         startMessageOffset,
                         startTime,
@@ -192,6 +197,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         consumerProps.setProperty(RocketMQConfig.CONSUMER_GROUP, consumerGroup);
         consumerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, nameServerAddress);
         consumerProps.setProperty(RocketMQConfig.CONSUMER_TAG, tag);
+        consumerProps.setProperty(RocketMQConfig.CONSUMER_SQL, sql);
         return consumerProps;
     }
 

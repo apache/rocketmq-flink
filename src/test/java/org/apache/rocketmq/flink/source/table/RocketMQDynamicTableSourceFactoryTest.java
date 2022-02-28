@@ -88,6 +88,21 @@ public class RocketMQDynamicTableSourceFactoryTest {
         createTableSource(options);
     }
 
+    @Test
+    public void testRocketMQDynamicTableSourceWithSql() {
+        final Map<String, String> options = new HashMap<>();
+        options.put("connector", IDENTIFIER);
+        options.put(RocketMQOptions.TOPIC.key(), TOPIC);
+        options.put(RocketMQOptions.CONSUMER_GROUP.key(), CONSUMER_GROUP);
+        options.put(RocketMQOptions.NAME_SERVER_ADDRESS.key(), NAME_SERVER_ADDRESS);
+        options.put(
+                RocketMQOptions.OPTIONAL_SQL.key(),
+                "(TAGS is not null and TAGS in ('TagA', 'TagB'))");
+        final DynamicTableSource tableSource = createTableSource(options);
+        assertTrue(tableSource instanceof RocketMQScanTableSource);
+        assertEquals(RocketMQScanTableSource.class.getName(), tableSource.asSummaryString());
+    }
+
     private static DynamicTableSource createTableSource(
             Map<String, String> options, Configuration conf) {
         return FactoryUtil.createTableSource(
