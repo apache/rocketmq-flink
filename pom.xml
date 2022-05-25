@@ -34,9 +34,8 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <rocketmq.version>4.9.2</rocketmq.version>
-        <flink.version>1.14.3</flink.version>
+        <flink.version>1.15.0</flink.version>
         <commons-lang.version>2.6</commons-lang.version>
-        <scala.binary.version>2.11</scala.binary.version>
         <spotless.version>2.4.2</spotless.version>
 	    <jaxb-api.version>2.3.1</jaxb-api.version>
     </properties>
@@ -50,13 +49,13 @@
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-streaming-java_${scala.binary.version}</artifactId>
+            <artifactId>flink-streaming-java</artifactId>
             <version>${flink.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-clients_${scala.binary.version}</artifactId>
+            <artifactId>flink-clients</artifactId>
             <version>${flink.version}</version>
         </dependency>
         <dependency>
@@ -71,12 +70,12 @@
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-table-api-java-bridge_${scala.binary.version}</artifactId>
+            <artifactId>flink-table-api-java-bridge</artifactId>
             <version>${flink.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-table-runtime_${scala.binary.version}</artifactId>
+            <artifactId>flink-table-runtime</artifactId>
             <version>${flink.version}</version>
         </dependency>
         <dependency>
