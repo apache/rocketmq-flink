@@ -139,7 +139,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         String tag = props.getProperty(RocketMQConfig.CONSUMER_TAG);
         String sql = props.getProperty(RocketMQConfig.CONSUMER_SQL);
         Validate.isTrue(
-                StringUtils.isNotEmpty(tag) && StringUtils.isNotEmpty(sql),
+                !(StringUtils.isNotEmpty(tag) && StringUtils.isNotEmpty(sql)),
                 "Consumer tag and sql can not set value at the same time");
 
         this.enableCheckpoint =

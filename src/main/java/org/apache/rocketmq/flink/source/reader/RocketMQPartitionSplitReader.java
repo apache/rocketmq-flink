@@ -164,18 +164,18 @@ public class RocketMQPartitionSplitReader<T>
                         recordsBySplits.prepareForRead();
                         return recordsBySplits;
                     }
-                    if (StringUtils.isNotEmpty(tag)) {
+                    if (StringUtils.isNotEmpty(sql)) {
                         pullResult =
                                 consumer.pull(
                                         messageQueue,
-                                        tag,
+                                        MessageSelector.bySql(sql),
                                         messageOffset,
                                         MAX_MESSAGE_NUMBER_PER_BLOCK);
                     } else {
                         pullResult =
                                 consumer.pull(
                                         messageQueue,
-                                        MessageSelector.bySql(sql),
+                                        tag,
                                         messageOffset,
                                         MAX_MESSAGE_NUMBER_PER_BLOCK);
                     }
