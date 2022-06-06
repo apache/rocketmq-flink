@@ -18,6 +18,7 @@
 
 package org.apache.rocketmq.flink.source;
 
+import org.apache.rocketmq.flink.legacy.RocketMQConfig;
 import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumState;
 import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumStateSerializer;
 import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumerator;
@@ -46,6 +47,9 @@ import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.UserCodeClassLoader;
 
+import org.apache.commons.lang.Validate;
+import org.apache.commons.lang3.StringUtils;
+
 import java.util.function.Supplier;
 
 /** The Source implementation of RocketMQ. */
@@ -58,6 +62,8 @@ public class RocketMQSource<OUT>
     private final String consumerGroup;
     private final String nameServerAddress;
     private final String tag;
+    private final String sql;
+
     private final long stopInMs;
     private final long startTime;
     private final long startOffset;
@@ -72,16 +78,21 @@ public class RocketMQSource<OUT>
             String consumerGroup,
             String nameServerAddress,
             String tag,
+            String sql,
             long stopInMs,
             long startTime,
             long startOffset,
             long partitionDiscoveryIntervalMs,
             Boundedness boundedness,
             RocketMQDeserializationSchema<OUT> deserializationSchema) {
+        Validate.isTrue(
+                !(StringUtils.isNotEmpty(tag) && StringUtils.isNotEmpty(sql)),
+                "Consumer tag and sql can not set value at the same time");
         this.topic = topic;
         this.consumerGroup = consumerGroup;
         this.nameServerAddress = nameServerAddress;
-        this.tag = tag;
+        this.tag = StringUtils.isEmpty(tag) ? RocketMQConfig.DEFAULT_CONSUMER_TAG : tag;
+        this.sql = sql;
         this.stopInMs = stopInMs;
         this.startTime = startTime;
         this.startOffset = startOffset;
@@ -120,6 +131,7 @@ public class RocketMQSource<OUT>
                                 consumerGroup,
                                 nameServerAddress,
                                 tag,
+                                sql,
                                 stopInMs,
                                 startTime,
                                 startOffset,

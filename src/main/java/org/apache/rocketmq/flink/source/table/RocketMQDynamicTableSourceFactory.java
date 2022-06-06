@@ -51,6 +51,7 @@ import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_FIELD_DE
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_LENGTH_CHECK;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_LINE_DELIMITER;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_PARTITION_DISCOVERY_INTERVAL_MS;
+import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_SQL;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_START_MESSAGE_OFFSET;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_START_TIME;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_START_TIME_MILLS;
@@ -85,6 +86,7 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
     public Set<ConfigOption<?>> optionalOptions() {
         Set<ConfigOption<?>> optionalOptions = new HashSet<>();
         optionalOptions.add(OPTIONAL_TAG);
+        optionalOptions.add(OPTIONAL_SQL);
         optionalOptions.add(OPTIONAL_START_MESSAGE_OFFSET);
         optionalOptions.add(OPTIONAL_START_TIME_MILLS);
         optionalOptions.add(OPTIONAL_START_TIME);
@@ -111,6 +113,7 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         String consumerGroup = configuration.getString(CONSUMER_GROUP);
         String nameServerAddress = configuration.getString(NAME_SERVER_ADDRESS);
         String tag = configuration.getString(OPTIONAL_TAG);
+        String sql = configuration.getString(OPTIONAL_SQL);
         int startMessageOffset = configuration.getInteger(OPTIONAL_START_MESSAGE_OFFSET);
         long startTimeMs = configuration.getLong(OPTIONAL_START_TIME_MILLS);
         String startDateTime = configuration.getString(OPTIONAL_START_TIME);
@@ -161,6 +164,7 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                 consumerGroup,
                 nameServerAddress,
                 tag,
+                sql,
                 stopInMs,
                 startMessageOffset,
                 startMessageOffset < 0 ? startTime : -1L,

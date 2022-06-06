@@ -66,6 +66,7 @@ public class RocketMQConfig {
     public static final String CONSUMER_TOPIC = "consumer.topic"; // Required
 
     public static final String CONSUMER_TAG = "consumer.tag";
+    public static final String CONSUMER_SQL = "consumer.sql";
     public static final String DEFAULT_CONSUMER_TAG = "*";
 
     public static final String CONSUMER_OFFSET_RESET_TO = "consumer.offset.reset.to";
