@@ -392,6 +392,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         offsetTable.put(mq, offset);
         if (!enableCheckpoint) {
             consumer.updateConsumeOffset(mq, offset);
+            consumer.getOffsetStore().persist(consumer.queueWithNamespace(mq));
         }
     }
 
