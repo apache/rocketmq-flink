@@ -6,7 +6,7 @@
 
 RocketMQ integration for [Apache Flink](https://flink.apache.org/). This module includes the RocketMQ source and sink that allows a flink job to either write messages into a topic or read from topics in a flink job.
 
-## RocketMQSource
+## RocketMQSourceFunction
 To use the `RocketMQSourceFunction`,  you construct an instance of it by specifying a KeyValueDeserializationSchema instance and a Properties instance which including rocketmq configs.
 `RocketMQSourceFunction(KeyValueDeserializationSchema<OUT> schema, Properties props)`
 The RocketMQSourceFunction is based on RocketMQ pull consumer mode, and provides exactly once reliability guarantees when checkpoints are enabled.
