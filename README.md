@@ -6,10 +6,10 @@
 
 RocketMQ integration for [Apache Flink](https://flink.apache.org/). This module includes the RocketMQ source and sink that allows a flink job to either write messages into a topic or read from topics in a flink job.
 
-## RocketMQSource
-To use the `RocketMQSource`,  you construct an instance of it by specifying a KeyValueDeserializationSchema instance and a Properties instance which including rocketmq configs.
-`RocketMQSource(KeyValueDeserializationSchema<OUT> schema, Properties props)`
-The RocketMQSource is based on RocketMQ pull consumer mode, and provides exactly once reliability guarantees when checkpoints are enabled.
+## RocketMQSourceFunction
+To use the `RocketMQSourceFunction`,  you construct an instance of it by specifying a KeyValueDeserializationSchema instance and a Properties instance which including rocketmq configs.
+`RocketMQSourceFunction(KeyValueDeserializationSchema<OUT> schema, Properties props)`
+The RocketMQSourceFunction is based on RocketMQ pull consumer mode, and provides exactly once reliability guarantees when checkpoints are enabled.
 Otherwise, the source doesn't provide any reliability guarantees.
 
 ### KeyValueDeserializationSchema
@@ -72,7 +72,7 @@ StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironm
         Properties producerProps = new Properties();
         producerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, "localhost:9876");
 
-        env.addSource(new RocketMQSource(new SimpleKeyValueDeserializationSchema("id", "address"), consumerProps))
+        env.addSource(new RocketMQSourceFunction(new SimpleKeyValueDeserializationSchema("id", "address"), consumerProps))
             .name("rocketmq-source")
             .setParallelism(2)
             .process(new ProcessFunction<Map, Map>() {
