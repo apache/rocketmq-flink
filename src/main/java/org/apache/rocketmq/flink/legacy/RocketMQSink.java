@@ -16,12 +16,14 @@
  */
 package org.apache.rocketmq.flink.legacy;
 
+import org.apache.flink.util.StringUtils;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendCallback;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.client.producer.SendStatus;
 import org.apache.rocketmq.common.message.Message;
+import org.apache.rocketmq.flink.legacy.common.selector.MessageQueueSelector;
 import org.apache.rocketmq.flink.legacy.common.util.MetricUtils;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
@@ -58,6 +60,8 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
 
     private Properties props;
 
+    private MessageQueueSelector messageQueueSelector;
+    private String messageQueueSelectorArg;
     private boolean batchFlushOnCheckpoint; // false by default
     private int batchSize = 32;
     private List<Message> batchList;
@@ -118,31 +122,43 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
         long timeStartWriting = System.currentTimeMillis();
         if (async) {
             try {
-                producer.send(
-                        input,
-                        new SendCallback() {
-                            @Override
-                            public void onSuccess(SendResult sendResult) {
-                                LOG.debug("Async send message success! result: {}", sendResult);
-                                long end = System.currentTimeMillis();
-                                latencyGauge.report(end - timeStartWriting, 1);
-                                outTps.markEvent();
-                                outBps.markEvent(input.getBody().length);
-                            }
+                SendCallback sendCallback = new SendCallback() {
+                    @Override
+                    public void onSuccess(SendResult sendResult) {
+                        LOG.debug("Async send message success! result: {}", sendResult);
+                        long end = System.currentTimeMillis();
+                        latencyGauge.report(end - timeStartWriting, 1);
+                        outTps.markEvent();
+                        outBps.markEvent(input.getBody().length);
+                    }
 
-                            @Override
-                            public void onException(Throwable throwable) {
-                                if (throwable != null) {
-                                    LOG.error("Async send message failure!", throwable);
-                                }
-                            }
-                        });
+                    @Override
+                    public void onException(Throwable throwable) {
+                        if (throwable != null) {
+                            LOG.error("Async send message failure!", throwable);
+                        }
+                    }
+                };
+                if (messageQueueSelector != null) {
+                    Object arg = StringUtils.isNullOrWhitespaceOnly(messageQueueSelectorArg)
+                            ? null : input.getProperty(messageQueueSelectorArg);
+                    producer.send(input, messageQueueSelector, arg, sendCallback);
+                } else {
+                    producer.send(input, sendCallback);
+                }
             } catch (Exception e) {
                 LOG.error("Async send message failure!", e);
             }
         } else {
             try {
-                SendResult result = producer.send(input);
+                SendResult result;
+                if (messageQueueSelector != null) {
+                    Object arg = StringUtils.isNullOrWhitespaceOnly(messageQueueSelectorArg)
+                            ? null : input.getProperty(messageQueueSelectorArg);
+                    result = producer.send(input, messageQueueSelector, arg);
+                } else {
+                    result = producer.send(input);
+                }
                 LOG.debug("Sync send message result: {}", result);
                 if (result.getSendStatus() != SendStatus.SEND_OK) {
                     throw new RemotingException(result.toString());
@@ -170,6 +186,16 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
 
     public RocketMQSink withBatchSize(int batchSize) {
         this.batchSize = batchSize;
+        return this;
+    }
+
+    public RocketMQSink withMessageQueueSelector(MessageQueueSelector selector) {
+        this.messageQueueSelector = selector;
+        return this;
+    }
+
+    public RocketMQSink withMessageQueueSelectorArg(String arg) {
+        this.messageQueueSelectorArg = arg;
         return this;
     }
 
