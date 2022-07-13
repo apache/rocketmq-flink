@@ -2,6 +2,7 @@ package org.apache.rocketmq.flink.legacy.common.selector;
 
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -14,13 +15,14 @@ public class RandomMessageQueueSelectorTest {
     @Test
     public void testSelect() {
         MessageQueueSelector hash = new RandomMessageQueueSelector();
-        List<Integer> queueIds = new ArrayList<Integer>() {
-            {
-                add(0);
-                add(1);
-                add(2);
-            }
-        };
+        List<Integer> queueIds =
+                new ArrayList<Integer>() {
+                    {
+                        add(0);
+                        add(1);
+                        add(2);
+                    }
+                };
         List<MessageQueue> queues = new ArrayList<>();
         MessageQueue queue0 = new MessageQueue("test", "broker-a", 0);
         MessageQueue queue1 = new MessageQueue("test", "broker-b", 1);
@@ -35,6 +37,5 @@ public class RandomMessageQueueSelectorTest {
         int queueId = messageQueue.getQueueId();
 
         Assert.assertTrue(queueIds.contains(queueId));
-
     }
 }

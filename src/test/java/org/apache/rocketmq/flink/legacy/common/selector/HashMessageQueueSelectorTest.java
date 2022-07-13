@@ -2,6 +2,7 @@ package org.apache.rocketmq.flink.legacy.common.selector;
 
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageQueue;
+
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -27,5 +28,4 @@ public class HashMessageQueueSelectorTest {
         MessageQueue messageQueue = hash.select(queues, message, 1);
         Assert.assertEquals(messageQueue.getQueueId(), 1);
     }
-
 }

@@ -16,7 +16,6 @@
  */
 package org.apache.rocketmq.flink.legacy;
 
-import org.apache.flink.util.StringUtils;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendCallback;
@@ -34,6 +33,7 @@ import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
+import org.apache.flink.util.StringUtils;
 
 import org.apache.commons.lang.Validate;
 import org.slf4j.Logger;
@@ -122,26 +122,29 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
         long timeStartWriting = System.currentTimeMillis();
         if (async) {
             try {
-                SendCallback sendCallback = new SendCallback() {
-                    @Override
-                    public void onSuccess(SendResult sendResult) {
-                        LOG.debug("Async send message success! result: {}", sendResult);
-                        long end = System.currentTimeMillis();
-                        latencyGauge.report(end - timeStartWriting, 1);
-                        outTps.markEvent();
-                        outBps.markEvent(input.getBody().length);
-                    }
+                SendCallback sendCallback =
+                        new SendCallback() {
+                            @Override
+                            public void onSuccess(SendResult sendResult) {
+                                LOG.debug("Async send message success! result: {}", sendResult);
+                                long end = System.currentTimeMillis();
+                                latencyGauge.report(end - timeStartWriting, 1);
+                                outTps.markEvent();
+                                outBps.markEvent(input.getBody().length);
+                            }
 
-                    @Override
-                    public void onException(Throwable throwable) {
-                        if (throwable != null) {
-                            LOG.error("Async send message failure!", throwable);
-                        }
-                    }
-                };
+                            @Override
+                            public void onException(Throwable throwable) {
+                                if (throwable != null) {
+                                    LOG.error("Async send message failure!", throwable);
+                                }
+                            }
+                        };
                 if (messageQueueSelector != null) {
-                    Object arg = StringUtils.isNullOrWhitespaceOnly(messageQueueSelectorArg)
-                            ? null : input.getProperty(messageQueueSelectorArg);
+                    Object arg =
+                            StringUtils.isNullOrWhitespaceOnly(messageQueueSelectorArg)
+                                    ? null
+                                    : input.getProperty(messageQueueSelectorArg);
                     producer.send(input, messageQueueSelector, arg, sendCallback);
                 } else {
                     producer.send(input, sendCallback);
@@ -153,8 +156,10 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
             try {
                 SendResult result;
                 if (messageQueueSelector != null) {
-                    Object arg = StringUtils.isNullOrWhitespaceOnly(messageQueueSelectorArg)
-                            ? null : input.getProperty(messageQueueSelectorArg);
+                    Object arg =
+                            StringUtils.isNullOrWhitespaceOnly(messageQueueSelectorArg)
+                                    ? null
+                                    : input.getProperty(messageQueueSelectorArg);
                     result = producer.send(input, messageQueueSelector, arg);
                 } else {
                     result = producer.send(input);
