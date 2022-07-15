@@ -108,7 +108,6 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
 
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
-        transformContext(this, context);
         FactoryUtil.TableFactoryHelper helper = createTableFactoryHelper(this, context);
         helper.validate();
         Map<String, String> rawProperties = context.getCatalogTable().getOptions();

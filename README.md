@@ -145,7 +145,7 @@ CREATE TABLE rocketmq_source (
 ) WITH (
   'connector' = 'rocketmq',
   'topic' = 'user_behavior',
-  'consumeGroup' = 'behavior_consume_group',
+  'consumerGroup' = 'behavior_consumer_group',
   'nameServerAddress' = '127.0.0.1:9876'
 );
 
@@ -183,7 +183,7 @@ CREATE TABLE rocketmq_source (
 ) WITH (
   'connector' = 'rocketmq',
   'topic' = 'user_behavior',
-  'consumeGroup' = 'behavior_consume_group',
+  'consumerGroup' = 'behavior_consumer_group',
   'nameServerAddress' = '127.0.0.1:9876'
 );
 ```
