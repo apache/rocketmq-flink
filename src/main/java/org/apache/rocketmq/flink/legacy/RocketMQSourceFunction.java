@@ -564,6 +564,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
 
         for (Map.Entry<MessageQueue, Long> entry : offsets.entrySet()) {
             consumer.updateConsumeOffset(entry.getKey(), entry.getValue());
+            consumer.getOffsetStore().persist(consumer.queueWithNamespace(entry.getKey()));
         }
     }
 }
