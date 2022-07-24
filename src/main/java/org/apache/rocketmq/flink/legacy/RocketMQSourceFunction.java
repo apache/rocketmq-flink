@@ -17,9 +17,8 @@
 
 package org.apache.rocketmq.flink.legacy;
 
-import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
+import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.consumer.MessageSelector;
-import org.apache.rocketmq.client.consumer.PullResult;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -52,6 +51,7 @@ import org.apache.flink.util.Preconditions;
 
 import org.apache.flink.shaded.curator5.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.map.LinkedMap;
 import org.apache.commons.lang.Validate;
 import org.apache.commons.lang3.StringUtils;
@@ -95,7 +95,9 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
     private static final Logger log = LoggerFactory.getLogger(RocketMQSourceFunction.class);
     private static final String OFFSETS_STATE_NAME = "topic-partition-offset-states";
     private RunningChecker runningChecker;
-    private transient DefaultMQPullConsumer consumer;
+
+    private transient DefaultLitePullConsumer consumer;
+
     private KeyValueDeserializationSchema<OUT> schema;
     private transient ListState<Tuple2<MessageQueue, Long>> unionOffsetStates;
     private Map<MessageQueue, Long> offsetTable;
@@ -182,7 +184,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         executor = Executors.newCachedThreadPool(threadFactory);
 
         int indexOfThisSubTask = getRuntimeContext().getIndexOfThisSubtask();
-        consumer = new DefaultMQPullConsumer(group, RocketMQConfig.buildAclRPCHook(props));
+        consumer = new DefaultLitePullConsumer(group, RocketMQConfig.buildAclRPCHook(props));
         RocketMQConfig.buildConsumerConfigs(props, consumer);
 
         // set unique instance name, avoid exception:
@@ -231,7 +233,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                 5,
                 TimeUnit.SECONDS);
 
-        Collection<MessageQueue> totalQueues = consumer.fetchSubscribeMessageQueues(topic);
+        Collection<MessageQueue> totalQueues = consumer.fetchMessageQueues(topic);
         messageQueues =
                 RocketMQUtils.allocate(totalQueues, taskNumber, ctx.getIndexOfThisSubtask());
         for (MessageQueue mq : messageQueues) {
@@ -241,91 +243,58 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                                     () -> {
                                         while (runningChecker.isRunning()) {
                                             try {
-                                                long offset = getMessageQueueOffset(mq);
-
-                                                PullResult pullResult = null;
+                                                getMessageQueueOffset(mq);
                                                 if (StringUtils.isEmpty(sql)) {
-                                                    pullResult =
-                                                            consumer.pullBlockIfNotFound(
-                                                                    mq, tag, offset, pullBatchSize);
+                                                    consumer.subscribe(topic, tag);
                                                 } else {
                                                     // pull with sql do not support block pull.
-                                                    pullResult =
-                                                            consumer.pull(
-                                                                    mq,
-                                                                    MessageSelector.bySql(sql),
-                                                                    offset,
-                                                                    pullBatchSize);
+                                                    consumer.subscribe(
+                                                            topic, MessageSelector.bySql(sql));
                                                 }
+                                                consumer.setPullBatchSize(pullBatchSize);
+                                                // consumer.seek(mq, offset);
 
                                                 boolean found = false;
-                                                switch (pullResult.getPullStatus()) {
-                                                    case FOUND:
-                                                        List<MessageExt> messages =
-                                                                pullResult.getMsgFoundList();
-                                                        for (MessageExt msg : messages) {
-                                                            byte[] key =
-                                                                    msg.getKeys() != null
-                                                                            ? msg.getKeys()
-                                                                                    .getBytes(
-                                                                                            StandardCharsets
-                                                                                                    .UTF_8)
-                                                                            : null;
-                                                            byte[] value = msg.getBody();
-                                                            OUT data =
-                                                                    schema.deserializeKeyAndValue(
-                                                                            key, value);
+                                                List<MessageExt> messages = consumer.poll();
+                                                if (CollectionUtils.isNotEmpty(messages)) {
+                                                    for (MessageExt msg : messages) {
+                                                        byte[] key =
+                                                                msg.getKeys() != null
+                                                                        ? msg.getKeys()
+                                                                                .getBytes(
+                                                                                        StandardCharsets
+                                                                                                .UTF_8)
+                                                                        : null;
+                                                        byte[] value = msg.getBody();
+                                                        OUT data =
+                                                                schema.deserializeKeyAndValue(
+                                                                        key, value);
 
-                                                            // output and state update are atomic
-                                                            synchronized (checkPointLock) {
-                                                                log.debug(
-                                                                        msg.getMsgId()
-                                                                                + "_"
-                                                                                + msg
-                                                                                        .getBrokerName()
-                                                                                + " "
-                                                                                + msg.getQueueId()
-                                                                                + " "
-                                                                                + msg
-                                                                                        .getQueueOffset());
-                                                                context.collectWithTimestamp(
-                                                                        data,
-                                                                        msg.getBornTimestamp());
+                                                        // output and state update are atomic
+                                                        synchronized (checkPointLock) {
+                                                            log.debug(
+                                                                    msg.getMsgId()
+                                                                            + "_"
+                                                                            + msg.getBrokerName()
+                                                                            + " "
+                                                                            + msg.getQueueId()
+                                                                            + " "
+                                                                            + msg.getQueueOffset());
+                                                            context.collectWithTimestamp(
+                                                                    data, msg.getBornTimestamp());
 
-                                                                // update max eventTime per queue
-                                                                // waterMarkPerQueue.extractTimestamp(mq, msg.getBornTimestamp());
-                                                                waterMarkForAll.extractTimestamp(
-                                                                        msg.getBornTimestamp());
-                                                                tpsMetric.markEvent();
-                                                            }
+                                                            // update max eventTime per queue
+                                                            // waterMarkPerQueue.extractTimestamp(mq, msg.getBornTimestamp());
+                                                            waterMarkForAll.extractTimestamp(
+                                                                    msg.getBornTimestamp());
+                                                            tpsMetric.markEvent();
                                                         }
-                                                        found = true;
-                                                        break;
-                                                    case NO_MATCHED_MSG:
-                                                        log.debug(
-                                                                "No matched message after offset {} for queue {}",
-                                                                offset,
-                                                                mq);
-                                                        break;
-                                                    case NO_NEW_MSG:
-                                                        log.debug(
-                                                                "No new message after offset {} for queue {}",
-                                                                offset,
-                                                                mq);
-                                                        break;
-                                                    case OFFSET_ILLEGAL:
-                                                        log.warn(
-                                                                "Offset {} is illegal for queue {}",
-                                                                offset,
-                                                                mq);
-                                                        break;
-                                                    default:
-                                                        break;
+                                                    }
+                                                    found = true;
                                                 }
-
                                                 synchronized (checkPointLock) {
                                                     updateMessageQueueOffset(
-                                                            mq, pullResult.getNextBeginOffset());
+                                                            mq, consumer.committed(mq));
                                                 }
 
                                                 if (!found) {
@@ -357,21 +326,21 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         // should only snapshot mqs that actually belong to us
         if (offset == null) {
             // fetchConsumeOffset from broker
-            offset = consumer.fetchConsumeOffset(mq, false);
+            offset = consumer.committed(mq);
             if (!restored || offset < 0) {
                 String initialOffset =
                         props.getProperty(
                                 RocketMQConfig.CONSUMER_OFFSET_RESET_TO, CONSUMER_OFFSET_LATEST);
                 switch (initialOffset) {
                     case CONSUMER_OFFSET_EARLIEST:
-                        offset = consumer.minOffset(mq);
+                        consumer.seekToBegin(mq);
                         break;
                     case CONSUMER_OFFSET_LATEST:
-                        offset = consumer.maxOffset(mq);
+                        consumer.seekToEnd(mq);
                         break;
                     case CONSUMER_OFFSET_TIMESTAMP:
                         offset =
-                                consumer.searchOffset(
+                                consumer.offsetForTimestamp(
                                         mq,
                                         getLong(
                                                 props,
@@ -391,8 +360,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
     private void updateMessageQueueOffset(MessageQueue mq, long offset) throws MQClientException {
         offsetTable.put(mq, offset);
         if (!enableCheckpoint) {
-            consumer.updateConsumeOffset(mq, offset);
-            consumer.getOffsetStore().persist(consumer.queueWithNamespace(mq));
+            consumer.getOffsetStore().updateOffset(mq, offset, false);
         }
     }
 
@@ -464,8 +432,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         // Discovery topic Route change when snapshot
         RetryUtil.call(
                 () -> {
-                    Collection<MessageQueue> totalQueues =
-                            consumer.fetchSubscribeMessageQueues(topic);
+                    Collection<MessageQueue> totalQueues = consumer.fetchMessageQueues(topic);
                     int taskNumber = getRuntimeContext().getNumberOfParallelSubtasks();
                     int taskIndex = getRuntimeContext().getIndexOfThisSubtask();
                     List<MessageQueue> newQueues =
@@ -563,7 +530,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         }
 
         for (Map.Entry<MessageQueue, Long> entry : offsets.entrySet()) {
-            consumer.updateConsumeOffset(entry.getKey(), entry.getValue());
+            consumer.getOffsetStore().updateOffset(entry.getKey(), entry.getValue(), false);
             consumer.getOffsetStore().persist(consumer.queueWithNamespace(entry.getKey()));
         }
     }

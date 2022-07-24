@@ -18,6 +18,7 @@
 
 package org.apache.rocketmq.flink.source.reader;
 
+import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
 import org.apache.rocketmq.client.consumer.MessageSelector;
 import org.apache.rocketmq.client.consumer.PullResult;
@@ -78,6 +79,7 @@ public class RocketMQPartitionSplitReader<T>
     private final Map<Tuple3<String, String, Integer>, Long> stoppingTimestamps;
     private final SimpleCollector<T> collector;
 
+    private DefaultLitePullConsumer litePullConsumer;
     private DefaultMQPullConsumer consumer;
 
     private volatile boolean wakeup = false;

@@ -20,7 +20,7 @@ import org.apache.rocketmq.acl.common.AclClientRPCHook;
 import org.apache.rocketmq.acl.common.SessionCredentials;
 import org.apache.rocketmq.client.AccessChannel;
 import org.apache.rocketmq.client.ClientConfig;
-import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
+import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.common.protocol.heartbeat.MessageModel;
 
@@ -138,9 +138,9 @@ public class RocketMQConfig {
      * Build Consumer Configs.
      *
      * @param props Properties
-     * @param consumer DefaultMQPullConsumer
+     * @param consumer DefaultLitePullConsumer
      */
-    public static void buildConsumerConfigs(Properties props, DefaultMQPullConsumer consumer) {
+    public static void buildConsumerConfigs(Properties props, DefaultLitePullConsumer consumer) {
         buildCommonConfigs(props, consumer);
         consumer.setMessageModel(MessageModel.CLUSTERING);
         consumer.setPersistConsumerOffsetInterval(
