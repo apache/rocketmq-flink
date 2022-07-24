@@ -18,6 +18,8 @@
 
 package org.apache.rocketmq.flink.source.reader;
 
+import org.apache.rocketmq.acl.common.AclClientRPCHook;
+import org.apache.rocketmq.acl.common.SessionCredentials;
 import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
 import org.apache.rocketmq.client.consumer.MessageSelector;
 import org.apache.rocketmq.client.consumer.PullResult;
@@ -73,6 +75,9 @@ public class RocketMQPartitionSplitReader<T>
     private final long startTime;
     private final long startOffset;
 
+    private final String accessKey;
+    private final String secretKey;
+
     private final RocketMQDeserializationSchema<T> deserializationSchema;
     private final Map<Tuple3<String, String, Integer>, Long> startingOffsets;
     private final Map<Tuple3<String, String, Integer>, Long> stoppingTimestamps;
@@ -88,6 +93,8 @@ public class RocketMQPartitionSplitReader<T>
             String topic,
             String consumerGroup,
             String nameServerAddress,
+            String accessKey,
+            String secretKey,
             String tag,
             String sql,
             long stopInMs,
@@ -97,6 +104,8 @@ public class RocketMQPartitionSplitReader<T>
         this.topic = topic;
         this.tag = tag;
         this.sql = sql;
+        this.accessKey = accessKey;
+        this.secretKey = secretKey;
         this.stopInMs = stopInMs;
         this.startTime = startTime;
         this.startOffset = startOffset;
@@ -104,7 +113,7 @@ public class RocketMQPartitionSplitReader<T>
         this.startingOffsets = new HashMap<>();
         this.stoppingTimestamps = new HashMap<>();
         this.collector = new SimpleCollector<>();
-        initialRocketMQConsumer(consumerGroup, nameServerAddress);
+        initialRocketMQConsumer(consumerGroup, nameServerAddress, accessKey, secretKey);
     }
 
     @Override
@@ -304,9 +313,17 @@ public class RocketMQPartitionSplitReader<T>
 
     // --------------- private helper method ----------------------
 
-    private void initialRocketMQConsumer(String consumerGroup, String nameServerAddress) {
+    private void initialRocketMQConsumer(
+            String consumerGroup, String nameServerAddress, String accessKey, String secretKey) {
+
         try {
-            consumer = new DefaultMQPullConsumer(consumerGroup);
+            if (StringUtils.isNotBlank(accessKey) && StringUtils.isNotBlank(secretKey)) {
+                AclClientRPCHook aclClientRPCHook =
+                        new AclClientRPCHook(new SessionCredentials(accessKey, secretKey));
+                consumer = new DefaultMQPullConsumer(consumerGroup, aclClientRPCHook);
+            } else {
+                consumer = new DefaultMQPullConsumer(consumerGroup);
+            }
             consumer.setNamesrvAddr(nameServerAddress);
             consumer.setInstanceName(
                     String.join(

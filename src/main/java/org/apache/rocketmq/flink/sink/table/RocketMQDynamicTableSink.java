@@ -57,6 +57,9 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
     private final String fieldDelimiter;
     private final String encoding;
 
+    private final String accessKey;
+    private final String secretKey;
+
     private final long retryTimes;
     private final long sleepTime;
 
@@ -84,11 +87,52 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
             boolean isDynamicTagIncluded,
             boolean writeKeysToBody,
             String[] keyColumns) {
+
+        this(
+                properties,
+                schema,
+                topic,
+                null,
+                null,
+                producerGroup,
+                nameServerAddress,
+                tag,
+                dynamicColumn,
+                fieldDelimiter,
+                encoding,
+                retryTimes,
+                sleepTime,
+                isDynamicTag,
+                isDynamicTagIncluded,
+                writeKeysToBody,
+                keyColumns);
+    }
+
+    public RocketMQDynamicTableSink(
+            DescriptorProperties properties,
+            TableSchema schema,
+            String topic,
+            String producerGroup,
+            String nameServerAddress,
+            String accessKey,
+            String secretKey,
+            String tag,
+            String dynamicColumn,
+            String fieldDelimiter,
+            String encoding,
+            long retryTimes,
+            long sleepTime,
+            boolean isDynamicTag,
+            boolean isDynamicTagIncluded,
+            boolean writeKeysToBody,
+            String[] keyColumns) {
         this.properties = properties;
         this.schema = schema;
         this.topic = topic;
         this.producerGroup = producerGroup;
         this.nameServerAddress = nameServerAddress;
+        this.accessKey = accessKey;
+        this.secretKey = secretKey;
         this.tag = tag;
         this.dynamicColumn = dynamicColumn;
         this.fieldDelimiter = fieldDelimiter;
@@ -141,6 +185,8 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
                         topic,
                         producerGroup,
                         nameServerAddress,
+                        accessKey,
+                        secretKey,
                         tag,
                         dynamicColumn,
                         fieldDelimiter,
@@ -196,6 +242,8 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
         Properties producerProps = new Properties();
         producerProps.setProperty(RocketMQConfig.PRODUCER_GROUP, producerGroup);
         producerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, nameServerAddress);
+        producerProps.setProperty(RocketMQConfig.ACCESS_KEY, accessKey);
+        producerProps.setProperty(RocketMQConfig.SECRET_KEY, secretKey);
         return producerProps;
     }
 

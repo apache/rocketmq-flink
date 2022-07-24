@@ -64,6 +64,9 @@ public class RocketMQSource<OUT>
     private final String tag;
     private final String sql;
 
+    private final String accessKey;
+    private final String secretKey;
+
     private final long stopInMs;
     private final long startTime;
     private final long startOffset;
@@ -85,12 +88,44 @@ public class RocketMQSource<OUT>
             long partitionDiscoveryIntervalMs,
             Boundedness boundedness,
             RocketMQDeserializationSchema<OUT> deserializationSchema) {
+        this(
+                topic,
+                consumerGroup,
+                nameServerAddress,
+                null,
+                null,
+                tag,
+                sql,
+                stopInMs,
+                startTime,
+                startOffset,
+                partitionDiscoveryIntervalMs,
+                boundedness,
+                deserializationSchema);
+    }
+
+    public RocketMQSource(
+            String topic,
+            String consumerGroup,
+            String nameServerAddress,
+            String accessKey,
+            String secretKey,
+            String tag,
+            String sql,
+            long stopInMs,
+            long startTime,
+            long startOffset,
+            long partitionDiscoveryIntervalMs,
+            Boundedness boundedness,
+            RocketMQDeserializationSchema<OUT> deserializationSchema) {
         Validate.isTrue(
                 !(StringUtils.isNotEmpty(tag) && StringUtils.isNotEmpty(sql)),
                 "Consumer tag and sql can not set value at the same time");
         this.topic = topic;
         this.consumerGroup = consumerGroup;
         this.nameServerAddress = nameServerAddress;
+        this.accessKey = accessKey;
+        this.secretKey = secretKey;
         this.tag = StringUtils.isEmpty(tag) ? RocketMQConfig.DEFAULT_CONSUMER_TAG : tag;
         this.sql = sql;
         this.stopInMs = stopInMs;
@@ -130,6 +165,8 @@ public class RocketMQSource<OUT>
                                 topic,
                                 consumerGroup,
                                 nameServerAddress,
+                                accessKey,
+                                secretKey,
                                 tag,
                                 sql,
                                 stopInMs,
@@ -149,10 +186,13 @@ public class RocketMQSource<OUT>
     @Override
     public SplitEnumerator<RocketMQPartitionSplit, RocketMQSourceEnumState> createEnumerator(
             SplitEnumeratorContext<RocketMQPartitionSplit> enumContext) {
+
         return new RocketMQSourceEnumerator(
                 topic,
                 consumerGroup,
                 nameServerAddress,
+                accessKey,
+                secretKey,
                 stopInMs,
                 startOffset,
                 partitionDiscoveryIntervalMs,
@@ -164,10 +204,13 @@ public class RocketMQSource<OUT>
     public SplitEnumerator<RocketMQPartitionSplit, RocketMQSourceEnumState> restoreEnumerator(
             SplitEnumeratorContext<RocketMQPartitionSplit> enumContext,
             RocketMQSourceEnumState checkpoint) {
+
         return new RocketMQSourceEnumerator(
                 topic,
                 consumerGroup,
                 nameServerAddress,
+                accessKey,
+                secretKey,
                 stopInMs,
                 startOffset,
                 partitionDiscoveryIntervalMs,

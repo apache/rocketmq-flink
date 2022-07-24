@@ -62,6 +62,9 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     private final String tag;
     private final String sql;
 
+    private final String accessKey;
+    private final String secretKey;
+
     private final long stopInMs;
     private final long partitionDiscoveryIntervalMs;
     private final long startMessageOffset;
@@ -83,11 +86,46 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             long startTime,
             long partitionDiscoveryIntervalMs,
             boolean useNewApi) {
+
+        this(
+                properties,
+                schema,
+                topic,
+                consumerGroup,
+                nameServerAddress,
+                null,
+                null,
+                tag,
+                sql,
+                stopInMs,
+                startMessageOffset,
+                startTime,
+                partitionDiscoveryIntervalMs,
+                useNewApi);
+    }
+
+    public RocketMQScanTableSource(
+            DescriptorProperties properties,
+            TableSchema schema,
+            String topic,
+            String consumerGroup,
+            String nameServerAddress,
+            String accessKey,
+            String secretKey,
+            String tag,
+            String sql,
+            long stopInMs,
+            long startMessageOffset,
+            long startTime,
+            long partitionDiscoveryIntervalMs,
+            boolean useNewApi) {
         this.properties = properties;
         this.schema = schema;
         this.topic = topic;
         this.consumerGroup = consumerGroup;
         this.nameServerAddress = nameServerAddress;
+        this.accessKey = accessKey;
+        this.secretKey = secretKey;
         this.tag = tag;
         this.sql = sql;
         this.stopInMs = stopInMs;
@@ -149,6 +187,8 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                         topic,
                         consumerGroup,
                         nameServerAddress,
+                        accessKey,
+                        secretKey,
                         tag,
                         sql,
                         stopInMs,
