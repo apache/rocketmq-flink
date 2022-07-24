@@ -18,6 +18,7 @@
 
 package org.apache.rocketmq.flink.legacy;
 
+import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
 import org.apache.rocketmq.client.consumer.MQPullConsumerScheduleService;
 import org.apache.rocketmq.client.consumer.PullResult;
@@ -56,6 +57,7 @@ public class RocketMQSourceTest {
 
     private RocketMQSourceFunction rocketMQSource;
     private MQPullConsumerScheduleService pullConsumerScheduleService;
+    private DefaultLitePullConsumer litePullConsumer;
     private DefaultMQPullConsumer consumer;
     private KeyValueDeserializationSchema deserializationSchema;
     private String topic = "tpc";
