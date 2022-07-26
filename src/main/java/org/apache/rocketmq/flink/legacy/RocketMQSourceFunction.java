@@ -50,6 +50,7 @@ import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunctio
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 import org.apache.flink.util.Preconditions;
 
+import org.apache.flink.shaded.curator5.com.google.common.collect.Lists;
 import org.apache.flink.shaded.curator5.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import org.apache.commons.collections.map.LinkedMap;
@@ -243,7 +244,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                                             try {
                                                 long offset = getMessageQueueOffset(mq);
 
-                                                PullResult pullResult = null;
+                                                PullResult pullResult;
                                                 if (StringUtils.isEmpty(sql)) {
                                                     pullResult =
                                                             consumer.pullBlockIfNotFound(
@@ -449,7 +450,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                         offsetTable.put(mq, offset);
                     }
                 });
-        log.info("init offset table from restoredOffsets successful.", offsetTable);
+        log.info("init offset table [{}] from restoredOffsets successful.", offsetTable);
     }
 
     @Override
@@ -461,33 +462,47 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
             return;
         }
 
-        // Discovery topic Route change when snapshot
-        RetryUtil.call(
-                () -> {
-                    Collection<MessageQueue> totalQueues =
-                            consumer.fetchSubscribeMessageQueues(topic);
-                    int taskNumber = getRuntimeContext().getNumberOfParallelSubtasks();
-                    int taskIndex = getRuntimeContext().getIndexOfThisSubtask();
-                    List<MessageQueue> newQueues =
-                            RocketMQUtils.allocate(totalQueues, taskNumber, taskIndex);
-                    Collections.sort(newQueues);
-                    log.debug(taskIndex + " Topic route is same.");
-                    if (!messageQueues.equals(newQueues)) {
-                        throw new RuntimeException();
-                    }
-                    return true;
-                },
-                "RuntimeException due to topic route changed");
+        Map<MessageQueue, Long> currentOffsets;
+        try {
+            // Discovers topic route change when snapshot
+            RetryUtil.call(
+                    () -> {
+                        Collection<MessageQueue> totalQueues =
+                                consumer.fetchSubscribeMessageQueues(topic);
+                        int taskNumber = getRuntimeContext().getNumberOfParallelSubtasks();
+                        int taskIndex = getRuntimeContext().getIndexOfThisSubtask();
+                        List<MessageQueue> newQueues =
+                                RocketMQUtils.allocate(totalQueues, taskNumber, taskIndex);
+                        Collections.sort(newQueues);
+                        log.debug(taskIndex + " Topic route is same.");
+                        if (!messageQueues.equals(newQueues)) {
+                            throw new RuntimeException();
+                        }
+                        return true;
+                    },
+                    "RuntimeException due to topic route changed");
 
-        unionOffsetStates.clear();
-        HashMap<MessageQueue, Long> currentOffsets = new HashMap<>(offsetTable.size());
+            unionOffsetStates.clear();
+            currentOffsets = new HashMap<>(offsetTable.size());
+        } catch (RuntimeException e) {
+            log.warn("Retry failed multiple times for topic route change, keep previous offset.");
+            // If the retry fails for multiple times, the message queue and its offset in the
+            // previous checkpoint will be retained.
+            List<Tuple2<MessageQueue, Long>> unionOffsets =
+                    Lists.newArrayList(unionOffsetStates.get().iterator());
+            Map<MessageQueue, Long> queueOffsets = new HashMap<>(unionOffsets.size());
+            unionOffsets.forEach(queueOffset -> queueOffsets.put(queueOffset.f0, queueOffset.f1));
+            currentOffsets = new HashMap<>(unionOffsets.size() + offsetTable.size());
+            currentOffsets.putAll(queueOffsets);
+        }
+
         for (Map.Entry<MessageQueue, Long> entry : offsetTable.entrySet()) {
             unionOffsetStates.add(Tuple2.of(entry.getKey(), entry.getValue()));
             currentOffsets.put(entry.getKey(), entry.getValue());
         }
         pendingOffsetsToCommit.put(context.getCheckpointId(), currentOffsets);
         log.info(
-                "Snapshotted state, last processed offsets: {}, checkpoint id: {}, timestamp: {}",
+                "Snapshot state, last processed offsets: {}, checkpoint id: {}, timestamp: {}",
                 offsetTable,
                 context.getCheckpointId(),
                 context.getCheckpointTimestamp());
@@ -531,7 +546,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
     }
 
     @Override
-    public TypeInformation getProducedType() {
+    public TypeInformation<OUT> getProducedType() {
         return schema.getProducedType();
     }
 
