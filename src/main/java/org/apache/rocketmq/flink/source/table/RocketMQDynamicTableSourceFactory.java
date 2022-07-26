@@ -122,6 +122,8 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         long startTimeMs = configuration.getLong(OPTIONAL_START_TIME_MILLS);
         String startDateTime = configuration.getString(OPTIONAL_START_TIME);
         String timeZone = configuration.getString(OPTIONAL_TIME_ZONE);
+        String accessKey = configuration.getString(OPTIONAL_ACCESS_KEY);
+        String secretKey = configuration.getString(OPTIONAL_SECRET_KEY);
         long startTime = startTimeMs;
         if (startTime == -1) {
             if (!StringUtils.isNullOrWhitespaceOnly(startDateTime)) {
@@ -167,6 +169,8 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                 topic,
                 consumerGroup,
                 nameServerAddress,
+                accessKey,
+                secretKey,
                 tag,
                 sql,
                 stopInMs,

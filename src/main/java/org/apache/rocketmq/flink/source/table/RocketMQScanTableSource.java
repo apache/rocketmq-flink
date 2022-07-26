@@ -149,6 +149,8 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                             topic,
                             consumerGroup,
                             nameServerAddress,
+                            accessKey,
+                            secretKey,
                             tag,
                             sql,
                             stopInMs,
@@ -238,6 +240,8 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         consumerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, nameServerAddress);
         consumerProps.setProperty(RocketMQConfig.CONSUMER_TAG, tag);
         consumerProps.setProperty(RocketMQConfig.CONSUMER_SQL, sql);
+        consumerProps.setProperty(RocketMQConfig.ACCESS_KEY, accessKey);
+        consumerProps.setProperty(RocketMQConfig.SECRET_KEY, secretKey);
         return consumerProps;
     }
 
