@@ -37,8 +37,10 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.table.factories.FactoryUtil.createTableFactoryHelper;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.NAME_SERVER_ADDRESS;
+import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_ACCESS_KEY;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_ENCODING;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_FIELD_DELIMITER;
+import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_SECRET_KEY;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_TAG;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN_WRITE_INCLUDED;
@@ -83,6 +85,8 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
         optionalOptions.add(OPTIONAL_WRITE_KEY_COLUMNS);
         optionalOptions.add(OPTIONAL_ENCODING);
         optionalOptions.add(OPTIONAL_FIELD_DELIMITER);
+        optionalOptions.add(OPTIONAL_ACCESS_KEY);
+        optionalOptions.add(OPTIONAL_SECRET_KEY);
         return optionalOptions;
     }
 
@@ -97,6 +101,8 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
         String producerGroup = properties.getString(PRODUCER_GROUP);
         String nameServerAddress = properties.getString(NAME_SERVER_ADDRESS);
         String tag = properties.getString(OPTIONAL_TAG);
+        String accessKey = properties.getString(OPTIONAL_ACCESS_KEY);
+        String secretKey = properties.getString(OPTIONAL_SECRET_KEY);
         String dynamicColumn = properties.getString(OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN);
         String encoding = properties.getString(OPTIONAL_ENCODING);
         String fieldDelimiter = properties.getString(OPTIONAL_FIELD_DELIMITER);
@@ -115,12 +121,15 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
         descriptorProperties.putProperties(rawProperties);
         TableSchema physicalSchema =
                 TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
+
         return new RocketMQDynamicTableSink(
                 descriptorProperties,
                 physicalSchema,
                 topicName,
                 producerGroup,
                 nameServerAddress,
+                accessKey,
+                secretKey,
                 tag,
                 dynamicColumn,
                 fieldDelimiter,

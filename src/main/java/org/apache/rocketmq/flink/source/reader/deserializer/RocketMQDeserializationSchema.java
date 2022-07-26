@@ -40,6 +40,7 @@ public interface RocketMQDeserializationSchema<T>
      *
      * @param context Contextual information that can be used during initialization.
      */
+    @Override
     @PublicEvolving
     default void open(InitializationContext context) {}
 
@@ -54,6 +55,7 @@ public interface RocketMQDeserializationSchema<T>
      * @param record The MessageExts to deserialize.
      * @param out The collector to put the resulting messages.
      */
+    @Override
     @PublicEvolving
     void deserialize(List<MessageExt> record, Collector<T> out) throws IOException;
 }

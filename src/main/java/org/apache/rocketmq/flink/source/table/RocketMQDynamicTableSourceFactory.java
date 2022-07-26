@@ -44,6 +44,7 @@ import java.util.stream.Collectors;
 import static org.apache.flink.table.factories.FactoryUtil.createTableFactoryHelper;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.CONSUMER_GROUP;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.NAME_SERVER_ADDRESS;
+import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_ACCESS_KEY;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_COLUMN_ERROR_DEBUG;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_ENCODING;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_END_TIME;
@@ -51,6 +52,7 @@ import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_FIELD_DE
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_LENGTH_CHECK;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_LINE_DELIMITER;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_PARTITION_DISCOVERY_INTERVAL_MS;
+import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_SECRET_KEY;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_SQL;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_START_MESSAGE_OFFSET;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_START_TIME;
@@ -99,6 +101,8 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         optionalOptions.add(OPTIONAL_LINE_DELIMITER);
         optionalOptions.add(OPTIONAL_COLUMN_ERROR_DEBUG);
         optionalOptions.add(OPTIONAL_LENGTH_CHECK);
+        optionalOptions.add(OPTIONAL_ACCESS_KEY);
+        optionalOptions.add(OPTIONAL_SECRET_KEY);
         return optionalOptions;
     }
 

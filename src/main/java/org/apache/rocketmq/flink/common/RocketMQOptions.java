@@ -83,6 +83,7 @@ public class RocketMQOptions {
 
     public static final ConfigOption<Long> OPTIONAL_WRITE_SLEEP_TIME_MS =
             ConfigOptions.key("sleepTimeMs").longType().defaultValue(5000L);
+
     public static final ConfigOption<Boolean> OPTIONAL_WRITE_IS_DYNAMIC_TAG =
             ConfigOptions.key("isDynamicTag").booleanType().defaultValue(false);
 
@@ -97,4 +98,10 @@ public class RocketMQOptions {
 
     public static final ConfigOption<Boolean> OPTIONAL_WRITE_KEYS_TO_BODY =
             ConfigOptions.key("writeKeysToBody").booleanType().defaultValue(false);
+
+    public static final ConfigOption<String> OPTIONAL_ACCESS_KEY =
+            ConfigOptions.key("accessKey").stringType().noDefaultValue();
+
+    public static final ConfigOption<String> OPTIONAL_SECRET_KEY =
+            ConfigOptions.key("secretKey").stringType().noDefaultValue();
 }

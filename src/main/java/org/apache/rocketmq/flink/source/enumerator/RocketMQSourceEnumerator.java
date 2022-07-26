@@ -18,6 +18,8 @@
 
 package org.apache.rocketmq.flink.source.enumerator;
 
+import org.apache.rocketmq.acl.common.AclClientRPCHook;
+import org.apache.rocketmq.acl.common.SessionCredentials;
 import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -31,6 +33,7 @@ import org.apache.flink.api.connector.source.SplitEnumeratorContext;
 import org.apache.flink.api.connector.source.SplitsAssignment;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.FlinkRuntimeException;
+import org.apache.flink.util.StringUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +73,11 @@ public class RocketMQSourceEnumerator
     /** The boundedness of this RocketMQSource. */
     private final Boundedness boundedness;
 
+    /** The accessKey used for this RocketMQSource. */
+    private final String accessKey;
+    /** The secretKey used for this RocketMQSource. */
+    private final String secretKey;
+
     private final SplitEnumeratorContext<RocketMQPartitionSplit> context;
 
     // The internal states of the enumerator.
@@ -94,6 +102,8 @@ public class RocketMQSourceEnumerator
             String topic,
             String consumerGroup,
             String nameServerAddress,
+            String accessKey,
+            String secretKey,
             long stopInMs,
             long startOffset,
             long partitionDiscoveryIntervalMs,
@@ -103,6 +113,8 @@ public class RocketMQSourceEnumerator
                 topic,
                 consumerGroup,
                 nameServerAddress,
+                accessKey,
+                secretKey,
                 stopInMs,
                 startOffset,
                 partitionDiscoveryIntervalMs,
@@ -115,6 +127,8 @@ public class RocketMQSourceEnumerator
             String topic,
             String consumerGroup,
             String nameServerAddress,
+            String accessKey,
+            String secretKey,
             long stopInMs,
             long startOffset,
             long partitionDiscoveryIntervalMs,
@@ -124,6 +138,8 @@ public class RocketMQSourceEnumerator
         this.topic = topic;
         this.consumerGroup = consumerGroup;
         this.nameServerAddress = nameServerAddress;
+        this.accessKey = accessKey;
+        this.secretKey = secretKey;
         this.stopInMs = stopInMs;
         this.startOffset = startOffset;
         this.partitionDiscoveryIntervalMs = partitionDiscoveryIntervalMs;
@@ -303,7 +319,15 @@ public class RocketMQSourceEnumerator
 
     private void initialRocketMQConsumer() {
         try {
-            consumer = new DefaultMQPullConsumer(consumerGroup);
+            if (!StringUtils.isNullOrWhitespaceOnly(accessKey)
+                    && !StringUtils.isNullOrWhitespaceOnly(secretKey)) {
+                AclClientRPCHook aclClientRPCHook =
+                        new AclClientRPCHook(new SessionCredentials(accessKey, secretKey));
+                consumer = new DefaultMQPullConsumer(consumerGroup, aclClientRPCHook);
+            } else {
+                consumer = new DefaultMQPullConsumer(consumerGroup);
+            }
+
             consumer.setNamesrvAddr(nameServerAddress);
             consumer.setInstanceName(
                     String.join(
