@@ -79,6 +79,8 @@ public class RocketMQConfig {
             "consumer.offset.persist.interval";
     public static final int DEFAULT_CONSUMER_OFFSET_PERSIST_INTERVAL = 5000; // 5 seconds
 
+    public static final String CONSUMER_START_MESSAGE_OFFSET = "consumer.start.message.offset";
+
     public static final String CONSUMER_BATCH_SIZE = "consumer.batch.size";
     public static final int DEFAULT_CONSUMER_BATCH_SIZE = 32;
 

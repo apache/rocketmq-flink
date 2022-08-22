@@ -115,6 +115,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
     private Properties props;
     private String topic;
     private String group;
+    private long startMessageOffset;
     private transient volatile boolean restored;
     private transient boolean enableCheckpoint;
     private volatile Object checkPointLock;
@@ -133,6 +134,11 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
 
         this.topic = props.getProperty(RocketMQConfig.CONSUMER_TOPIC);
         this.group = props.getProperty(RocketMQConfig.CONSUMER_GROUP);
+        this.startMessageOffset =
+                props.containsKey(RocketMQConfig.CONSUMER_START_MESSAGE_OFFSET)
+                        ? Long.parseLong(
+                                props.getProperty(RocketMQConfig.CONSUMER_START_MESSAGE_OFFSET))
+                        : -1;
 
         Validate.notEmpty(topic, "Consumer topic can not be empty");
         Validate.notEmpty(group, "Consumer group can not be empty");
@@ -354,9 +360,12 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
 
     private long getMessageQueueOffset(MessageQueue mq) throws MQClientException {
         Long offset = offsetTable.get(mq);
+        if (offset != null) {
+            return offset;
+        }
         // restoredOffsets(unionOffsetStates) is the restored global union state;
         // should only snapshot mqs that actually belong to us
-        if (offset == null) {
+        if (startMessageOffset == -1) {
             // fetchConsumeOffset from broker
             offset = consumer.fetchConsumeOffset(mq, false);
             if (!restored || offset < 0) {
@@ -384,6 +393,8 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                                 "Unknown value for CONSUMER_OFFSET_RESET_TO.");
                 }
             }
+        } else {
+            offset = startMessageOffset;
         }
         offsetTable.put(mq, offset);
         return offsetTable.get(mq);

@@ -79,37 +79,6 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             String topic,
             String consumerGroup,
             String nameServerAddress,
-            String tag,
-            String sql,
-            long stopInMs,
-            long startMessageOffset,
-            long startTime,
-            long partitionDiscoveryIntervalMs,
-            boolean useNewApi) {
-
-        this(
-                properties,
-                schema,
-                topic,
-                consumerGroup,
-                nameServerAddress,
-                null,
-                null,
-                tag,
-                sql,
-                stopInMs,
-                startMessageOffset,
-                startTime,
-                partitionDiscoveryIntervalMs,
-                useNewApi);
-    }
-
-    public RocketMQScanTableSource(
-            DescriptorProperties properties,
-            TableSchema schema,
-            String topic,
-            String consumerGroup,
-            String nameServerAddress,
             String accessKey,
             String secretKey,
             String tag,
@@ -240,6 +209,8 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         consumerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, nameServerAddress);
         consumerProps.setProperty(RocketMQConfig.CONSUMER_TAG, tag);
         consumerProps.setProperty(RocketMQConfig.CONSUMER_SQL, sql);
+        consumerProps.setProperty(
+                RocketMQConfig.CONSUMER_START_MESSAGE_OFFSET, String.valueOf(startMessageOffset));
         consumerProps.setProperty(RocketMQConfig.ACCESS_KEY, accessKey);
         consumerProps.setProperty(RocketMQConfig.SECRET_KEY, secretKey);
         return consumerProps;

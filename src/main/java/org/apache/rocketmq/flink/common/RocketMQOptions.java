@@ -42,20 +42,20 @@ public class RocketMQOptions {
     public static final ConfigOption<String> OPTIONAL_SQL =
             ConfigOptions.key("sql").stringType().noDefaultValue();
 
-    public static final ConfigOption<Integer> OPTIONAL_START_MESSAGE_OFFSET =
-            ConfigOptions.key("startMessageOffset").intType().defaultValue(-1);
+    public static final ConfigOption<Long> OPTIONAL_START_MESSAGE_OFFSET =
+            ConfigOptions.key("startMessageOffset").longType().defaultValue(-1L);
 
     public static final ConfigOption<Long> OPTIONAL_START_TIME_MILLS =
-            ConfigOptions.key("startTimeMs".toLowerCase()).longType().defaultValue(-1L);
+            ConfigOptions.key("startTimeMs").longType().defaultValue(-1L);
 
     public static final ConfigOption<String> OPTIONAL_START_TIME =
-            ConfigOptions.key("startTime".toLowerCase()).stringType().noDefaultValue();
+            ConfigOptions.key("startTime").stringType().noDefaultValue();
 
     public static final ConfigOption<String> OPTIONAL_END_TIME =
             ConfigOptions.key("endTime").stringType().noDefaultValue();
 
     public static final ConfigOption<String> OPTIONAL_TIME_ZONE =
-            ConfigOptions.key("timeZone".toLowerCase()).stringType().noDefaultValue();
+            ConfigOptions.key("timeZone").stringType().noDefaultValue();
 
     public static final ConfigOption<Long> OPTIONAL_PARTITION_DISCOVERY_INTERVAL_MS =
             ConfigOptions.key("partitionDiscoveryIntervalMs").longType().defaultValue(30000L);

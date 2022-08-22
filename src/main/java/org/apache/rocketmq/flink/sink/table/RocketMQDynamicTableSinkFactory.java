@@ -23,17 +23,13 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.descriptors.DescriptorProperties;
-import org.apache.flink.table.factories.DynamicTableFactory;
 import org.apache.flink.table.factories.DynamicTableSinkFactory;
-import org.apache.flink.table.factories.Factory;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.utils.TableSchemaUtils;
 
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.apache.flink.table.factories.FactoryUtil.createTableFactoryHelper;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.NAME_SERVER_ADDRESS;
@@ -92,7 +88,6 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
 
     @Override
     public DynamicTableSink createDynamicTableSink(Context context) {
-        transformContext(this, context);
         FactoryUtil.TableFactoryHelper helper = createTableFactoryHelper(this, context);
         helper.validate();
         Map<String, String> rawProperties = context.getCatalogTable().getOptions();
@@ -140,44 +135,5 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
                 isDynamicTagIncluded,
                 writeKeysToBody,
                 keyColumns);
-    }
-
-    private void transformContext(
-            DynamicTableFactory factory, DynamicTableFactory.Context context) {
-        Map<String, String> catalogOptions = context.getCatalogTable().getOptions();
-        Map<String, String> convertedOptions =
-                normalizeOptionCaseAsFactory(factory, catalogOptions);
-        catalogOptions.clear();
-        for (Map.Entry<String, String> entry : convertedOptions.entrySet()) {
-            catalogOptions.put(entry.getKey(), entry.getValue());
-        }
-    }
-
-    private Map<String, String> normalizeOptionCaseAsFactory(
-            Factory factory, Map<String, String> options) {
-        Map<String, String> normalizedOptions = new HashMap<>();
-        Map<String, String> requiredOptionKeysLowerCaseToOriginal =
-                factory.requiredOptions().stream()
-                        .collect(
-                                Collectors.toMap(
-                                        option -> option.key().toLowerCase(), ConfigOption::key));
-        Map<String, String> optionalOptionKeysLowerCaseToOriginal =
-                factory.optionalOptions().stream()
-                        .collect(
-                                Collectors.toMap(
-                                        option -> option.key().toLowerCase(), ConfigOption::key));
-        for (Map.Entry<String, String> entry : options.entrySet()) {
-            final String catalogOptionKey = entry.getKey();
-            final String catalogOptionValue = entry.getValue();
-            normalizedOptions.put(
-                    requiredOptionKeysLowerCaseToOriginal.containsKey(
-                                    catalogOptionKey.toLowerCase())
-                            ? requiredOptionKeysLowerCaseToOriginal.get(
-                                    catalogOptionKey.toLowerCase())
-                            : optionalOptionKeysLowerCaseToOriginal.getOrDefault(
-                                    catalogOptionKey.toLowerCase(), catalogOptionKey),
-                    catalogOptionValue);
-        }
-        return normalizedOptions;
     }
 }
