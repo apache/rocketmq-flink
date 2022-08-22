@@ -80,34 +80,6 @@ public class RocketMQSource<OUT>
             String topic,
             String consumerGroup,
             String nameServerAddress,
-            String tag,
-            String sql,
-            long stopInMs,
-            long startTime,
-            long startOffset,
-            long partitionDiscoveryIntervalMs,
-            Boundedness boundedness,
-            RocketMQDeserializationSchema<OUT> deserializationSchema) {
-        this(
-                topic,
-                consumerGroup,
-                nameServerAddress,
-                null,
-                null,
-                tag,
-                sql,
-                stopInMs,
-                startTime,
-                startOffset,
-                partitionDiscoveryIntervalMs,
-                boundedness,
-                deserializationSchema);
-    }
-
-    public RocketMQSource(
-            String topic,
-            String consumerGroup,
-            String nameServerAddress,
             String accessKey,
             String secretKey,
             String tag,
