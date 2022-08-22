@@ -80,6 +80,7 @@ import static org.apache.rocketmq.flink.legacy.RocketMQConfig.CONSUMER_OFFSET_EA
 import static org.apache.rocketmq.flink.legacy.RocketMQConfig.CONSUMER_OFFSET_LATEST;
 import static org.apache.rocketmq.flink.legacy.RocketMQConfig.CONSUMER_OFFSET_TIMESTAMP;
 import static org.apache.rocketmq.flink.legacy.RocketMQConfig.DEFAULT_CONSUMER_BATCH_SIZE;
+import static org.apache.rocketmq.flink.legacy.RocketMQConfig.DEFAULT_START_MESSAGE_OFFSET;
 import static org.apache.rocketmq.flink.legacy.common.util.RocketMQUtils.getInteger;
 import static org.apache.rocketmq.flink.legacy.common.util.RocketMQUtils.getLong;
 
@@ -138,7 +139,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                 props.containsKey(RocketMQConfig.CONSUMER_START_MESSAGE_OFFSET)
                         ? Long.parseLong(
                                 props.getProperty(RocketMQConfig.CONSUMER_START_MESSAGE_OFFSET))
-                        : -1;
+                        : DEFAULT_START_MESSAGE_OFFSET;
 
         Validate.notEmpty(topic, "Consumer topic can not be empty");
         Validate.notEmpty(group, "Consumer group can not be empty");
@@ -365,7 +366,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         }
         // restoredOffsets(unionOffsetStates) is the restored global union state;
         // should only snapshot mqs that actually belong to us
-        if (startMessageOffset == -1) {
+        if (startMessageOffset == DEFAULT_START_MESSAGE_OFFSET) {
             // fetchConsumeOffset from broker
             offset = consumer.fetchConsumeOffset(mq, false);
             if (!restored || offset < 0) {

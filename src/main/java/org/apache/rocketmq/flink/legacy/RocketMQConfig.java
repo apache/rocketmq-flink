@@ -81,6 +81,8 @@ public class RocketMQConfig {
 
     public static final String CONSUMER_START_MESSAGE_OFFSET = "consumer.start.message.offset";
 
+    public static final long DEFAULT_START_MESSAGE_OFFSET = -1;
+
     public static final String CONSUMER_BATCH_SIZE = "consumer.batch.size";
     public static final int DEFAULT_CONSUMER_BATCH_SIZE = 32;
 

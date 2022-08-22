@@ -21,6 +21,8 @@ package org.apache.rocketmq.flink.common;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 
+import static org.apache.rocketmq.flink.legacy.RocketMQConfig.DEFAULT_START_MESSAGE_OFFSET;
+
 /** Includes config options of RocketMQ connector type. */
 public class RocketMQOptions {
 
@@ -43,7 +45,9 @@ public class RocketMQOptions {
             ConfigOptions.key("sql").stringType().noDefaultValue();
 
     public static final ConfigOption<Long> OPTIONAL_START_MESSAGE_OFFSET =
-            ConfigOptions.key("startMessageOffset").longType().defaultValue(-1L);
+            ConfigOptions.key("startMessageOffset")
+                    .longType()
+                    .defaultValue(DEFAULT_START_MESSAGE_OFFSET);
 
     public static final ConfigOption<Long> OPTIONAL_START_TIME_MILLS =
             ConfigOptions.key("startTimeMs").longType().defaultValue(-1L);
