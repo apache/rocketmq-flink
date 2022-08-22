@@ -369,7 +369,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         if (startMessageOffset == DEFAULT_START_MESSAGE_OFFSET) {
             // fetchConsumeOffset from broker
             offset = consumer.fetchConsumeOffset(mq, false);
-            if (!restored || offset < 0) {
+            if (!restored && offset < 0) {
                 String initialOffset =
                         props.getProperty(
                                 RocketMQConfig.CONSUMER_OFFSET_RESET_TO, CONSUMER_OFFSET_LATEST);
