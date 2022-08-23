@@ -37,7 +37,8 @@
         <flink.version>1.15.0</flink.version>
         <commons-lang.version>2.6</commons-lang.version>
         <spotless.version>2.4.2</spotless.version>
-	    <jaxb-api.version>2.3.1</jaxb-api.version>
+        <jaxb-api.version>2.3.1</jaxb-api.version>
+        <rocketmq.schema.registry.version>0.0.4-SNAPSHOT</rocketmq.schema.registry.version>
     </properties>
 
     <dependencies>
@@ -84,6 +85,11 @@
             <version>${flink.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-avro</artifactId>
+            <version>${flink.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.rocketmq</groupId>
             <artifactId>rocketmq-client</artifactId>
             <version>${rocketmq.version}</version>
@@ -106,10 +112,25 @@
         </dependency>
         <dependency>
             <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-namesrv</artifactId>
+            <version>${rocketmq.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-broker</artifactId>
+            <version>${rocketmq.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
             <artifactId>rocketmq-test</artifactId>
             <version>${rocketmq.version}</version>
         </dependency>
-
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>schema-registry-client</artifactId>
+            <version>${rocketmq.schema.registry.version}</version>
+        </dependency>
+        
         <dependency>
             <groupId>commons-lang</groupId>
             <artifactId>commons-lang</artifactId>
@@ -135,18 +156,7 @@
             <version>1.5.5</version>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>org.apache.rocketmq</groupId>
-            <artifactId>rocketmq-namesrv</artifactId>
-            <version>${rocketmq.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.rocketmq</groupId>
-            <artifactId>rocketmq-broker</artifactId>
-            <version>${rocketmq.version}</version>
-            <scope>test</scope>
-        </dependency>
+
     </dependencies>
 
     <build>
