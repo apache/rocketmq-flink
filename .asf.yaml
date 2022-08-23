@@ -1,4 +1,10 @@
 github:
+  description: "RocketMQ integration for Apache Flink. This module includes the RocketMQ source and sink that allows a flink job to either write messages into a topic or read from topics in a flink job."
+  homepage: https://rocketmq.apache.org/
+  labels:
+    - streaming
+    - cloud-native
+    - rocketmq
   features:
     # Enable issue management
     issues: true
