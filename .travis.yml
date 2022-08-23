@@ -24,3 +24,6 @@ jdk:
 script:
   - travis_retry mvn -B clean apache-rat:check -debug
   - travis_retry mvn -B clean install jacoco:report coveralls:report
+  
+after_success:
+  - bash <(curl -s https://codecov.io/bash) || echo 'Codecov failed to upload'
