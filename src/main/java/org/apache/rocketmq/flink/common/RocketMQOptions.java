@@ -108,4 +108,10 @@ public class RocketMQOptions {
 
     public static final ConfigOption<String> OPTIONAL_SECRET_KEY =
             ConfigOptions.key("secretKey").stringType().noDefaultValue();
+
+    public static final ConfigOption<String> OPTIONAL_SCAN_STARTUP_MODE =
+            ConfigOptions.key("scanStartupMode").stringType().defaultValue("latest");
+
+    public static final ConfigOption<Long> OPTIONAL_OFFSET_FROM_TIMESTAMP =
+            ConfigOptions.key("offsetFromTimestamp").longType().noDefaultValue();
 }
