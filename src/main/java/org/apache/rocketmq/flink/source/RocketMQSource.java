@@ -58,6 +58,8 @@ public class RocketMQSource<OUT>
                 ResultTypeQueryable<OUT> {
     private static final long serialVersionUID = -1L;
 
+    private final String consumerOffsetMode;
+    private final long consumerOffsetTimestamp;
     private final String topic;
     private final String consumerGroup;
     private final String nameServerAddress;
@@ -89,7 +91,9 @@ public class RocketMQSource<OUT>
             long startOffset,
             long partitionDiscoveryIntervalMs,
             Boundedness boundedness,
-            RocketMQDeserializationSchema<OUT> deserializationSchema) {
+            RocketMQDeserializationSchema<OUT> deserializationSchema,
+            String cosumerOffsetMode,
+            long consumerOffsetTimestamp) {
         Validate.isTrue(
                 !(StringUtils.isNotEmpty(tag) && StringUtils.isNotEmpty(sql)),
                 "Consumer tag and sql can not set value at the same time");
@@ -102,10 +106,12 @@ public class RocketMQSource<OUT>
         this.sql = sql;
         this.stopInMs = stopInMs;
         this.startTime = startTime;
-        this.startOffset = startOffset;
+        this.startOffset = startOffset > 0 ? startOffset : startTime;
         this.partitionDiscoveryIntervalMs = partitionDiscoveryIntervalMs;
         this.boundedness = boundedness;
         this.deserializationSchema = deserializationSchema;
+        this.consumerOffsetMode = cosumerOffsetMode;
+        this.consumerOffsetTimestamp = consumerOffsetTimestamp;
     }
 
     @Override
@@ -169,7 +175,9 @@ public class RocketMQSource<OUT>
                 startOffset,
                 partitionDiscoveryIntervalMs,
                 boundedness,
-                enumContext);
+                enumContext,
+                consumerOffsetMode,
+                consumerOffsetTimestamp);
     }
 
     @Override
@@ -188,7 +196,9 @@ public class RocketMQSource<OUT>
                 partitionDiscoveryIntervalMs,
                 boundedness,
                 enumContext,
-                checkpoint.getCurrentAssignment());
+                checkpoint.getCurrentAssignment(),
+                consumerOffsetMode,
+                consumerOffsetTimestamp);
     }
 
     @Override

@@ -266,7 +266,7 @@ public class RocketMQPartitionSplitReader<T>
                             "The SplitChange type of %s is not supported.",
                             splitsChange.getClass()));
         }
-        // Setup the stopping timestamps.
+        // Set up the stopping timestamps.
         splitsChange
                 .splits()
                 .forEach(

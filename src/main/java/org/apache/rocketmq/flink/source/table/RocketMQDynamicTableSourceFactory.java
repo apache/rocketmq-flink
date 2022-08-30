@@ -18,6 +18,8 @@
 
 package org.apache.rocketmq.flink.source.table;
 
+import org.apache.rocketmq.flink.common.RocketMQOptions;
+
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.TableSchema;
@@ -48,6 +50,7 @@ import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_FIELD_DE
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_LENGTH_CHECK;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_LINE_DELIMITER;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_PARTITION_DISCOVERY_INTERVAL_MS;
+import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_SCAN_STARTUP_MODE;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_SECRET_KEY;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_SQL;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_START_MESSAGE_OFFSET;
@@ -57,6 +60,7 @@ import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_TAG;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_TIME_ZONE;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_USE_NEW_API;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.TOPIC;
+import static org.apache.rocketmq.flink.legacy.RocketMQConfig.CONSUMER_OFFSET_LATEST;
 
 /**
  * Defines the {@link DynamicTableSourceFactory} implementation to create {@link
@@ -99,6 +103,7 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         optionalOptions.add(OPTIONAL_LENGTH_CHECK);
         optionalOptions.add(OPTIONAL_ACCESS_KEY);
         optionalOptions.add(OPTIONAL_SECRET_KEY);
+        optionalOptions.add(OPTIONAL_SCAN_STARTUP_MODE);
         return optionalOptions;
     }
 
@@ -113,6 +118,18 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         String nameServerAddress = configuration.getString(NAME_SERVER_ADDRESS);
         String tag = configuration.getString(OPTIONAL_TAG);
         String sql = configuration.getString(OPTIONAL_SQL);
+        if (configuration.contains(OPTIONAL_SCAN_STARTUP_MODE)
+                && (configuration.contains(OPTIONAL_START_MESSAGE_OFFSET)
+                        || configuration.contains(OPTIONAL_START_TIME_MILLS)
+                        || configuration.contains(OPTIONAL_START_TIME))) {
+            throw new IllegalArgumentException(
+                    String.format(
+                            "cannot support these configs when %s has been set: [%s, %s, %s] !",
+                            OPTIONAL_SCAN_STARTUP_MODE.key(),
+                            OPTIONAL_START_MESSAGE_OFFSET.key(),
+                            OPTIONAL_START_TIME.key(),
+                            OPTIONAL_START_TIME_MILLS.key()));
+        }
         long startMessageOffset = configuration.getLong(OPTIONAL_START_MESSAGE_OFFSET);
         long startTimeMs = configuration.getLong(OPTIONAL_START_TIME_MILLS);
         String startDateTime = configuration.getString(OPTIONAL_START_TIME);
@@ -158,6 +175,12 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         TableSchema physicalSchema =
                 TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
         descriptorProperties.putTableSchema("schema", physicalSchema);
+        String consumerOffsetMode =
+                configuration.getString(
+                        RocketMQOptions.OPTIONAL_SCAN_STARTUP_MODE, CONSUMER_OFFSET_LATEST);
+        long consumerOffsetTimestamp =
+                configuration.getLong(
+                        RocketMQOptions.OPTIONAL_OFFSET_FROM_TIMESTAMP, System.currentTimeMillis());
         return new RocketMQScanTableSource(
                 descriptorProperties,
                 physicalSchema,
@@ -172,6 +195,8 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                 startMessageOffset,
                 startMessageOffset < 0 ? startTime : -1L,
                 partitionDiscoveryIntervalMs,
+                consumerOffsetMode,
+                consumerOffsetTimestamp,
                 useNewApi);
     }
 

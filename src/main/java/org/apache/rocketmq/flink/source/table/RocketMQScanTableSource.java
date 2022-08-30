@@ -56,6 +56,9 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     private final DescriptorProperties properties;
     private final TableSchema schema;
 
+    private final String consumerOffsetMode;
+    private final long consumerOffsetTimestamp;
+
     private final String topic;
     private final String consumerGroup;
     private final String nameServerAddress;
@@ -87,6 +90,8 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             long startMessageOffset,
             long startTime,
             long partitionDiscoveryIntervalMs,
+            String consumerOffsetMode,
+            long consumerOffsetTimestamp,
             boolean useNewApi) {
         this.properties = properties;
         this.schema = schema;
@@ -103,6 +108,8 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         this.partitionDiscoveryIntervalMs = partitionDiscoveryIntervalMs;
         this.useNewApi = useNewApi;
         this.metadataKeys = Collections.emptyList();
+        this.consumerOffsetMode = consumerOffsetMode;
+        this.consumerOffsetTimestamp = consumerOffsetTimestamp;
     }
 
     @Override
@@ -127,7 +134,9 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                             startMessageOffset < 0 ? 0 : startMessageOffset,
                             partitionDiscoveryIntervalMs,
                             isBounded() ? BOUNDED : CONTINUOUS_UNBOUNDED,
-                            createRocketMQDeserializationSchema()));
+                            createRocketMQDeserializationSchema(),
+                            consumerOffsetMode,
+                            consumerOffsetTimestamp));
         } else {
             return SourceFunctionProvider.of(
                     new RocketMQSourceFunction<>(
@@ -166,6 +175,8 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                         startMessageOffset,
                         startTime,
                         partitionDiscoveryIntervalMs,
+                        consumerOffsetMode,
+                        consumerOffsetTimestamp,
                         useNewApi);
         tableSource.metadataKeys = metadataKeys;
         return tableSource;
