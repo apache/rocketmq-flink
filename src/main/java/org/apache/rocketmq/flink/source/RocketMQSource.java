@@ -60,6 +60,7 @@ public class RocketMQSource<OUT>
 
     private final String consumerOffsetMode;
     private final long consumerOffsetTimestamp;
+    private final int pollTime;
     private final String topic;
     private final String consumerGroup;
     private final String nameServerAddress;
@@ -79,6 +80,7 @@ public class RocketMQSource<OUT>
     private final RocketMQDeserializationSchema<OUT> deserializationSchema;
 
     public RocketMQSource(
+            int pollTime,
             String topic,
             String consumerGroup,
             String nameServerAddress,
@@ -97,6 +99,7 @@ public class RocketMQSource<OUT>
         Validate.isTrue(
                 !(StringUtils.isNotEmpty(tag) && StringUtils.isNotEmpty(sql)),
                 "Consumer tag and sql can not set value at the same time");
+        this.pollTime = pollTime;
         this.topic = topic;
         this.consumerGroup = consumerGroup;
         this.nameServerAddress = nameServerAddress;
@@ -140,6 +143,7 @@ public class RocketMQSource<OUT>
         Supplier<SplitReader<Tuple3<OUT, Long, Long>, RocketMQPartitionSplit>> splitReaderSupplier =
                 () ->
                         new RocketMQPartitionSplitReader<>(
+                                pollTime,
                                 topic,
                                 consumerGroup,
                                 nameServerAddress,

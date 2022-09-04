@@ -20,16 +20,13 @@ package org.apache.rocketmq.flink.source.reader;
 
 import org.apache.rocketmq.acl.common.AclClientRPCHook;
 import org.apache.rocketmq.acl.common.SessionCredentials;
-import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
+import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.consumer.MessageSelector;
-import org.apache.rocketmq.client.consumer.PullResult;
-import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQDeserializationSchema;
 import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
-import org.apache.rocketmq.remoting.exception.RemotingException;
 
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
@@ -57,8 +54,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.apache.rocketmq.client.consumer.PullStatus.FOUND;
-
 /**
  * A {@link SplitReader} implementation that reads records from RocketMQ partitions.
  *
@@ -75,6 +70,8 @@ public class RocketMQPartitionSplitReader<T>
     private final long startTime;
     private final long startOffset;
 
+    private final int pollTime;
+
     private final String accessKey;
     private final String secretKey;
 
@@ -83,13 +80,14 @@ public class RocketMQPartitionSplitReader<T>
     private final Map<Tuple3<String, String, Integer>, Long> stoppingTimestamps;
     private final SimpleCollector<T> collector;
 
-    private DefaultMQPullConsumer consumer;
+    private DefaultLitePullConsumer consumer;
 
     private volatile boolean wakeup = false;
 
     private static final int MAX_MESSAGE_NUMBER_PER_BLOCK = 64;
 
     public RocketMQPartitionSplitReader(
+            int pollTime,
             String topic,
             String consumerGroup,
             String nameServerAddress,
@@ -101,6 +99,7 @@ public class RocketMQPartitionSplitReader<T>
             long startTime,
             long startOffset,
             RocketMQDeserializationSchema<T> deserializationSchema) {
+        this.pollTime = pollTime;
         this.topic = topic;
         this.tag = tag;
         this.sql = sql;
@@ -120,9 +119,14 @@ public class RocketMQPartitionSplitReader<T>
     public RecordsWithSplitIds<Tuple3<T, Long, Long>> fetch() throws IOException {
         RocketMQPartitionSplitRecords<Tuple3<T, Long, Long>> recordsBySplits =
                 new RocketMQPartitionSplitRecords<>();
-        Set<MessageQueue> messageQueues;
+        Collection<MessageQueue> messageQueues;
         try {
-            messageQueues = consumer.fetchSubscribeMessageQueues(topic);
+            messageQueues = consumer.fetchMessageQueues(topic);
+            if (StringUtils.isNotEmpty(sql)) {
+                consumer.subscribe(topic, MessageSelector.bySql(sql));
+            } else {
+                consumer.subscribe(topic, tag);
+            }
         } catch (MQClientException e) {
             LOG.error(
                     String.format(
@@ -144,7 +148,7 @@ public class RocketMQPartitionSplitReader<T>
                     try {
                         messageOffset =
                                 startTime > 0
-                                        ? consumer.searchOffset(messageQueue, startTime)
+                                        ? consumer.offsetForTimestamp(messageQueue, startTime)
                                         : startOffset;
                     } catch (MQClientException e) {
                         LOG.warn(
@@ -157,7 +161,7 @@ public class RocketMQPartitionSplitReader<T>
                     }
                     messageOffset = messageOffset > -1 ? messageOffset : 0;
                 }
-                PullResult pullResult = null;
+                List<MessageExt> messageExts = null;
                 try {
                     if (wakeup) {
                         LOG.info(
@@ -173,25 +177,12 @@ public class RocketMQPartitionSplitReader<T>
                         recordsBySplits.prepareForRead();
                         return recordsBySplits;
                     }
-                    if (StringUtils.isNotEmpty(sql)) {
-                        pullResult =
-                                consumer.pull(
-                                        messageQueue,
-                                        MessageSelector.bySql(sql),
-                                        messageOffset,
-                                        MAX_MESSAGE_NUMBER_PER_BLOCK);
-                    } else {
-                        pullResult =
-                                consumer.pull(
-                                        messageQueue,
-                                        tag,
-                                        messageOffset,
-                                        MAX_MESSAGE_NUMBER_PER_BLOCK);
-                    }
-                } catch (MQClientException
-                        | RemotingException
-                        | MQBrokerException
-                        | InterruptedException e) {
+                    consumer.assign(Collections.singletonList(messageQueue));
+
+                    consumer.setPullBatchSize(MAX_MESSAGE_NUMBER_PER_BLOCK);
+                    consumer.seek(messageQueue, messageOffset);
+                    messageExts = consumer.poll(pollTime);
+                } catch (MQClientException e) {
                     LOG.warn(
                             String.format(
                                     "Pull RocketMQ messages of topic[%s] broker[%s] queue[%d] tag[%s] sql[%s] from offset[%d] exception.",
@@ -203,10 +194,23 @@ public class RocketMQPartitionSplitReader<T>
                                     messageOffset),
                             e);
                 }
-                startingOffsets.put(
-                        topicPartition,
-                        pullResult == null ? messageOffset : pullResult.getNextBeginOffset());
-                if (pullResult != null && pullResult.getPullStatus() == FOUND) {
+                try {
+                    startingOffsets.put(
+                            topicPartition,
+                            messageExts == null ? messageOffset : consumer.committed(messageQueue));
+                } catch (MQClientException e) {
+                    LOG.warn(
+                            String.format(
+                                    "Pull RocketMQ messages of topic[%s] broker[%s] queue[%d] tag[%s] sql[%s] from offset[%d] exception.",
+                                    messageQueue.getTopic(),
+                                    messageQueue.getBrokerName(),
+                                    messageQueue.getQueueId(),
+                                    tag,
+                                    sql,
+                                    messageOffset),
+                            e);
+                }
+                if (messageExts != null) {
                     Collection<Tuple3<T, Long, Long>> recordsForSplit =
                             recordsBySplits.recordsForSplit(
                                     messageQueue.getTopic()
@@ -214,7 +218,7 @@ public class RocketMQPartitionSplitReader<T>
                                             + messageQueue.getBrokerName()
                                             + "-"
                                             + messageQueue.getQueueId());
-                    for (MessageExt messageExt : pullResult.getMsgFoundList()) {
+                    for (MessageExt messageExt : messageExts) {
                         long stoppingTimestamp = getStoppingTimestamp(topicPartition);
                         long storeTimestamp = messageExt.getStoreTimestamp();
                         if (storeTimestamp > stoppingTimestamp) {
@@ -320,9 +324,9 @@ public class RocketMQPartitionSplitReader<T>
             if (StringUtils.isNotBlank(accessKey) && StringUtils.isNotBlank(secretKey)) {
                 AclClientRPCHook aclClientRPCHook =
                         new AclClientRPCHook(new SessionCredentials(accessKey, secretKey));
-                consumer = new DefaultMQPullConsumer(consumerGroup, aclClientRPCHook);
+                consumer = new DefaultLitePullConsumer(consumerGroup, aclClientRPCHook);
             } else {
-                consumer = new DefaultMQPullConsumer(consumerGroup);
+                consumer = new DefaultLitePullConsumer(consumerGroup);
             }
             consumer.setNamesrvAddr(nameServerAddress);
             consumer.setInstanceName(
