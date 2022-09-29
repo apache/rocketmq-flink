@@ -61,8 +61,6 @@ public class RocketMQCatalogFactory implements CatalogFactory {
     public Set<ConfigOption<?>> optionalOptions() {
         Set<ConfigOption<?>> options = new HashSet<>();
         options.add(DEFAULT_DATABASE);
-        options.add(NAME_SERVER_ADDR);
-        options.add(SCHEMA_REGISTRY_BASE_URL);
         return options;
     }
 }

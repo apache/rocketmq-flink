@@ -242,10 +242,8 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
         Properties producerProps = new Properties();
         producerProps.setProperty(RocketMQConfig.PRODUCER_GROUP, producerGroup);
         producerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, nameServerAddress);
-        if (accessKey != null && secretKey != null) {
-            producerProps.setProperty(RocketMQConfig.ACCESS_KEY, accessKey);
-            producerProps.setProperty(RocketMQConfig.SECRET_KEY, secretKey);
-        }
+        producerProps.setProperty(RocketMQConfig.ACCESS_KEY, accessKey);
+        producerProps.setProperty(RocketMQConfig.SECRET_KEY, secretKey);
         return producerProps;
     }
 

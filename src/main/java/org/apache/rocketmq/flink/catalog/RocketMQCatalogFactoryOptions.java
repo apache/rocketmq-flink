@@ -30,7 +30,7 @@ import org.apache.flink.table.catalog.CommonCatalogOptions;
 @Internal
 public final class RocketMQCatalogFactoryOptions {
 
-    public static final String IDENTIFIER = "rocketmq_catalog";
+    public static final String IDENTIFIER = "rocketmq-catalog";
 
     public static final ConfigOption<String> DEFAULT_DATABASE =
             ConfigOptions.key(CommonCatalogOptions.DEFAULT_DATABASE_KEY)
