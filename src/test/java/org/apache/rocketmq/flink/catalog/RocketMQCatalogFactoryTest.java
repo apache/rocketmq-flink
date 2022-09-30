@@ -48,7 +48,7 @@ public class RocketMQCatalogFactoryTest {
     @Test
     public void testFactoryIdentifier() {
         RocketMQCatalogFactory factory = new RocketMQCatalogFactory();
-        assertEquals(factory.factoryIdentifier(), "rocketmq-catalog");
+        assertEquals(factory.factoryIdentifier(), "rocketmq_catalog");
     }
 
     @Test
@@ -62,6 +62,6 @@ public class RocketMQCatalogFactoryTest {
     public void testOptionalOptions() {
         RocketMQCatalogFactory factory = new RocketMQCatalogFactory();
         Set<ConfigOption<?>> options = factory.optionalOptions();
-        assertEquals(options.size(), 1);
+        assertEquals(options.size(), 3);
     }
 }

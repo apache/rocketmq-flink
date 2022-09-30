@@ -75,7 +75,7 @@ public class RocketMQCatalogTest {
     public void setUp() throws Exception {
         rocketMQCatalog =
                 new RocketMQCatalog(
-                        "rocketmq-catalog",
+                        "rocketmq_catalog",
                         "default",
                         "http://localhost:9876",
                         SchemaRegistryConstant.SCHEMA_REGISTRY_BASE_URL);
