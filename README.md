@@ -73,7 +73,12 @@ StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironm
         Properties producerProps = new Properties();
         producerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, "localhost:9876");
 
-        env.addSource(new RocketMQSourceFunction(new SimpleKeyValueDeserializationSchema("id", "address"), consumerProps))
+        RocketMQSourceFunction<Map<Object,Object>> source = new RocketMQSourceFunction(
+                new SimpleKeyValueDeserializationSchema("id", "address"), consumerProps);
+        // use group offsets.
+        // If there is no committed offset,consumer would start from the latest offset.
+        source.setStartFromGroupOffsets(OffsetResetStrategy.LATEST);
+        env.addSource()
             .name("rocketmq-source")
             .setParallelism(2)
             .process(new ProcessFunction<Map, Map>() {
@@ -123,13 +128,40 @@ The following configurations are all from the class `org.apache.rocketmq.flink.l
 | consumer.group | consumer group *Required*     |    null |
 | consumer.topic | consumer topic *Required*       |    null |
 | consumer.tag | consumer topic tag      |    * |
-| consumer.offset.reset.to | what to do when there is no initial offset on the server      |   latest/earliest/timestamp |
-| consumer.offset.from.timestamp | the timestamp when `consumer.offset.reset.to=timestamp` was set   |   `System.currentTimeMillis()` |
 | consumer.offset.persist.interval | auto commit offset interval      |    5000 |
 | consumer.pull.thread.pool.size | consumer pull thread pool size      |    20 |
 | consumer.batch.size | consumer messages batch size      |    32 |
 | consumer.delay.when.message.not.found | the delay time when messages were not found      |    10 |
 
+### Consumer Strategy
+
+```java
+RocketMQSourceFunction<String> source = new RocketMQSourceFunction<>(
+        new SimpleStringDeserializationSchema(), props);
+HashMap<MessageQueue, Long> brokerMap = new HashMap<>();
+brokerMap.put(new MessageQueue("tp_driver_tag_sync_back", "broker-a", 1), 201L);
+brokerMap.put(new MessageQueue("tp_driver_tag_sync_back", "broker-c", 3), 123L);
+source.setStartFromSpecificOffsets(brokerMap);
+```
+RocketMQSourceFunction offer five initialization policies 
+* setStartFromEarliest
+* setStartFromLatest
+* setStartFromTimeStamp with timestamp
+* setStartFromGroupOffsets with `OffsetResetStrategy`
+* setStartFromSpecificOffsets
+
+| STRATEGY                    | DESCRIPTION                                                  |
+| --------------------------- | ------------------------------------------------------------ |
+| EARLIEST                    | consume from the earliest offset after restart with no state |
+| LATEST                      | consume from the latest offset after restart with no state   |
+| TIMESTAMP                   | consume from the closest timestamp of data in each broker's queue |
+| GROUP_OFFSETS with LATEST   | If broker has the committed offset then consume from the next else consume from the latest offset |
+| GROUP_OFFSETS with EARLIEST | If broker has the committed offset ,consume from the next ,otherwise consume from the earlist offset.It's useful when server  expand  broker |
+| SPECIFIC_OFFSETS            | consumer from the specificOffsets in broker's queues.Group offsets will be returned from those broker's queues whose didn't be specified |
+
+**Attention**
+
+Only if Flink job starts with none state, these strategies are effective. If the job recovers from the checkpoint, the offset would intialize from the stored data.
 
 ## RocketMQ SQL Connector
 
