@@ -23,10 +23,15 @@ import org.apache.flink.metrics.Meter;
 import org.apache.flink.metrics.MeterView;
 import org.apache.flink.metrics.SimpleCounter;
 
+import java.io.Serializable;
+
 /** RocketMQ connector metrics. */
 public class MetricUtils {
 
     public static final String METRICS_TPS = "tps";
+    // https://cwiki.apache.org/confluence/display/FLINK/FLIP-33%3A+Standardize+Connector+Metrics
+    public static final String CURRENT_FETCH_EVENT_TIME_LAG = "currentFetchEventTimeLag";
+    public static final String CURRENT_EMIT_EVENT_TIME_LAG = "currentEmitEventTimeLag";
 
     private static final String METRIC_GROUP_SINK = "sink";
     private static final String METRICS_SINK_IN_TPS = "inTps";
@@ -81,6 +86,19 @@ public class MetricUtils {
 
         @Override
         public Double getValue() {
+            return value;
+        }
+    }
+
+    public static class TimestampGauge implements Gauge<Long>, Serializable {
+        private Long value;
+
+        public void report(long delay) {
+            this.value = delay;
+        }
+
+        @Override
+        public Long getValue() {
             return value;
         }
     }

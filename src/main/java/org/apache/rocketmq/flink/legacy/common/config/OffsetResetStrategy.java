@@ -14,25 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.rocketmq.flink.legacy.common.util;
 
-import java.lang.reflect.Field;
+package org.apache.rocketmq.flink.legacy.common.config;
 
-public class TestUtils {
-    public static void setFieldValue(Object obj, String fieldName, Object value) {
-        try {
-            Field field = obj.getClass().getDeclaredField(fieldName);
-            field.setAccessible(true);
-            field.set(obj, value);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static Object getFieldValue(Object obj, String fieldName)
-            throws NoSuchFieldException, IllegalAccessException {
-        Field field = obj.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        return field.get(obj);
-    }
+/** Config for #{@link StartupMode#GROUP_OFFSETS}. */
+public enum OffsetResetStrategy {
+    /** If group offsets is not found,the latest offset would be set to start consumer */
+    LATEST,
+    /** If group offsets is not found,the earliest offset would be set to start consumer */
+    EARLIEST
 }

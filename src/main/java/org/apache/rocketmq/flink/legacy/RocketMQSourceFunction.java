@@ -23,6 +23,8 @@ import org.apache.rocketmq.client.consumer.PullResult;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.flink.legacy.common.config.OffsetResetStrategy;
+import org.apache.rocketmq.flink.legacy.common.config.StartupMode;
 import org.apache.rocketmq.flink.legacy.common.serialization.KeyValueDeserializationSchema;
 import org.apache.rocketmq.flink.legacy.common.util.MetricUtils;
 import org.apache.rocketmq.flink.legacy.common.util.RetryUtil;
@@ -76,13 +78,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.apache.rocketmq.flink.legacy.RocketMQConfig.CONSUMER_BATCH_SIZE;
-import static org.apache.rocketmq.flink.legacy.RocketMQConfig.CONSUMER_OFFSET_EARLIEST;
-import static org.apache.rocketmq.flink.legacy.RocketMQConfig.CONSUMER_OFFSET_LATEST;
-import static org.apache.rocketmq.flink.legacy.RocketMQConfig.CONSUMER_OFFSET_TIMESTAMP;
 import static org.apache.rocketmq.flink.legacy.RocketMQConfig.DEFAULT_CONSUMER_BATCH_SIZE;
-import static org.apache.rocketmq.flink.legacy.RocketMQConfig.DEFAULT_START_MESSAGE_OFFSET;
 import static org.apache.rocketmq.flink.legacy.common.util.RocketMQUtils.getInteger;
-import static org.apache.rocketmq.flink.legacy.common.util.RocketMQUtils.getLong;
 
 /**
  * The RocketMQSource is based on RocketMQ pull consumer mode, and provides exactly once reliability
@@ -116,12 +113,33 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
     private Properties props;
     private String topic;
     private String group;
-    private long startMessageOffset;
     private transient volatile boolean restored;
     private transient boolean enableCheckpoint;
     private volatile Object checkPointLock;
 
     private Meter tpsMetric;
+    private MetricUtils.TimestampGauge fetchDelay = new MetricUtils.TimestampGauge();
+    private MetricUtils.TimestampGauge emitDelay = new MetricUtils.TimestampGauge();
+
+    /** The startup mode for the consumer (default is {@link StartupMode#GROUP_OFFSETS}). */
+    private StartupMode startMode = StartupMode.GROUP_OFFSETS;
+
+    /**
+     * If StartupMode#GROUP_OFFSETS has no commit offset.OffsetResetStrategy would offer init
+     * strategy.
+     */
+    private OffsetResetStrategy offsetResetStrategy = OffsetResetStrategy.LATEST;
+
+    /**
+     * Specific startup offsets; only relevant when startup mode is {@link
+     * StartupMode#SPECIFIC_OFFSETS}.
+     */
+    private Map<MessageQueue, Long> specificStartupOffsets;
+
+    /**
+     * Specific startup offsets; only relevant when startup mode is {@link StartupMode#TIMESTAMP}.
+     */
+    private long specificTimeStamp;
 
     public RocketMQSourceFunction(KeyValueDeserializationSchema<OUT> schema, Properties props) {
         this.schema = schema;
@@ -135,11 +153,6 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
 
         this.topic = props.getProperty(RocketMQConfig.CONSUMER_TOPIC);
         this.group = props.getProperty(RocketMQConfig.CONSUMER_GROUP);
-        this.startMessageOffset =
-                props.containsKey(RocketMQConfig.CONSUMER_START_MESSAGE_OFFSET)
-                        ? Long.parseLong(
-                                props.getProperty(RocketMQConfig.CONSUMER_START_MESSAGE_OFFSET))
-                        : DEFAULT_START_MESSAGE_OFFSET;
 
         Validate.notEmpty(topic, "Consumer topic can not be empty");
         Validate.notEmpty(group, "Consumer group can not be empty");
@@ -214,6 +227,28 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                 getRuntimeContext()
                         .getMetricGroup()
                         .meter(MetricUtils.METRICS_TPS, new MeterView(outputCounter, 60));
+
+        getRuntimeContext()
+                .getMetricGroup()
+                .gauge(MetricUtils.CURRENT_FETCH_EVENT_TIME_LAG, fetchDelay);
+        getRuntimeContext()
+                .getMetricGroup()
+                .gauge(MetricUtils.CURRENT_EMIT_EVENT_TIME_LAG, emitDelay);
+
+        final RuntimeContext ctx = getRuntimeContext();
+        // The lock that guarantees that record emission and state updates are atomic,
+        // from the view of taking a checkpoint.
+        int taskNumber = ctx.getNumberOfParallelSubtasks();
+        int taskIndex = ctx.getIndexOfThisSubtask();
+        log.info("Source run, NumberOfTotalTask={}, IndexOfThisSubTask={}", taskNumber, taskIndex);
+        Collection<MessageQueue> totalQueues = consumer.fetchSubscribeMessageQueues(topic);
+        messageQueues =
+                RocketMQUtils.allocate(totalQueues, taskNumber, ctx.getIndexOfThisSubtask());
+        // If the job recovers from the state, the state has already contained the offsets of last
+        // commit.
+        if (!restored) {
+            initOffsets(messageQueues);
+        }
     }
 
     @Override
@@ -222,14 +257,6 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         String tag =
                 props.getProperty(RocketMQConfig.CONSUMER_TAG, RocketMQConfig.DEFAULT_CONSUMER_TAG);
         int pullBatchSize = getInteger(props, CONSUMER_BATCH_SIZE, DEFAULT_CONSUMER_BATCH_SIZE);
-
-        final RuntimeContext ctx = getRuntimeContext();
-        // The lock that guarantees that record emission and state updates are atomic,
-        // from the view of taking a checkpoint.
-        int taskNumber = ctx.getNumberOfParallelSubtasks();
-        int taskIndex = ctx.getIndexOfThisSubtask();
-        log.info("Source run, NumberOfTotalTask={}, IndexOfThisSubTask={}", taskNumber, taskIndex);
-
         timer.scheduleAtFixedRate(
                 () -> {
                     // context.emitWatermark(waterMarkPerQueue.getCurrentWatermark());
@@ -238,10 +265,6 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                 5,
                 5,
                 TimeUnit.SECONDS);
-
-        Collection<MessageQueue> totalQueues = consumer.fetchSubscribeMessageQueues(topic);
-        messageQueues =
-                RocketMQUtils.allocate(totalQueues, taskNumber, ctx.getIndexOfThisSubtask());
         for (MessageQueue mq : messageQueues) {
             this.executor.execute(
                     () ->
@@ -249,8 +272,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                                     () -> {
                                         while (runningChecker.isRunning()) {
                                             try {
-                                                long offset = getMessageQueueOffset(mq);
-
+                                                long offset = offsetTable.get(mq);
                                                 PullResult pullResult;
                                                 if (StringUtils.isEmpty(sql)) {
                                                     pullResult =
@@ -271,6 +293,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                                                     case FOUND:
                                                         List<MessageExt> messages =
                                                                 pullResult.getMsgFoundList();
+                                                        long fetchTime = System.currentTimeMillis();
                                                         for (MessageExt msg : messages) {
                                                             byte[] key =
                                                                     msg.getKeys() != null
@@ -299,12 +322,24 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                                                                 context.collectWithTimestamp(
                                                                         data,
                                                                         msg.getBornTimestamp());
+                                                                long emitTime =
+                                                                        System.currentTimeMillis();
 
                                                                 // update max eventTime per queue
                                                                 // waterMarkPerQueue.extractTimestamp(mq, msg.getBornTimestamp());
                                                                 waterMarkForAll.extractTimestamp(
                                                                         msg.getBornTimestamp());
                                                                 tpsMetric.markEvent();
+                                                                long eventTime =
+                                                                        msg.getStoreTimestamp();
+                                                                fetchDelay.report(
+                                                                        Math.abs(
+                                                                                fetchTime
+                                                                                        - eventTime));
+                                                                emitDelay.report(
+                                                                        Math.abs(
+                                                                                emitTime
+                                                                                        - eventTime));
                                                             }
                                                         }
                                                         found = true;
@@ -359,46 +394,121 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         }
     }
 
-    private long getMessageQueueOffset(MessageQueue mq) throws MQClientException {
-        Long offset = offsetTable.get(mq);
-        if (offset != null) {
-            return offset;
-        }
-        // restoredOffsets(unionOffsetStates) is the restored global union state;
-        // should only snapshot mqs that actually belong to us
-        if (startMessageOffset == DEFAULT_START_MESSAGE_OFFSET) {
-            // fetchConsumeOffset from broker
-            offset = consumer.fetchConsumeOffset(mq, false);
-            if (!restored && offset < 0) {
-                String initialOffset =
-                        props.getProperty(
-                                RocketMQConfig.CONSUMER_OFFSET_RESET_TO, CONSUMER_OFFSET_LATEST);
-                switch (initialOffset) {
-                    case CONSUMER_OFFSET_EARLIEST:
-                        offset = consumer.minOffset(mq);
-                        break;
-                    case CONSUMER_OFFSET_LATEST:
-                        offset = consumer.maxOffset(mq);
-                        break;
-                    case CONSUMER_OFFSET_TIMESTAMP:
-                        offset =
-                                consumer.searchOffset(
+    /**
+     * only flink job start with no state can init offsets from broker
+     *
+     * @param messageQueues
+     * @throws MQClientException
+     */
+    private void initOffsets(List<MessageQueue> messageQueues) throws MQClientException {
+        for (MessageQueue mq : messageQueues) {
+            long offset;
+            switch (startMode) {
+                case LATEST:
+                    offset = consumer.maxOffset(mq);
+                    break;
+                case EARLIEST:
+                    offset = consumer.minOffset(mq);
+                    break;
+                case GROUP_OFFSETS:
+                    offset = consumer.fetchConsumeOffset(mq, false);
+                    // the min offset return if consumer group first join,return a negative number
+                    // if
+                    // catch exception when fetch from broker.
+                    // If you want consumer from earliest,please use OffsetResetStrategy.EARLIEST
+                    if (offset <= 0) {
+                        switch (offsetResetStrategy) {
+                            case LATEST:
+                                offset = consumer.maxOffset(mq);
+                                log.info(
+                                        "current consumer thread:{} has no committed offset,use Strategy:{} instead",
                                         mq,
-                                        getLong(
-                                                props,
-                                                RocketMQConfig.CONSUMER_OFFSET_FROM_TIMESTAMP,
-                                                System.currentTimeMillis()));
-                        break;
-                    default:
-                        throw new IllegalArgumentException(
-                                "Unknown value for CONSUMER_OFFSET_RESET_TO.");
-                }
+                                        offsetResetStrategy);
+                                break;
+                            case EARLIEST:
+                                log.info(
+                                        "current consumer thread:{} has no committed offset,use Strategy:{} instead",
+                                        mq,
+                                        offsetResetStrategy);
+                                offset = consumer.minOffset(mq);
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    break;
+                case TIMESTAMP:
+                    offset = consumer.searchOffset(mq, specificTimeStamp);
+                    break;
+                case SPECIFIC_OFFSETS:
+                    if (specificStartupOffsets == null) {
+                        throw new RuntimeException(
+                                "StartMode is specific_offsets.But none offsets has been specified");
+                    }
+                    Long specificOffset = specificStartupOffsets.get(mq);
+                    if (specificOffset != null) {
+                        offset = specificOffset;
+                    } else {
+                        offset = consumer.fetchConsumeOffset(mq, false);
+                    }
+                    break;
+                default:
+                    throw new IllegalArgumentException(
+                            "current startMode is not supported" + startMode);
             }
-        } else {
-            offset = startMessageOffset;
+            log.info(
+                    "current consumer queue:{} start from offset of: {}",
+                    mq.getBrokerName() + "-" + mq.getQueueId(),
+                    offset);
+            offsetTable.put(mq, offset);
         }
-        offsetTable.put(mq, offset);
-        return offsetTable.get(mq);
+    }
+
+    /** consume from the min offset at every restart with no state */
+    public RocketMQSourceFunction<OUT> setStartFromEarliest() {
+        this.startMode = StartupMode.EARLIEST;
+        return this;
+    }
+
+    /** consume from the max offset of each broker's queue at every restart with no state */
+    public RocketMQSourceFunction<OUT> setStartFromLatest() {
+        this.startMode = StartupMode.LATEST;
+        return this;
+    }
+
+    /** consume from the closest offset */
+    public RocketMQSourceFunction<OUT> setStartFromTimeStamp(long timeStamp) {
+        this.startMode = StartupMode.TIMESTAMP;
+        this.specificTimeStamp = timeStamp;
+        return this;
+    }
+
+    /** consume from the group offsets those was stored in brokers. */
+    public RocketMQSourceFunction<OUT> setStartFromGroupOffsets() {
+        this.startMode = StartupMode.GROUP_OFFSETS;
+        return this;
+    }
+
+    /**
+     * consume from the group offsets those was stored in brokers. If there is no committed
+     * offset,#{@link OffsetResetStrategy} would provide initialization policy.
+     */
+    public RocketMQSourceFunction<OUT> setStartFromGroupOffsets(
+            OffsetResetStrategy offsetResetStrategy) {
+        this.startMode = StartupMode.GROUP_OFFSETS;
+        this.offsetResetStrategy = offsetResetStrategy;
+        return this;
+    }
+
+    /**
+     * consume from the specific offset. Group offsets is enable while the broker didn't specify
+     * offset.
+     */
+    public RocketMQSourceFunction<OUT> setStartFromSpecificOffsets(
+            Map<MessageQueue, Long> specificOffsets) {
+        this.specificStartupOffsets = specificOffsets;
+        this.startMode = StartupMode.SPECIFIC_OFFSETS;
+        return this;
     }
 
     private void updateMessageQueueOffset(MessageQueue mq, long offset) throws MQClientException {
