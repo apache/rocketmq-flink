@@ -184,7 +184,7 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                 configuration.getLong(
                         RocketMQOptions.OPTIONAL_OFFSET_FROM_TIMESTAMP, System.currentTimeMillis());
         return new RocketMQScanTableSource(
-                configuration.getInteger(OPTIONAL_CONSUMER_POLL_MS),
+                configuration.getLong(OPTIONAL_CONSUMER_POLL_MS),
                 descriptorProperties,
                 physicalSchema,
                 topic,

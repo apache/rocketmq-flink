@@ -60,7 +60,7 @@ public class RocketMQSource<OUT>
 
     private final String consumerOffsetMode;
     private final long consumerOffsetTimestamp;
-    private final int pollTime;
+    private final long pollTime;
     private final String topic;
     private final String consumerGroup;
     private final String nameServerAddress;
@@ -80,7 +80,7 @@ public class RocketMQSource<OUT>
     private final RocketMQDeserializationSchema<OUT> deserializationSchema;
 
     public RocketMQSource(
-            int pollTime,
+            long pollTime,
             String topic,
             String consumerGroup,
             String nameServerAddress,

@@ -73,12 +73,12 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     private final long startMessageOffset;
     private final long startTime;
     private final boolean useNewApi;
-    private final int pollTime;
+    private final long pollTime;
 
     private List<String> metadataKeys;
 
     public RocketMQScanTableSource(
-            int pollTime,
+            long pollTime,
             DescriptorProperties properties,
             TableSchema schema,
             String topic,

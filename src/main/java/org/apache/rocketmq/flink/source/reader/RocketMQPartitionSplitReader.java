@@ -70,7 +70,7 @@ public class RocketMQPartitionSplitReader<T>
     private final long startTime;
     private final long startOffset;
 
-    private final int pollTime;
+    private final long pollTime;
 
     private final String accessKey;
     private final String secretKey;
@@ -87,7 +87,7 @@ public class RocketMQPartitionSplitReader<T>
     private static final int MAX_MESSAGE_NUMBER_PER_BLOCK = 64;
 
     public RocketMQPartitionSplitReader(
-            int pollTime,
+            long pollTime,
             String topic,
             String consumerGroup,
             String nameServerAddress,
@@ -122,11 +122,6 @@ public class RocketMQPartitionSplitReader<T>
         Collection<MessageQueue> messageQueues;
         try {
             messageQueues = consumer.fetchMessageQueues(topic);
-            if (StringUtils.isNotEmpty(sql)) {
-                consumer.subscribe(topic, MessageSelector.bySql(sql));
-            } else {
-                consumer.subscribe(topic, tag);
-            }
         } catch (MQClientException e) {
             LOG.error(
                     String.format(
@@ -177,7 +172,6 @@ public class RocketMQPartitionSplitReader<T>
                         recordsBySplits.prepareForRead();
                         return recordsBySplits;
                     }
-                    consumer.assign(Collections.singletonList(messageQueue));
 
                     consumer.setPullBatchSize(MAX_MESSAGE_NUMBER_PER_BLOCK);
                     consumer.seek(messageQueue, messageOffset);
@@ -337,6 +331,11 @@ public class RocketMQPartitionSplitReader<T>
                             consumerGroup,
                             "" + System.nanoTime()));
             consumer.start();
+            if (StringUtils.isNotEmpty(sql)) {
+                consumer.subscribe(topic, MessageSelector.bySql(sql));
+            } else {
+                consumer.subscribe(topic, tag);
+            }
         } catch (MQClientException e) {
             LOG.error("Failed to initial RocketMQ consumer.", e);
             consumer.shutdown();
