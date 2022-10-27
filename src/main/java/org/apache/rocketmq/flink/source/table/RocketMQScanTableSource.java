@@ -73,10 +73,12 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     private final long startMessageOffset;
     private final long startTime;
     private final boolean useNewApi;
+    private final long pollTime;
 
     private List<String> metadataKeys;
 
     public RocketMQScanTableSource(
+            long pollTime,
             DescriptorProperties properties,
             TableSchema schema,
             String topic,
@@ -93,6 +95,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             String consumerOffsetMode,
             long consumerOffsetTimestamp,
             boolean useNewApi) {
+        this.pollTime = pollTime;
         this.properties = properties;
         this.schema = schema;
         this.topic = topic;
@@ -122,6 +125,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         if (useNewApi) {
             return SourceProvider.of(
                     new RocketMQSource<>(
+                            pollTime,
                             topic,
                             consumerGroup,
                             nameServerAddress,
@@ -162,6 +166,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     public DynamicTableSource copy() {
         RocketMQScanTableSource tableSource =
                 new RocketMQScanTableSource(
+                        pollTime,
                         properties,
                         schema,
                         topic,

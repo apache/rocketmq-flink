@@ -18,8 +18,7 @@
 
 package org.apache.rocketmq.flink.legacy;
 
-import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
-import org.apache.rocketmq.client.consumer.MQPullConsumerScheduleService;
+import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.consumer.PullResult;
 import org.apache.rocketmq.client.consumer.PullStatus;
 import org.apache.rocketmq.common.message.MessageExt;
@@ -42,10 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.rocketmq.flink.legacy.common.util.TestUtils.setFieldValue;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
-import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -55,8 +51,7 @@ import static org.mockito.Mockito.when;
 public class RocketMQSourceTest {
 
     private RocketMQSourceFunction rocketMQSource;
-    private MQPullConsumerScheduleService pullConsumerScheduleService;
-    private DefaultMQPullConsumer consumer;
+    private DefaultLitePullConsumer consumer;
     private KeyValueDeserializationSchema deserializationSchema;
     private String topic = "tpc";
 
@@ -71,12 +66,8 @@ public class RocketMQSourceTest {
         setFieldValue(rocketMQSource, "offsetTable", new ConcurrentHashMap<>());
         setFieldValue(rocketMQSource, "restoredOffsets", new ConcurrentHashMap<>());
 
-        pullConsumerScheduleService = new MQPullConsumerScheduleService("g");
-
-        consumer = mock(DefaultMQPullConsumer.class);
-        pullConsumerScheduleService.setDefaultMQPullConsumer(consumer);
+        consumer = mock(DefaultLitePullConsumer.class);
         setFieldValue(rocketMQSource, "consumer", consumer);
-        setFieldValue(rocketMQSource, "pullConsumerScheduleService", pullConsumerScheduleService);
     }
 
     @Test
@@ -89,9 +80,8 @@ public class RocketMQSourceTest {
         msgFoundList.add(messageExt);
         PullResult pullResult = new PullResult(PullStatus.FOUND, 3, 1, 5, msgFoundList);
 
-        when(consumer.fetchConsumeOffset(any(MessageQueue.class), anyBoolean())).thenReturn(2L);
-        when(consumer.pull(any(MessageQueue.class), anyString(), anyLong(), anyInt()))
-                .thenReturn(pullResult);
+        when(consumer.committed(any(MessageQueue.class))).thenReturn(2L);
+        when(consumer.poll(anyLong())).thenReturn(pullResult.getMsgFoundList());
 
         SourceContext context = mock(SourceContext.class);
         when(context.getCheckpointLock()).thenReturn(new Object());
@@ -101,7 +91,6 @@ public class RocketMQSourceTest {
         // schedule the pull task
         Set<MessageQueue> set = new HashSet();
         set.add(new MessageQueue(topic, "brk", 1));
-        pullConsumerScheduleService.putTask(topic, set);
 
         MessageExt msg = pullResult.getMsgFoundList().get(0);
 

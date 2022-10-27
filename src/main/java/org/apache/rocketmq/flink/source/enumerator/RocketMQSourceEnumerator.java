@@ -20,7 +20,7 @@ package org.apache.rocketmq.flink.source.enumerator;
 
 import org.apache.rocketmq.acl.common.AclClientRPCHook;
 import org.apache.rocketmq.acl.common.SessionCredentials;
-import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
+import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
@@ -100,7 +100,8 @@ public class RocketMQSourceEnumerator
     private final Map<Integer, Set<RocketMQPartitionSplit>> pendingPartitionSplitAssignment;
 
     // Lazily instantiated or mutable fields.
-    private DefaultMQPullConsumer consumer;
+    private DefaultLitePullConsumer consumer;
+
     private boolean noMoreNewPartitionSplits = false;
 
     public RocketMQSourceEnumerator(
@@ -233,7 +234,8 @@ public class RocketMQSourceEnumerator
         Set<Tuple3<String, String, Integer>> newPartitions = new HashSet<>();
         Set<Tuple3<String, String, Integer>> removedPartitions =
                 new HashSet<>(Collections.unmodifiableSet(discoveredPartitions));
-        Set<MessageQueue> messageQueues = consumer.fetchSubscribeMessageQueues(topic);
+
+        Collection<MessageQueue> messageQueues = consumer.fetchMessageQueues(topic);
         Set<RocketMQPartitionSplit> result = new HashSet<>();
         for (MessageQueue messageQueue : messageQueues) {
             Tuple3<String, String, Integer> topicPartition =
@@ -337,16 +339,16 @@ public class RocketMQSourceEnumerator
             } else {
                 switch (consumerOffsetMode) {
                     case CONSUMER_OFFSET_EARLIEST:
-                        offset = consumer.minOffset(mq);
-                        break;
+                        consumer.seekToBegin(mq);
+                        return -1;
                     case CONSUMER_OFFSET_LATEST:
-                        offset = consumer.maxOffset(mq);
-                        break;
+                        consumer.seekToEnd(mq);
+                        return -1;
                     case CONSUMER_OFFSET_TIMESTAMP:
-                        offset = consumer.searchOffset(mq, consumerOffsetTimestamp);
+                        offset = consumer.offsetForTimestamp(mq, consumerOffsetTimestamp);
                         break;
                     default:
-                        offset = consumer.fetchConsumeOffset(mq, false);
+                        offset = consumer.committed(mq);
                         if (offset < 0) {
                             throw new IllegalArgumentException(
                                     "Unknown value for CONSUMER_OFFSET_RESET_TO.");
@@ -364,11 +366,10 @@ public class RocketMQSourceEnumerator
                     && !StringUtils.isNullOrWhitespaceOnly(secretKey)) {
                 AclClientRPCHook aclClientRPCHook =
                         new AclClientRPCHook(new SessionCredentials(accessKey, secretKey));
-                consumer = new DefaultMQPullConsumer(consumerGroup, aclClientRPCHook);
+                consumer = new DefaultLitePullConsumer(consumerGroup, aclClientRPCHook);
             } else {
-                consumer = new DefaultMQPullConsumer(consumerGroup);
+                consumer = new DefaultLitePullConsumer(consumerGroup);
             }
-
             consumer.setNamesrvAddr(nameServerAddress);
             consumer.setInstanceName(
                     String.join(

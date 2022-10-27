@@ -20,7 +20,7 @@ import org.apache.rocketmq.acl.common.AclClientRPCHook;
 import org.apache.rocketmq.acl.common.SessionCredentials;
 import org.apache.rocketmq.client.AccessChannel;
 import org.apache.rocketmq.client.ClientConfig;
-import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
+import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.common.protocol.heartbeat.MessageModel;
 
@@ -59,7 +59,11 @@ public class RocketMQConfig {
     public static final int DEFAULT_PRODUCER_RETRY_TIMES = 3;
 
     public static final String PRODUCER_TIMEOUT = "producer.timeout";
+
+    public static final String CONSUMER_TIMEOUT = "consumer.timeout";
     public static final int DEFAULT_PRODUCER_TIMEOUT = 3000; // 3 seconds
+
+    public static final int DEFAULT_CONSUMER_TIMEOUT = 3000; // 3 seconds
 
     // Consumer related config
     public static final String CONSUMER_GROUP = "consumer.group"; // Required
@@ -142,9 +146,9 @@ public class RocketMQConfig {
      * Build Consumer Configs.
      *
      * @param props Properties
-     * @param consumer DefaultMQPullConsumer
+     * @param consumer DefaultLitePullConsumer
      */
-    public static void buildConsumerConfigs(Properties props, DefaultMQPullConsumer consumer) {
+    public static void buildConsumerConfigs(Properties props, DefaultLitePullConsumer consumer) {
         buildCommonConfigs(props, consumer);
         consumer.setMessageModel(MessageModel.CLUSTERING);
         consumer.setPersistConsumerOffsetInterval(

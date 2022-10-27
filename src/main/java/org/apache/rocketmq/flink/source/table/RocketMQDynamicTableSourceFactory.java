@@ -44,6 +44,7 @@ import static org.apache.rocketmq.flink.common.RocketMQOptions.CONSUMER_GROUP;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.NAME_SERVER_ADDRESS;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_ACCESS_KEY;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_COLUMN_ERROR_DEBUG;
+import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_CONSUMER_POLL_MS;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_ENCODING;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_END_TIME;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_FIELD_DELIMITER;
@@ -104,6 +105,7 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         optionalOptions.add(OPTIONAL_ACCESS_KEY);
         optionalOptions.add(OPTIONAL_SECRET_KEY);
         optionalOptions.add(OPTIONAL_SCAN_STARTUP_MODE);
+        optionalOptions.add(OPTIONAL_CONSUMER_POLL_MS);
         return optionalOptions;
     }
 
@@ -182,6 +184,7 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                 configuration.getLong(
                         RocketMQOptions.OPTIONAL_OFFSET_FROM_TIMESTAMP, System.currentTimeMillis());
         return new RocketMQScanTableSource(
+                configuration.getLong(OPTIONAL_CONSUMER_POLL_MS),
                 descriptorProperties,
                 physicalSchema,
                 topic,

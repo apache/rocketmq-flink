@@ -64,6 +64,9 @@ public class RocketMQOptions {
     public static final ConfigOption<Long> OPTIONAL_PARTITION_DISCOVERY_INTERVAL_MS =
             ConfigOptions.key("partitionDiscoveryIntervalMs").longType().defaultValue(30000L);
 
+    public static final ConfigOption<Long> OPTIONAL_CONSUMER_POLL_MS =
+            ConfigOptions.key("consumer.timeout").longType().defaultValue(3000L);
+
     public static final ConfigOption<Boolean> OPTIONAL_USE_NEW_API =
             ConfigOptions.key("useNewApi").booleanType().defaultValue(true);
 
