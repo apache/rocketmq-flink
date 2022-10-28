@@ -16,6 +16,8 @@
  */
 package org.apache.rocketmq.flink.legacy.common.util;
 
+import org.apache.rocketmq.flink.legacy.RunningChecker;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +41,11 @@ public class RetryUtil {
     }
 
     public static <T> T call(Callable<T> callable, String errorMsg) throws RuntimeException {
+        return call(callable, errorMsg, null);
+    }
+
+    public static <T> T call(Callable<T> callable, String errorMsg, RunningChecker runningChecker)
+            throws RuntimeException {
         long backoff = INITIAL_BACKOFF;
         int retries = 0;
         do {
@@ -46,6 +53,9 @@ public class RetryUtil {
                 return callable.call();
             } catch (Exception ex) {
                 if (retries >= MAX_ATTEMPTS) {
+                    if (null != runningChecker) {
+                        runningChecker.setRunning(false);
+                    }
                     throw new RuntimeException(ex);
                 }
                 log.error("{}, retry {}/{}", errorMsg, retries, MAX_ATTEMPTS, ex);
