@@ -18,10 +18,11 @@
 
 package org.apache.rocketmq.flink.common;
 
+import org.apache.rocketmq.flink.legacy.common.config.OffsetResetStrategy;
+import org.apache.rocketmq.flink.legacy.common.config.StartupMode;
+
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
-
-import static org.apache.rocketmq.flink.legacy.RocketMQConfig.DEFAULT_START_MESSAGE_OFFSET;
 
 /** Includes config options of RocketMQ connector type. */
 public class RocketMQOptions {
@@ -44,25 +45,11 @@ public class RocketMQOptions {
     public static final ConfigOption<String> OPTIONAL_SQL =
             ConfigOptions.key("sql").stringType().noDefaultValue();
 
-    public static final ConfigOption<Long> OPTIONAL_START_MESSAGE_OFFSET =
-            ConfigOptions.key("startMessageOffset")
-                    .longType()
-                    .defaultValue(DEFAULT_START_MESSAGE_OFFSET);
-
-    public static final ConfigOption<Long> OPTIONAL_START_TIME_MILLS =
-            ConfigOptions.key("startTimeMs").longType().defaultValue(-1L);
-
-    public static final ConfigOption<String> OPTIONAL_START_TIME =
-            ConfigOptions.key("startTime").stringType().noDefaultValue();
-
-    public static final ConfigOption<String> OPTIONAL_END_TIME =
-            ConfigOptions.key("endTime").stringType().noDefaultValue();
-
-    public static final ConfigOption<String> OPTIONAL_TIME_ZONE =
-            ConfigOptions.key("timeZone").stringType().noDefaultValue();
+    public static final ConfigOption<Long> OPTIONAL_END_TIME_STAMP =
+            ConfigOptions.key("endTimestamp").longType().defaultValue(Long.MAX_VALUE);
 
     public static final ConfigOption<Long> OPTIONAL_PARTITION_DISCOVERY_INTERVAL_MS =
-            ConfigOptions.key("partitionDiscoveryIntervalMs").longType().defaultValue(30000L);
+            ConfigOptions.key("partitionDiscoveryIntervalMs").longType().defaultValue(-1L);
 
     public static final ConfigOption<Boolean> OPTIONAL_USE_NEW_API =
             ConfigOptions.key("useNewApi").booleanType().defaultValue(true);
@@ -109,9 +96,42 @@ public class RocketMQOptions {
     public static final ConfigOption<String> OPTIONAL_SECRET_KEY =
             ConfigOptions.key("secretKey").stringType().noDefaultValue();
 
-    public static final ConfigOption<String> OPTIONAL_SCAN_STARTUP_MODE =
-            ConfigOptions.key("scanStartupMode").stringType().defaultValue("latest");
+    // --------------------------------------------------------------------------------------------
+    // Scan specific options
+    // --------------------------------------------------------------------------------------------
 
-    public static final ConfigOption<Long> OPTIONAL_OFFSET_FROM_TIMESTAMP =
-            ConfigOptions.key("offsetFromTimestamp").longType().noDefaultValue();
+    public static final ConfigOption<StartupMode> OPTIONAL_SCAN_STARTUP_MODE =
+            ConfigOptions.key("scan.startup.mode")
+                    .enumType(StartupMode.class)
+                    .defaultValue(StartupMode.GROUP_OFFSETS)
+                    .withDescription("Startup mode for RocketMQ consumer.");
+
+    public static final ConfigOption<OffsetResetStrategy> OPTIONAL_SCAN_OFFSET_RESET_STRATEGY =
+            ConfigOptions.key("scan.offsetReset.strategy")
+                    .enumType(OffsetResetStrategy.class)
+                    .defaultValue(OffsetResetStrategy.LATEST)
+                    .withDescription(
+                            "The offsetReset strategy only be used if group offsets is not found");
+
+    public static final ConfigOption<String> OPTIONAL_SCAN_STARTUP_SPECIFIC_OFFSETS =
+            ConfigOptions.key("scan.startup.specific-offsets")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Optional offsets used in case of \"specific-offsets\" startup mode");
+
+    public static final ConfigOption<Long> OPTIONAL_SCAN_STARTUP_TIMESTAMP_MILLIS =
+            ConfigOptions.key("scan.startup.timestamp-millis")
+                    .longType()
+                    .defaultValue(-1L)
+                    .withDescription(
+                            "Optional timestamp used in case of \"timestamp\" startup mode");
+
+    public static final ConfigOption<Boolean> OPTIONAL_COMMIT_OFFSET_AUTO =
+            ConfigOptions.key("commit.offset.auto")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Commit offset immediately when each message is fetched."
+                                    + "If you don't enable the flink checkpoint, make sure this option is set to true.");
 }

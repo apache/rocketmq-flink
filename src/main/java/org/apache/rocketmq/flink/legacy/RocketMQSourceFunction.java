@@ -166,9 +166,6 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         this.enableCheckpoint =
                 ((StreamingRuntimeContext) getRuntimeContext()).isCheckpointingEnabled();
 
-        if (offsetTable == null) {
-            offsetTable = new ConcurrentHashMap<>();
-        }
         if (restoredOffsets == null) {
             restoredOffsets = new ConcurrentHashMap<>();
         }
@@ -247,7 +244,16 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         // If the job recovers from the state, the state has already contained the offsets of last
         // commit.
         if (!restored) {
-            initOffsets(messageQueues);
+            this.offsetTable =
+                    RocketMQUtils.initOffsets(
+                            messageQueues,
+                            consumer,
+                            startMode,
+                            offsetResetStrategy,
+                            specificTimeStamp,
+                            specificStartupOffsets);
+        } else {
+            this.offsetTable = new ConcurrentHashMap<>();
         }
     }
 
@@ -391,76 +397,6 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
     private void awaitTermination() throws InterruptedException {
         while (runningChecker.isRunning()) {
             Thread.sleep(50);
-        }
-    }
-
-    /**
-     * only flink job start with no state can init offsets from broker
-     *
-     * @param messageQueues
-     * @throws MQClientException
-     */
-    private void initOffsets(List<MessageQueue> messageQueues) throws MQClientException {
-        for (MessageQueue mq : messageQueues) {
-            long offset;
-            switch (startMode) {
-                case LATEST:
-                    offset = consumer.maxOffset(mq);
-                    break;
-                case EARLIEST:
-                    offset = consumer.minOffset(mq);
-                    break;
-                case GROUP_OFFSETS:
-                    offset = consumer.fetchConsumeOffset(mq, false);
-                    // the min offset return if consumer group first join,return a negative number
-                    // if
-                    // catch exception when fetch from broker.
-                    // If you want consumer from earliest,please use OffsetResetStrategy.EARLIEST
-                    if (offset <= 0) {
-                        switch (offsetResetStrategy) {
-                            case LATEST:
-                                offset = consumer.maxOffset(mq);
-                                log.info(
-                                        "current consumer thread:{} has no committed offset,use Strategy:{} instead",
-                                        mq,
-                                        offsetResetStrategy);
-                                break;
-                            case EARLIEST:
-                                log.info(
-                                        "current consumer thread:{} has no committed offset,use Strategy:{} instead",
-                                        mq,
-                                        offsetResetStrategy);
-                                offset = consumer.minOffset(mq);
-                                break;
-                            default:
-                                break;
-                        }
-                    }
-                    break;
-                case TIMESTAMP:
-                    offset = consumer.searchOffset(mq, specificTimeStamp);
-                    break;
-                case SPECIFIC_OFFSETS:
-                    if (specificStartupOffsets == null) {
-                        throw new RuntimeException(
-                                "StartMode is specific_offsets.But none offsets has been specified");
-                    }
-                    Long specificOffset = specificStartupOffsets.get(mq);
-                    if (specificOffset != null) {
-                        offset = specificOffset;
-                    } else {
-                        offset = consumer.fetchConsumeOffset(mq, false);
-                    }
-                    break;
-                default:
-                    throw new IllegalArgumentException(
-                            "current startMode is not supported" + startMode);
-            }
-            log.info(
-                    "current consumer queue:{} start from offset of: {}",
-                    mq.getBrokerName() + "-" + mq.getQueueId(),
-                    offset);
-            offsetTable.put(mq, offset);
         }
     }
 

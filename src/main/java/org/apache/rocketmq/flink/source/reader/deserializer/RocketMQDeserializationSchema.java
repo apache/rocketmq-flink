@@ -42,7 +42,7 @@ public interface RocketMQDeserializationSchema<T>
      */
     @Override
     @PublicEvolving
-    default void open(InitializationContext context) {}
+    default void open(InitializationContext context) throws Exception {}
 
     /**
      * Deserializes the byte message.

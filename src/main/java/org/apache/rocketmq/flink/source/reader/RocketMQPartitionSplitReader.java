@@ -27,10 +27,12 @@ import org.apache.rocketmq.client.exception.MQBrokerException;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.flink.legacy.common.util.MetricUtils;
 import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQDeserializationSchema;
 import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
+import org.apache.flink.api.connector.source.SourceReaderContext;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
@@ -71,12 +73,7 @@ public class RocketMQPartitionSplitReader<T>
     private final String topic;
     private final String tag;
     private final String sql;
-    private final long stopInMs;
-    private final long startTime;
-    private final long startOffset;
-
-    private final String accessKey;
-    private final String secretKey;
+    private final boolean commitOffsetAuto;
 
     private final RocketMQDeserializationSchema<T> deserializationSchema;
     private final Map<Tuple3<String, String, Integer>, Long> startingOffsets;
@@ -89,6 +86,8 @@ public class RocketMQPartitionSplitReader<T>
 
     private static final int MAX_MESSAGE_NUMBER_PER_BLOCK = 64;
 
+    private MetricUtils.TimestampGauge fetchDelay = new MetricUtils.TimestampGauge();
+
     public RocketMQPartitionSplitReader(
             String topic,
             String consumerGroup,
@@ -97,29 +96,26 @@ public class RocketMQPartitionSplitReader<T>
             String secretKey,
             String tag,
             String sql,
-            long stopInMs,
-            long startTime,
-            long startOffset,
-            RocketMQDeserializationSchema<T> deserializationSchema) {
+            RocketMQDeserializationSchema<T> deserializationSchema,
+            SourceReaderContext readerContext,
+            boolean commitOffsetAuto) {
         this.topic = topic;
         this.tag = tag;
         this.sql = sql;
-        this.accessKey = accessKey;
-        this.secretKey = secretKey;
-        this.stopInMs = stopInMs;
-        this.startTime = startTime;
-        this.startOffset = startOffset;
         this.deserializationSchema = deserializationSchema;
         this.startingOffsets = new HashMap<>();
         this.stoppingTimestamps = new HashMap<>();
         this.collector = new SimpleCollector<>();
+        this.commitOffsetAuto = commitOffsetAuto;
         initialRocketMQConsumer(consumerGroup, nameServerAddress, accessKey, secretKey);
+        readerContext.metricGroup().gauge(MetricUtils.CURRENT_FETCH_EVENT_TIME_LAG, fetchDelay);
     }
 
     @Override
     public RecordsWithSplitIds<Tuple3<T, Long, Long>> fetch() throws IOException {
         RocketMQPartitionSplitRecords<Tuple3<T, Long, Long>> recordsBySplits =
                 new RocketMQPartitionSplitRecords<>();
+        long fetchTime = 0L;
         Set<MessageQueue> messageQueues;
         try {
             messageQueues = consumer.fetchSubscribeMessageQueues(topic);
@@ -140,23 +136,6 @@ public class RocketMQPartitionSplitReader<T>
                             messageQueue.getQueueId());
             if (startingOffsets.containsKey(topicPartition)) {
                 long messageOffset = startingOffsets.get(topicPartition);
-                if (messageOffset == 0) {
-                    try {
-                        messageOffset =
-                                startTime > 0
-                                        ? consumer.searchOffset(messageQueue, startTime)
-                                        : startOffset;
-                    } catch (MQClientException e) {
-                        LOG.warn(
-                                String.format(
-                                        "Search RocketMQ message offset of topic[%s] broker[%s] queue[%d] exception.",
-                                        messageQueue.getTopic(),
-                                        messageQueue.getBrokerName(),
-                                        messageQueue.getQueueId()),
-                                e);
-                    }
-                    messageOffset = messageOffset > -1 ? messageOffset : 0;
-                }
                 PullResult pullResult = null;
                 try {
                     if (wakeup) {
@@ -188,6 +167,7 @@ public class RocketMQPartitionSplitReader<T>
                                         messageOffset,
                                         MAX_MESSAGE_NUMBER_PER_BLOCK);
                     }
+                    fetchTime = System.currentTimeMillis();
                 } catch (MQClientException
                         | RemotingException
                         | MQBrokerException
@@ -239,6 +219,13 @@ public class RocketMQPartitionSplitReader<T>
                                                                     messageExt.getQueueOffset(),
                                                                     messageExt
                                                                             .getStoreTimestamp())));
+                            if (commitOffsetAuto) {
+                                consumer.updateConsumeOffset(
+                                        messageQueue, startingOffsets.get(topicPartition));
+                                consumer.getOffsetStore()
+                                        .persist(consumer.queueWithNamespace(messageQueue));
+                            }
+                            fetchDelay.report(Math.abs(fetchTime - storeTimestamp));
                         } catch (Exception e) {
                             throw new IOException(
                                     "Failed to deserialize consumer record due to", e);
@@ -308,7 +295,21 @@ public class RocketMQPartitionSplitReader<T>
     }
 
     private long getStoppingTimestamp(Tuple3<String, String, Integer> topicPartition) {
-        return stoppingTimestamps.getOrDefault(topicPartition, stopInMs);
+        return stoppingTimestamps.getOrDefault(topicPartition, Long.MAX_VALUE);
+    }
+
+    public void notifyCheckpointComplete(
+            Map<MessageQueue, Long> committedOffsets, OffsetCommitCallback callback)
+            throws MQClientException {
+        if (commitOffsetAuto) {
+            return;
+        }
+        for (Map.Entry<MessageQueue, Long> entry : committedOffsets.entrySet()) {
+            consumer.updateConsumeOffset(entry.getKey(), entry.getValue());
+            consumer.getOffsetStore().persist(consumer.queueWithNamespace(entry.getKey()));
+            LOG.info("Offset commit success.{},offset:{}", entry.getKey(), entry.getValue());
+        }
+        callback.onComplete();
     }
 
     // --------------- private helper method ----------------------

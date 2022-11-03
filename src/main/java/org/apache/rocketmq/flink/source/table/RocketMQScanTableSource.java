@@ -17,8 +17,11 @@
 
 package org.apache.rocketmq.flink.source.table;
 
+import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.flink.legacy.RocketMQConfig;
 import org.apache.rocketmq.flink.legacy.RocketMQSourceFunction;
+import org.apache.rocketmq.flink.legacy.common.config.OffsetResetStrategy;
+import org.apache.rocketmq.flink.legacy.common.config.StartupMode;
 import org.apache.rocketmq.flink.legacy.common.serialization.KeyValueDeserializationSchema;
 import org.apache.rocketmq.flink.legacy.common.serialization.RowKeyValueDeserializationSchema;
 import org.apache.rocketmq.flink.source.RocketMQSource;
@@ -56,9 +59,6 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     private final DescriptorProperties properties;
     private final TableSchema schema;
 
-    private final String consumerOffsetMode;
-    private final long consumerOffsetTimestamp;
-
     private final String topic;
     private final String consumerGroup;
     private final String nameServerAddress;
@@ -70,9 +70,14 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
 
     private final long stopInMs;
     private final long partitionDiscoveryIntervalMs;
-    private final long startMessageOffset;
-    private final long startTime;
     private final boolean useNewApi;
+    private final boolean commitOffsetAuto;
+
+    // consumer strategy
+    private final StartupMode startMode;
+    private final OffsetResetStrategy offsetResetStrategy;
+    private final Map<MessageQueue, Long> specificOffsets;
+    private final long consumerOffsetTimestamp;
 
     private List<String> metadataKeys;
 
@@ -87,12 +92,13 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             String tag,
             String sql,
             long stopInMs,
-            long startMessageOffset,
-            long startTime,
+            boolean useNewApi,
             long partitionDiscoveryIntervalMs,
-            String consumerOffsetMode,
+            StartupMode startMode,
+            OffsetResetStrategy offsetResetStrategy,
+            Map<MessageQueue, Long> specificOffsets,
             long consumerOffsetTimestamp,
-            boolean useNewApi) {
+            boolean commitOffsetAuto) {
         this.properties = properties;
         this.schema = schema;
         this.topic = topic;
@@ -103,13 +109,14 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         this.tag = tag;
         this.sql = sql;
         this.stopInMs = stopInMs;
-        this.startMessageOffset = startMessageOffset;
-        this.startTime = startTime;
         this.partitionDiscoveryIntervalMs = partitionDiscoveryIntervalMs;
         this.useNewApi = useNewApi;
         this.metadataKeys = Collections.emptyList();
-        this.consumerOffsetMode = consumerOffsetMode;
+        this.startMode = startMode;
+        this.offsetResetStrategy = offsetResetStrategy;
+        this.specificOffsets = specificOffsets;
         this.consumerOffsetTimestamp = consumerOffsetTimestamp;
+        this.commitOffsetAuto = commitOffsetAuto;
     }
 
     @Override
@@ -130,18 +137,25 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                             tag,
                             sql,
                             stopInMs,
-                            startTime,
-                            startMessageOffset < 0 ? 0 : startMessageOffset,
                             partitionDiscoveryIntervalMs,
                             isBounded() ? BOUNDED : CONTINUOUS_UNBOUNDED,
                             createRocketMQDeserializationSchema(),
-                            consumerOffsetMode,
-                            consumerOffsetTimestamp));
+                            startMode,
+                            offsetResetStrategy,
+                            specificOffsets,
+                            consumerOffsetTimestamp,
+                            commitOffsetAuto));
         } else {
-            return SourceFunctionProvider.of(
+            RocketMQSourceFunction<RowData> rocketMQSource =
                     new RocketMQSourceFunction<>(
-                            createKeyValueDeserializationSchema(), getConsumerProps()),
-                    isBounded());
+                            createKeyValueDeserializationSchema(), getConsumerProps());
+            setStartupMode(
+                    rocketMQSource,
+                    startMode,
+                    offsetResetStrategy,
+                    specificOffsets,
+                    consumerOffsetTimestamp);
+            return SourceFunctionProvider.of(rocketMQSource, isBounded());
         }
     }
 
@@ -172,12 +186,13 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                         tag,
                         sql,
                         stopInMs,
-                        startMessageOffset,
-                        startTime,
+                        useNewApi,
                         partitionDiscoveryIntervalMs,
-                        consumerOffsetMode,
+                        startMode,
+                        offsetResetStrategy,
+                        specificOffsets,
                         consumerOffsetTimestamp,
-                        useNewApi);
+                        commitOffsetAuto);
         tableSource.metadataKeys = metadataKeys;
         return tableSource;
     }
@@ -220,11 +235,36 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         consumerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, nameServerAddress);
         consumerProps.setProperty(RocketMQConfig.CONSUMER_TAG, tag);
         consumerProps.setProperty(RocketMQConfig.CONSUMER_SQL, sql);
-        consumerProps.setProperty(
-                RocketMQConfig.CONSUMER_START_MESSAGE_OFFSET, String.valueOf(startMessageOffset));
         consumerProps.setProperty(RocketMQConfig.ACCESS_KEY, accessKey);
         consumerProps.setProperty(RocketMQConfig.SECRET_KEY, secretKey);
         return consumerProps;
+    }
+
+    private void setStartupMode(
+            RocketMQSourceFunction<RowData> rocketMQSource,
+            StartupMode startMode,
+            OffsetResetStrategy offsetResetStrategy,
+            Map<MessageQueue, Long> specificOffsets,
+            long consumerOffsetTimestamp) {
+        switch (startMode) {
+            case LATEST:
+                rocketMQSource.setStartFromLatest();
+                break;
+            case EARLIEST:
+                rocketMQSource.setStartFromEarliest();
+                break;
+            case GROUP_OFFSETS:
+                rocketMQSource.setStartFromGroupOffsets(offsetResetStrategy);
+                break;
+            case SPECIFIC_OFFSETS:
+                rocketMQSource.setStartFromSpecificOffsets(specificOffsets);
+                break;
+            case TIMESTAMP:
+                rocketMQSource.setStartFromTimeStamp(consumerOffsetTimestamp);
+                break;
+            default:
+                break;
+        }
     }
 
     // --------------------------------------------------------------------------------------------

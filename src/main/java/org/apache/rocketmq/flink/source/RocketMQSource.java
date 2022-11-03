@@ -18,7 +18,11 @@
 
 package org.apache.rocketmq.flink.source;
 
+import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.flink.common.RocketMQOptions;
 import org.apache.rocketmq.flink.legacy.RocketMQConfig;
+import org.apache.rocketmq.flink.legacy.common.config.OffsetResetStrategy;
+import org.apache.rocketmq.flink.legacy.common.config.StartupMode;
 import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumState;
 import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumStateSerializer;
 import org.apache.rocketmq.flink.source.enumerator.RocketMQSourceEnumerator;
@@ -26,9 +30,11 @@ import org.apache.rocketmq.flink.source.reader.RocketMQPartitionSplitReader;
 import org.apache.rocketmq.flink.source.reader.RocketMQRecordEmitter;
 import org.apache.rocketmq.flink.source.reader.RocketMQSourceReader;
 import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQDeserializationSchema;
+import org.apache.rocketmq.flink.source.reader.fetcher.RocketMQSourceFetcherManager;
 import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
 import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplitSerializer;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.Boundedness;
@@ -50,6 +56,9 @@ import org.apache.flink.util.UserCodeClassLoader;
 import org.apache.commons.lang.Validate;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 /** The Source implementation of RocketMQ. */
@@ -58,8 +67,6 @@ public class RocketMQSource<OUT>
                 ResultTypeQueryable<OUT> {
     private static final long serialVersionUID = -1L;
 
-    private final String consumerOffsetMode;
-    private final long consumerOffsetTimestamp;
     private final String topic;
     private final String consumerGroup;
     private final String nameServerAddress;
@@ -70,13 +77,19 @@ public class RocketMQSource<OUT>
     private final String secretKey;
 
     private final long stopInMs;
-    private final long startTime;
-    private final long startOffset;
     private final long partitionDiscoveryIntervalMs;
 
     // Boundedness
     private final Boundedness boundedness;
     private final RocketMQDeserializationSchema<OUT> deserializationSchema;
+
+    // consumer strategy
+    private StartupMode startMode = StartupMode.GROUP_OFFSETS;
+    private OffsetResetStrategy offsetResetStrategy = OffsetResetStrategy.LATEST;
+    private final Map<MessageQueue, Long> specificOffsets;
+    private long consumerOffsetTimestamp;
+
+    private boolean commitOffsetAuto;
 
     public RocketMQSource(
             String topic,
@@ -87,16 +100,22 @@ public class RocketMQSource<OUT>
             String tag,
             String sql,
             long stopInMs,
-            long startTime,
-            long startOffset,
             long partitionDiscoveryIntervalMs,
             Boundedness boundedness,
             RocketMQDeserializationSchema<OUT> deserializationSchema,
-            String cosumerOffsetMode,
-            long consumerOffsetTimestamp) {
+            StartupMode startMode,
+            OffsetResetStrategy offsetResetStrategy,
+            Map<MessageQueue, Long> specificOffsets,
+            long consumerOffsetTimestamp,
+            boolean commitOffsetAuto) {
         Validate.isTrue(
                 !(StringUtils.isNotEmpty(tag) && StringUtils.isNotEmpty(sql)),
                 "Consumer tag and sql can not set value at the same time");
+        Validate.isTrue(
+                !(boundedness == Boundedness.BOUNDED && partitionDiscoveryIntervalMs > 0),
+                "Bounded stream didn't support partitionDiscovery."
+                        + "PartitionDiscovery will hold the split reader and keep the thread running "
+                        + "even though all of subtasks has emitted the last record.");
         this.topic = topic;
         this.consumerGroup = consumerGroup;
         this.nameServerAddress = nameServerAddress;
@@ -105,13 +124,18 @@ public class RocketMQSource<OUT>
         this.tag = StringUtils.isEmpty(tag) ? RocketMQConfig.DEFAULT_CONSUMER_TAG : tag;
         this.sql = sql;
         this.stopInMs = stopInMs;
-        this.startTime = startTime;
-        this.startOffset = startOffset > 0 ? startOffset : startTime;
         this.partitionDiscoveryIntervalMs = partitionDiscoveryIntervalMs;
         this.boundedness = boundedness;
         this.deserializationSchema = deserializationSchema;
-        this.consumerOffsetMode = cosumerOffsetMode;
+        if (null != startMode) {
+            this.startMode = startMode;
+        }
+        if (null != offsetResetStrategy) {
+            this.offsetResetStrategy = offsetResetStrategy;
+        }
+        this.specificOffsets = specificOffsets == null ? new HashMap<>() : specificOffsets;
         this.consumerOffsetTimestamp = consumerOffsetTimestamp;
+        this.commitOffsetAuto = commitOffsetAuto;
     }
 
     @Override
@@ -120,8 +144,8 @@ public class RocketMQSource<OUT>
     }
 
     @Override
-    public SourceReader<OUT, RocketMQPartitionSplit> createReader(
-            SourceReaderContext readerContext) {
+    public SourceReader<OUT, RocketMQPartitionSplit> createReader(SourceReaderContext readerContext)
+            throws Exception {
         FutureCompletingBlockingQueue<RecordsWithSplitIds<Tuple3<OUT, Long, Long>>> elementsQueue =
                 new FutureCompletingBlockingQueue<>();
         deserializationSchema.open(
@@ -147,15 +171,15 @@ public class RocketMQSource<OUT>
                                 secretKey,
                                 tag,
                                 sql,
-                                stopInMs,
-                                startTime,
-                                startOffset,
-                                deserializationSchema);
+                                deserializationSchema,
+                                readerContext,
+                                commitOffsetAuto);
         RocketMQRecordEmitter<OUT> recordEmitter = new RocketMQRecordEmitter<>();
 
         return new RocketMQSourceReader<>(
                 elementsQueue,
-                splitReaderSupplier,
+                new RocketMQSourceFetcherManager<>(
+                        elementsQueue, splitReaderSupplier, (ignore) -> {}),
                 recordEmitter,
                 new Configuration(),
                 readerContext);
@@ -172,11 +196,12 @@ public class RocketMQSource<OUT>
                 accessKey,
                 secretKey,
                 stopInMs,
-                startOffset,
                 partitionDiscoveryIntervalMs,
                 boundedness,
                 enumContext,
-                consumerOffsetMode,
+                startMode,
+                offsetResetStrategy,
+                specificOffsets,
                 consumerOffsetTimestamp);
     }
 
@@ -184,6 +209,8 @@ public class RocketMQSource<OUT>
     public SplitEnumerator<RocketMQPartitionSplit, RocketMQSourceEnumState> restoreEnumerator(
             SplitEnumeratorContext<RocketMQPartitionSplit> enumContext,
             RocketMQSourceEnumState checkpoint) {
+        Map<Integer, List<RocketMQPartitionSplit>> listMap = checkpoint.getCurrentAssignment();
+        listMap.forEach((a, b) -> System.out.println("xixixixixix" + b));
 
         return new RocketMQSourceEnumerator(
                 topic,
@@ -192,12 +219,13 @@ public class RocketMQSource<OUT>
                 accessKey,
                 secretKey,
                 stopInMs,
-                startOffset,
                 partitionDiscoveryIntervalMs,
                 boundedness,
                 enumContext,
                 checkpoint.getCurrentAssignment(),
-                consumerOffsetMode,
+                startMode,
+                offsetResetStrategy,
+                specificOffsets,
                 consumerOffsetTimestamp);
     }
 
@@ -214,5 +242,27 @@ public class RocketMQSource<OUT>
     @Override
     public TypeInformation<OUT> getProducedType() {
         return deserializationSchema.getProducedType();
+    }
+
+    /**
+     * Builder to build a {@link RocketMQSource}
+     *
+     * @param <OUT>
+     * @return
+     */
+    public static <OUT> RocketMQSourceBuilder<OUT> builder() {
+        return new RocketMQSourceBuilder<>();
+    }
+
+    @VisibleForTesting
+    Configuration getConfiguration() {
+        Configuration conf = new Configuration();
+        conf.set(RocketMQOptions.OPTIONAL_SCAN_STARTUP_MODE, startMode);
+        conf.set(RocketMQOptions.OPTIONAL_SCAN_OFFSET_RESET_STRATEGY, offsetResetStrategy);
+        conf.set(RocketMQOptions.OPTIONAL_END_TIME_STAMP, stopInMs);
+        conf.set(RocketMQOptions.OPTIONAL_SCAN_STARTUP_TIMESTAMP_MILLIS, consumerOffsetTimestamp);
+        conf.set(
+                RocketMQOptions.OPTIONAL_SCAN_STARTUP_SPECIFIC_OFFSETS, specificOffsets.toString());
+        return conf;
     }
 }

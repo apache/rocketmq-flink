@@ -14,6 +14,7 @@ The RocketMQSourceFunction is based on RocketMQ pull consumer mode, and provides
 Otherwise, the source doesn't provide any reliability guarantees.
 
 ### KeyValueDeserializationSchema
+
 The main API for deserializing topic and tags is the `org.apache.rocketmq.flink.legacy.common.serialization.KeyValueDeserializationSchema` interface.
 `rocketmq-flink` includes general purpose `KeyValueDeserializationSchema` implementations called `SimpleKeyValueDeserializationSchema`.
 
@@ -23,7 +24,16 @@ public interface KeyValueDeserializationSchema<T> extends ResultTypeQueryable<T>
 }
 ```
 
+## RocketMQSource
+
+RocketMQSource implement flink's new source interface,which provide capability of flow-batch integration.Now you can construct an instance by  `RocketMQSourceBuilder.build()`.
+
+### RocketMQDeserializationSchema
+
+The mian API for deserializing topic and tags is the `org.apache.rocketmq.flink.source.reader.deserializer.RocketMQDeserializationSchema`interface.`rocketmq-flink` includes general purpose `RocketMQDeserializationSchema` implementations called `RocketMQRowDeserializationSchema` and `SimpleStringSchema`.If you only focus on the value of message,you can use the wrapper class of `RocketMQValueOnlyDeserializationSchemaWrapper`  to expand.
+
 ## RocketMQSink
+
 To use the `RocketMQSink`,  you construct an instance of it by specifying KeyValueSerializationSchema & TopicSelector instances and a Properties instance which including rocketmq configs.
 `RocketMQSink(KeyValueSerializationSchema<IN> schema, TopicSelector<IN> topicSelector, Properties props)`
 The RocketMQSink provides at-least-once reliability guarantees when checkpoints are enabled and `withBatchFlushOnCheckpoint(true)` is set.
@@ -57,6 +67,9 @@ public interface TopicSelector<T> extends Serializable {
 ```
 
 ## Examples
+
+You can find more examples in directory of `org.apache.rocketmq.flink.legacy.example`
+
 The following is an example which receive messages from RocketMQ brokers and send messages to broker after processing.
 
  ```java
@@ -119,7 +132,36 @@ StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironm
         }
  ```
 
+The following is an example which use new source function to fetch the records and deserialize to a simple string.
+
+```java
+ StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(30000L);
+
+        RocketMQSource<String> source =
+                RocketMQSource.<String>builder()
+                        .setNameServerAddress(nameServerAddress)
+                        .setTopic(topic)
+                        .setConsumerGroup(consumerGroup)
+                        .setStartFromEarliest()
+                        .setDeserializer(
+                                new RocketMQValueOnlyDeserializationSchemaWrapper<>(
+                                        new SimpleStringSchema()))
+                        .build();
+
+        DataStreamSource<String> newSource =
+                env.fromSource(source, WatermarkStrategy.noWatermarks(), "new source")
+                        .setParallelism(4);
+
+        newSource.print().setParallelism(1);
+
+        env.execute();
+```
+
+
+
 ## Configurations
+
 The following configurations are all from the class `org.apache.rocketmq.flink.legacy.RocketMQConfig`.
 
 ### Producer Configurations
