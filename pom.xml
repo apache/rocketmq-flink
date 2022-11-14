@@ -38,7 +38,7 @@
         <commons-lang.version>2.6</commons-lang.version>
         <spotless.version>2.4.2</spotless.version>
         <jaxb-api.version>2.3.1</jaxb-api.version>
-        <rocketmq.schema.registry.version>0.0.4-SNAPSHOT</rocketmq.schema.registry.version>
+        <rocketmq.schema.registry.version>0.1.0</rocketmq.schema.registry.version>
     </properties>
 
     <dependencies>
