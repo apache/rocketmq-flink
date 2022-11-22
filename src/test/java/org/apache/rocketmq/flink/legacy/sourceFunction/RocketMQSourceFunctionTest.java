@@ -27,6 +27,7 @@ import org.apache.rocketmq.flink.legacy.common.serialization.SimpleStringDeseria
 
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -78,7 +79,7 @@ public class RocketMQSourceFunctionTest {
         map.put(new MessageQueue("tpc", "broker-1", 1), 31L);
         setFieldValue(source, "restoredOffsets", map);
         setFieldValue(source, "offsetTable", new ConcurrentHashMap<>());
-        source.initOffsetTableFromRestoredOffsets();
+        source.initOffsetTableFromRestoredOffsets(new ArrayList<>(map.keySet()));
         Map<MessageQueue, Long> offsetTable = (Map) getFieldValue(source, "offsetTable");
         for (Map.Entry<MessageQueue, Long> entry : map.entrySet()) {
             assertEquals(offsetTable.containsKey(entry.getKey()), true);
