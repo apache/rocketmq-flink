@@ -236,6 +236,7 @@ public class RocketMQSourceEnumerator
                 new HashSet<>(Collections.unmodifiableSet(discoveredPartitions));
 
         Collection<MessageQueue> messageQueues = consumer.fetchMessageQueues(topic);
+        consumer.assign(messageQueues);
         Set<RocketMQPartitionSplit> result = new HashSet<>();
         for (MessageQueue messageQueue : messageQueues) {
             Tuple3<String, String, Integer> topicPartition =
@@ -340,10 +341,12 @@ public class RocketMQSourceEnumerator
                 switch (consumerOffsetMode) {
                     case CONSUMER_OFFSET_EARLIEST:
                         consumer.seekToBegin(mq);
-                        return -1;
+                        offset = consumer.committed(mq);
+                        break;
                     case CONSUMER_OFFSET_LATEST:
                         consumer.seekToEnd(mq);
-                        return -1;
+                        offset = consumer.committed(mq);
+                        break;
                     case CONSUMER_OFFSET_TIMESTAMP:
                         offset = consumer.offsetForTimestamp(mq, consumerOffsetTimestamp);
                         break;

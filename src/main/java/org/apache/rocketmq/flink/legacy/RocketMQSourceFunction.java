@@ -18,7 +18,6 @@
 package org.apache.rocketmq.flink.legacy;
 
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
-import org.apache.rocketmq.client.consumer.MessageSelector;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -161,7 +160,8 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         Validate.notEmpty(topic, "Consumer topic can not be empty");
         Validate.notEmpty(group, "Consumer group can not be empty");
 
-        String tag = props.getProperty(RocketMQConfig.CONSUMER_TAG);
+        String tag =
+                props.getProperty(RocketMQConfig.CONSUMER_TAG, RocketMQConfig.DEFAULT_CONSUMER_TAG);
         String sql = props.getProperty(RocketMQConfig.CONSUMER_SQL);
         Validate.isTrue(
                 !(StringUtils.isNotEmpty(tag) && StringUtils.isNotEmpty(sql)),
@@ -221,6 +221,15 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                         String.valueOf(indexOfThisSubTask),
                         String.valueOf(System.nanoTime()));
         consumer.setInstanceName(instanceName);
+
+        int pullBatchSize = getInteger(props, CONSUMER_BATCH_SIZE, DEFAULT_CONSUMER_BATCH_SIZE);
+        consumer.setPullBatchSize(pullBatchSize);
+
+        if (StringUtils.isEmpty(sql)) {
+            consumer.setSubExpressionForAssign(topic, tag);
+        } else {
+            consumer.setSubExpressionForAssign(topic, sql);
+        }
         consumer.start();
 
         Counter outputCounter =
@@ -250,6 +259,8 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                 RocketMQUtils.allocate(totalQueues, taskNumber, ctx.getIndexOfThisSubtask());
         // If the job recovers from the state, the state has already contained the offsets of last
         // commit.
+        consumer.assign(totalQueues);
+
         if (!restored) {
             initOffsets(messageQueues);
         }
@@ -257,10 +268,6 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
 
     @Override
     public void run(SourceContext context) throws Exception {
-        String sql = props.getProperty(RocketMQConfig.CONSUMER_SQL);
-        String tag =
-                props.getProperty(RocketMQConfig.CONSUMER_TAG, RocketMQConfig.DEFAULT_CONSUMER_TAG);
-        int pullBatchSize = getInteger(props, CONSUMER_BATCH_SIZE, DEFAULT_CONSUMER_BATCH_SIZE);
         timer.scheduleAtFixedRate(
                 () -> {
                     // context.emitWatermark(waterMarkPerQueue.getCurrentWatermark());
@@ -269,12 +276,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                 5,
                 5,
                 TimeUnit.SECONDS);
-        if (StringUtils.isEmpty(sql)) {
-            consumer.subscribe(topic, tag);
-        } else {
-            // pull with sql do not support block pull.
-            consumer.subscribe(topic, MessageSelector.bySql(sql));
-        }
+
         for (MessageQueue mq : messageQueues) {
             this.executor.execute(
                     () ->
@@ -283,8 +285,9 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                                         while (runningChecker.isRunning()) {
                                             try {
                                                 Long offset = offsetTable.get(mq);
-                                                consumer.setPullBatchSize(pullBatchSize);
-                                                consumer.seek(mq, offset);
+                                                if (offset != null) {
+                                                    consumer.seek(mq, offset);
+                                                }
                                                 boolean found = false;
                                                 List<MessageExt> messages =
                                                         consumer.poll(

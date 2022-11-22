@@ -21,7 +21,6 @@ package org.apache.rocketmq.flink.source.reader;
 import org.apache.rocketmq.acl.common.AclClientRPCHook;
 import org.apache.rocketmq.acl.common.SessionCredentials;
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
-import org.apache.rocketmq.client.consumer.MessageSelector;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -122,6 +121,7 @@ public class RocketMQPartitionSplitReader<T>
         Collection<MessageQueue> messageQueues;
         try {
             messageQueues = consumer.fetchMessageQueues(topic);
+            consumer.assign(messageQueues);
         } catch (MQClientException e) {
             LOG.error(
                     String.format(
@@ -330,12 +330,13 @@ public class RocketMQPartitionSplitReader<T>
                             topic,
                             consumerGroup,
                             "" + System.nanoTime()));
-            consumer.start();
-            if (StringUtils.isNotEmpty(sql)) {
-                consumer.subscribe(topic, MessageSelector.bySql(sql));
+
+            if (StringUtils.isEmpty(sql)) {
+                consumer.setSubExpressionForAssign(topic, tag);
             } else {
-                consumer.subscribe(topic, tag);
+                consumer.setSubExpressionForAssign(topic, sql);
             }
+            consumer.start();
         } catch (MQClientException e) {
             LOG.error("Failed to initial RocketMQ consumer.", e);
             consumer.shutdown();
