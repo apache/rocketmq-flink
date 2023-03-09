@@ -32,12 +32,16 @@ public class MetricUtils {
     // https://cwiki.apache.org/confluence/display/FLINK/FLIP-33%3A+Standardize+Connector+Metrics
     public static final String CURRENT_FETCH_EVENT_TIME_LAG = "currentFetchEventTimeLag";
     public static final String CURRENT_EMIT_EVENT_TIME_LAG = "currentEmitEventTimeLag";
-
+    private static final String METRIC_GROUP_SOURCE = "source";
     private static final String METRIC_GROUP_SINK = "sink";
     private static final String METRICS_SINK_IN_TPS = "inTps";
-    private static final String METRICS_SINK_OUT_TPS = "outTps";
     private static final String METRICS_SINK_OUT_BPS = "outBps";
     private static final String METRICS_SINK_OUT_LATENCY = "outLatency";
+    public static final String SUFFIX_RATE = "PerSecond";
+    public static final String IO_NUM_RECORDS_IN = "numRecordsIn";
+    public static final String IO_NUM_RECORDS_OUT = "numRecordsOut";
+    public static final String IO_NUM_RECORDS_IN_RATE = IO_NUM_RECORDS_IN + SUFFIX_RATE;
+    public static final String IO_NUM_RECORDS_OUT_RATE = IO_NUM_RECORDS_OUT + SUFFIX_RATE;
 
     public static Meter registerSinkInTps(RuntimeContext context) {
         Counter parserCounter =
@@ -47,16 +51,6 @@ public class MetricUtils {
         return context.getMetricGroup()
                 .addGroup(METRIC_GROUP_SINK)
                 .meter(METRICS_SINK_IN_TPS, new MeterView(parserCounter, 60));
-    }
-
-    public static Meter registerOutTps(RuntimeContext context) {
-        Counter parserCounter =
-                context.getMetricGroup()
-                        .addGroup(METRIC_GROUP_SINK)
-                        .counter(METRICS_SINK_OUT_TPS + "_counter", new SimpleCounter());
-        return context.getMetricGroup()
-                .addGroup(METRIC_GROUP_SINK)
-                .meter(METRICS_SINK_OUT_TPS, new MeterView(parserCounter, 60));
     }
 
     public static Meter registerOutBps(RuntimeContext context) {
@@ -73,6 +67,26 @@ public class MetricUtils {
         return context.getMetricGroup()
                 .addGroup(METRIC_GROUP_SINK)
                 .gauge(METRICS_SINK_OUT_LATENCY, new LatencyGauge());
+    }
+
+    public static Meter registerNumRecordsInPerSecond(RuntimeContext context) {
+        Counter numRecordsIn =
+                context.getMetricGroup()
+                        .addGroup(METRIC_GROUP_SOURCE)
+                        .counter(IO_NUM_RECORDS_IN, new SimpleCounter());
+        return context.getMetricGroup()
+                .addGroup(METRIC_GROUP_SOURCE)
+                .meter(IO_NUM_RECORDS_IN_RATE, new MeterView(numRecordsIn, 60));
+    }
+
+    public static Meter registerNumRecordsOutPerSecond(RuntimeContext context) {
+        Counter numRecordsOut =
+                context.getMetricGroup()
+                        .addGroup(METRIC_GROUP_SINK)
+                        .counter(IO_NUM_RECORDS_OUT, new SimpleCounter());
+        return context.getMetricGroup()
+                .addGroup(METRIC_GROUP_SINK)
+                .meter(IO_NUM_RECORDS_OUT_RATE, new MeterView(numRecordsOut, 60));
     }
 
     public static class LatencyGauge implements Gauge<Double> {
