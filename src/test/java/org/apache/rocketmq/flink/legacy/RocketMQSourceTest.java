@@ -18,6 +18,7 @@
 
 package org.apache.rocketmq.flink.legacy;
 
+import java.util.Map;
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.consumer.PullResult;
 import org.apache.rocketmq.client.consumer.PullStatus;
@@ -50,16 +51,16 @@ import static org.mockito.Mockito.when;
 @Ignore
 public class RocketMQSourceTest {
 
-    private RocketMQSourceFunction rocketMQSource;
+    private RocketMQSourceFunction<Map<String, String>> rocketMQSource;
     private DefaultLitePullConsumer consumer;
-    private KeyValueDeserializationSchema deserializationSchema;
+    private KeyValueDeserializationSchema<Map<String, String>> deserializationSchema;
     private String topic = "tpc";
 
     @Before
     public void setUp() throws Exception {
         deserializationSchema = new SimpleKeyValueDeserializationSchema();
         Properties props = new Properties();
-        rocketMQSource = new RocketMQSourceFunction(deserializationSchema, props);
+        rocketMQSource = new RocketMQSourceFunction<>(deserializationSchema, props);
 
         setFieldValue(rocketMQSource, "topic", topic);
         setFieldValue(rocketMQSource, "runningChecker", new SingleRunningCheck());
@@ -89,7 +90,7 @@ public class RocketMQSourceTest {
         rocketMQSource.run(context);
 
         // schedule the pull task
-        Set<MessageQueue> set = new HashSet();
+        Set<MessageQueue> set = new HashSet<>();
         set.add(new MessageQueue(topic, "brk", 1));
 
         MessageExt msg = pullResult.getMsgFoundList().get(0);

@@ -33,7 +33,7 @@ public class SimpleKeyValueSerializationSchemaTest {
         SimpleKeyValueDeserializationSchema deserializationSchema =
                 new SimpleKeyValueDeserializationSchema("id", "name");
 
-        Map tuple = new HashMap();
+        Map<String, String> tuple = new HashMap<>();
         tuple.put("id", "x001");
         tuple.put("name", "vesense");
 
