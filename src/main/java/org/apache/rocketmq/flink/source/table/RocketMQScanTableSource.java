@@ -27,9 +27,13 @@ import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQDeserializat
 import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQRowDeserializationSchema;
 import org.apache.rocketmq.flink.source.reader.deserializer.RowDeserializationSchema.MetadataConverter;
 
+import org.apache.flink.api.common.serialization.DeserializationSchema;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;
+import org.apache.flink.table.connector.Projection;
+import org.apache.flink.table.connector.format.DecodingFormat;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.connector.source.ScanTableSource;
 import org.apache.flink.table.connector.source.SourceFunctionProvider;
@@ -39,6 +43,9 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.descriptors.DescriptorProperties;
 import org.apache.flink.table.types.DataType;
+import org.apache.flink.util.Preconditions;
+
+import javax.annotation.Nullable;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -55,6 +62,25 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
 
     private final DescriptorProperties properties;
     private final TableSchema schema;
+
+    /** Data type that describes the final output of the source. */
+    protected DataType producedDataType;
+
+    /** Optional format for decoding keys from Kafka. */
+    private final @Nullable DecodingFormat<
+                    org.apache.flink.api.common.serialization.DeserializationSchema<RowData>>
+            keyDecodingFormat;
+
+    /** Format for decoding values from Kafka. */
+    private final @Nullable DecodingFormat<
+                    org.apache.flink.api.common.serialization.DeserializationSchema<RowData>>
+            valueDecodingFormat;
+
+    /** Indices that determine the key fields and the target position in the produced row. */
+    protected final int[] keyProjection;
+
+    /** Indices that determine the value fields and the target position in the produced row. */
+    protected final int[] valueProjection;
 
     private final String consumerOffsetMode;
     private final long consumerOffsetTimestamp;
@@ -81,6 +107,16 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             long pollTime,
             DescriptorProperties properties,
             TableSchema schema,
+            @Nullable
+                    DecodingFormat<
+                                    org.apache.flink.api.common.serialization.DeserializationSchema<
+                                            RowData>>
+                            keyDecodingFormat,
+            DecodingFormat<org.apache.flink.api.common.serialization.DeserializationSchema<RowData>>
+                    valueDecodingFormat,
+            int[] keyProjection,
+            int[] valueProjection,
+            DataType physicalDataType,
             String topic,
             String consumerGroup,
             String nameServerAddress,
@@ -98,6 +134,13 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         this.pollTime = pollTime;
         this.properties = properties;
         this.schema = schema;
+        this.keyDecodingFormat = keyDecodingFormat;
+        this.valueDecodingFormat = valueDecodingFormat;
+        this.keyProjection =
+                Preconditions.checkNotNull(keyProjection, "Key projection must not be null.");
+        this.valueProjection =
+                Preconditions.checkNotNull(valueProjection, "Value projection must not be null.");
+        this.producedDataType = physicalDataType;
         this.topic = topic;
         this.consumerGroup = consumerGroup;
         this.nameServerAddress = nameServerAddress;
@@ -123,7 +166,19 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     @Override
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext scanContext) {
         if (useNewApi) {
-            return SourceProvider.of(
+            final org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+                    keyDeserialization =
+                            createDeserialization(scanContext, keyDecodingFormat, keyProjection);
+
+            final org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+                    valueDeserialization =
+                            createDeserialization(
+                                    scanContext, valueDecodingFormat, valueProjection);
+
+            final TypeInformation<RowData> producedTypeInfo =
+                    scanContext.createTypeInformation(producedDataType);
+
+            RocketMQSource<RowData> rocketMQSource =
                     new RocketMQSource<>(
                             pollTime,
                             topic,
@@ -138,9 +193,11 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                             startMessageOffset < 0 ? 0 : startMessageOffset,
                             partitionDiscoveryIntervalMs,
                             isBounded() ? BOUNDED : CONTINUOUS_UNBOUNDED,
-                            createRocketMQDeserializationSchema(),
+                            createRocketMQDeserializationSchema(
+                                    keyDeserialization, valueDeserialization, producedTypeInfo),
                             consumerOffsetMode,
-                            consumerOffsetTimestamp));
+                            consumerOffsetTimestamp);
+            return SourceProvider.of(rocketMQSource);
         } else {
             return SourceFunctionProvider.of(
                     new RocketMQSourceFunction<>(
@@ -169,6 +226,11 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                         pollTime,
                         properties,
                         schema,
+                        keyDecodingFormat,
+                        valueDecodingFormat,
+                        keyProjection,
+                        valueProjection,
+                        producedDataType,
                         topic,
                         consumerGroup,
                         nameServerAddress,
@@ -192,7 +254,11 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         return RocketMQScanTableSource.class.getName();
     }
 
-    private RocketMQDeserializationSchema<RowData> createRocketMQDeserializationSchema() {
+    private RocketMQDeserializationSchema<RowData> createRocketMQDeserializationSchema(
+            DeserializationSchema<RowData> keyDeserialization,
+            DeserializationSchema<RowData> valueDeserialization,
+            TypeInformation<RowData> producedTypeInfo) {
+
         final MetadataConverter[] metadataConverters =
                 metadataKeys.stream()
                         .map(
@@ -203,8 +269,14 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                                                 .orElseThrow(IllegalStateException::new))
                         .map(m -> m.converter)
                         .toArray(MetadataConverter[]::new);
+
         return new RocketMQRowDeserializationSchema(
-                schema, properties.asMap(), metadataKeys.size() > 0, metadataConverters);
+                schema,
+                keyDeserialization,
+                valueDeserialization,
+                properties.asMap(),
+                metadataKeys.size() > 0,
+                metadataConverters);
     }
 
     private boolean isBounded() {
@@ -261,5 +333,23 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             this.dataType = dataType;
             this.converter = converter;
         }
+    }
+
+    private @Nullable org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+            createDeserialization(
+                    DynamicTableSource.Context context,
+                    @Nullable
+                            DecodingFormat<
+                                            org.apache.flink.api.common.serialization
+                                                            .DeserializationSchema<
+                                                    RowData>>
+                                    format,
+                    int[] projection) {
+        if (format == null) {
+            return null;
+        }
+
+        DataType physicalFormatDataType = Projection.of(projection).project(this.producedDataType);
+        return format.createRuntimeDecoder(context, physicalFormatDataType);
     }
 }

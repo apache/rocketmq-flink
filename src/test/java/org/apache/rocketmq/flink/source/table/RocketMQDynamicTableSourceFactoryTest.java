@@ -56,6 +56,8 @@ public class RocketMQDynamicTableSourceFactoryTest {
     private static final String CONSUMER_GROUP = "test_consumer";
     private static final String NAME_SERVER_ADDRESS = "127.0.0.1:9876";
 
+    private static final String FORMAT_JSON = "json";
+
     @Test
     public void testRocketMQDynamicTableSourceWithLegalOption() {
         final Map<String, String> options = new HashMap<>();
@@ -64,6 +66,40 @@ public class RocketMQDynamicTableSourceFactoryTest {
         options.put(RocketMQOptions.CONSUMER_GROUP.key(), CONSUMER_GROUP);
         options.put(RocketMQOptions.NAME_SERVER_ADDRESS.key(), NAME_SERVER_ADDRESS);
         final DynamicTableSource tableSource = createTableSource(options);
+        assertTrue(tableSource instanceof RocketMQScanTableSource);
+        assertEquals(RocketMQScanTableSource.class.getName(), tableSource.asSummaryString());
+    }
+
+    @Test
+    public void testRocketMQDynamicTableSourceWithFormatOption() {
+        final Map<String, String> options = new HashMap<>();
+        options.put("connector", IDENTIFIER);
+        options.put(RocketMQOptions.TOPIC.key(), TOPIC);
+        options.put(RocketMQOptions.CONSUMER_GROUP.key(), CONSUMER_GROUP);
+        options.put(RocketMQOptions.NAME_SERVER_ADDRESS.key(), NAME_SERVER_ADDRESS);
+
+        options.put(FactoryUtil.FORMAT.key(), FORMAT_JSON);
+        final DynamicTableSource tableSource = createTableSource(options);
+
+        assertTrue(tableSource instanceof RocketMQScanTableSource);
+        assertEquals(RocketMQScanTableSource.class.getName(), tableSource.asSummaryString());
+    }
+
+    @Test
+    public void testRocketMQDynamicTableSourceWithJsonOption() {
+        final Map<String, String> options = new HashMap<>();
+        options.put("connector", IDENTIFIER);
+        options.put(RocketMQOptions.TOPIC.key(), TOPIC);
+        options.put(RocketMQOptions.CONSUMER_GROUP.key(), CONSUMER_GROUP);
+        options.put(RocketMQOptions.NAME_SERVER_ADDRESS.key(), NAME_SERVER_ADDRESS);
+        options.put(FactoryUtil.FORMAT.key(), FORMAT_JSON);
+
+        // json props
+        options.put("json.fail-on-missing-field", "false");
+        options.put("json.ignore-parse-errors", "true");
+        options.put("json.map-null-key.mode", "FAIL");
+        final DynamicTableSource tableSource = createTableSource(options);
+
         assertTrue(tableSource instanceof RocketMQScanTableSource);
         assertEquals(RocketMQScanTableSource.class.getName(), tableSource.asSummaryString());
     }

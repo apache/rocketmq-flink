@@ -17,13 +17,14 @@
 package org.apache.rocketmq.flink.legacy.common.serialization;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.typeutils.MapTypeInfo;
 
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import org.apache.flink.api.java.typeutils.MapTypeInfo;
 
-public class SimpleKeyValueDeserializationSchema implements KeyValueDeserializationSchema<Map<String, String>> {
+public class SimpleKeyValueDeserializationSchema
+        implements KeyValueDeserializationSchema<Map<String, String>> {
     public static final String DEFAULT_KEY_FIELD = "key";
     public static final String DEFAULT_VALUE_FIELD = "value";
 

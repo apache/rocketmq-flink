@@ -28,12 +28,13 @@ import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.util.Collector;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * A row data wrapper class that wraps a {@link RocketMQDeserializationSchema} to deserialize {@link
+ * A row data wrapper class that wraps a {@link DeserializationSchema} to deserialize {@link
  * MessageExt}.
  */
 public class RocketMQRowDeserializationSchema implements RocketMQDeserializationSchema<RowData> {
@@ -46,6 +47,10 @@ public class RocketMQRowDeserializationSchema implements RocketMQDeserialization
 
     public RocketMQRowDeserializationSchema(
             TableSchema tableSchema,
+            org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+                    keyDeserialization,
+            org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+                    valueDeserialization,
             Map<String, String> properties,
             boolean hasMetadata,
             MetadataConverter[] metadataConverters) {
@@ -55,17 +60,20 @@ public class RocketMQRowDeserializationSchema implements RocketMQDeserialization
                         .setTableSchema(tableSchema)
                         .setHasMetadata(hasMetadata)
                         .setMetadataConverters(metadataConverters)
+                        .setKeyDeserialization(keyDeserialization)
+                        .setValueDeserialization(valueDeserialization)
                         .build();
     }
 
     @Override
-    public void open(InitializationContext context) {
+    public void open(InitializationContext context) throws Exception {
         deserializationSchema.open(context);
         bytesMessages = new ArrayList<>();
     }
 
     @Override
-    public void deserialize(List<MessageExt> input, Collector<RowData> collector) {
+    public void deserialize(List<MessageExt> input, Collector<RowData> collector)
+            throws IOException {
         extractMessages(input);
         deserializationSchema.deserialize(bytesMessages, collector);
     }
