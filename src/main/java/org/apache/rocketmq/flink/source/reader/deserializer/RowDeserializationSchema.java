@@ -42,8 +42,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
+import java.io.IOException;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -60,6 +64,16 @@ public class RowDeserializationSchema
     private static final Logger LOGGER = LoggerFactory.getLogger(RowDeserializationSchema.class);
 
     private transient TableSchema tableSchema;
+
+    private final @Nullable org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+            keyDeserialization;
+
+    private final @Nullable org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+            valueDeserialization;
+
+    /** Indices that determine the key fields and the target position in the produced row. */
+    private final int[] keyProjection;
+
     private final DirtyDataStrategy formatErrorStrategy;
     private final DirtyDataStrategy fieldMissingStrategy;
     private final DirtyDataStrategy fieldIncrementStrategy;
@@ -67,6 +81,8 @@ public class RowDeserializationSchema
     private final String fieldDelimiter;
     private final String lineDelimiter;
     private final boolean columnErrorDebug;
+
+    private final BufferingCollector keyCollector;
     private final MetadataCollector metadataCollector;
     private final int totalColumnSize;
     private final int dataColumnSize;
@@ -83,6 +99,12 @@ public class RowDeserializationSchema
 
     public RowDeserializationSchema(
             TableSchema tableSchema,
+            @Nullable
+                    org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+                            keyDeserialization,
+            org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+                    valueDeserialization,
+            int[] keyProjection,
             DirtyDataStrategy formatErrorStrategy,
             DirtyDataStrategy fieldMissingStrategy,
             DirtyDataStrategy fieldIncrementStrategy,
@@ -95,6 +117,9 @@ public class RowDeserializationSchema
             List<String> headerFields,
             Map<String, String> properties) {
         this.tableSchema = tableSchema;
+        this.keyDeserialization = keyDeserialization;
+        this.valueDeserialization = valueDeserialization;
+        this.keyProjection = keyProjection;
         this.formatErrorStrategy = formatErrorStrategy;
         this.fieldMissingStrategy = fieldMissingStrategy;
         this.fieldIncrementStrategy = fieldIncrementStrategy;
@@ -102,6 +127,7 @@ public class RowDeserializationSchema
         this.encoding = encoding;
         this.fieldDelimiter = StringEscapeUtils.unescapeJava(fieldDelimiter);
         this.lineDelimiter = StringEscapeUtils.unescapeJava(lineDelimiter);
+        this.keyCollector = new BufferingCollector();
         this.metadataCollector = new MetadataCollector(hasMetadata, metadataConverters);
         this.headerFields = headerFields == null ? null : new HashSet<>(headerFields);
         this.properties = properties;
@@ -126,19 +152,42 @@ public class RowDeserializationSchema
     }
 
     @Override
-    public void open(InitializationContext context) {
+    public void open(InitializationContext context) throws Exception {
         DescriptorProperties descriptorProperties = new DescriptorProperties();
         descriptorProperties.putProperties(properties);
         this.tableSchema = SchemaValidator.deriveTableSinkSchema(descriptorProperties);
         this.fieldDataTypes = tableSchema.getFieldDataTypes();
         this.lastLogExceptionTime = System.currentTimeMillis();
         this.lastLogHandleFieldTime = System.currentTimeMillis();
+
+        if (keyDeserialization != null) {
+            keyDeserialization.open(context);
+        }
+        if (valueDeserialization != null) {
+            valueDeserialization.open(context);
+        }
     }
 
     @Override
-    public void deserialize(List<BytesMessage> messages, Collector<RowData> collector) {
+    public void deserialize(List<BytesMessage> messages, Collector<RowData> collector)
+            throws IOException {
         metadataCollector.collector = collector;
-        deserialize(messages, metadataCollector);
+
+        if (keyDeserialization == null && valueDeserialization == null) {
+            // Use default deserializer
+            deserialize(messages, metadataCollector);
+            return;
+        }
+
+        if (keyDeserialization == null && !metadataCollector.hasMetadata) {
+            for (BytesMessage message : messages) {
+                valueDeserialization.deserialize(message.getData(), collector);
+            }
+        } else {
+            // TODO Implement key deserialization
+            LOGGER.error("keyDeserialization not support yet");
+            throw new RuntimeException("keyDeserialization not support yet");
+        }
     }
 
     private void deserialize(List<BytesMessage> messages, MetadataCollector collector) {
@@ -405,7 +454,27 @@ public class RowDeserializationSchema
 
     /** Source metadata converter interface. */
     public interface MetadataConverter extends Serializable {
+
         Object read(BytesMessage message);
+    }
+
+    // --------------------------------------------------------------------------------------------
+
+    private static final class BufferingCollector implements Collector<RowData>, Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        private final List<RowData> buffer = new ArrayList<>();
+
+        @Override
+        public void collect(RowData record) {
+            buffer.add(record);
+        }
+
+        @Override
+        public void close() {
+            // nothing to do
+        }
     }
 
     // --------------------------------------------------------------------------------------------
@@ -457,6 +526,12 @@ public class RowDeserializationSchema
     public static class Builder {
 
         private TableSchema schema;
+        private org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+                keyDeserialization;
+
+        private org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+                valueDeserialization;
+        private int[] keyProjection;
         private DirtyDataStrategy formatErrorStrategy = DirtyDataStrategy.SKIP;
         private DirtyDataStrategy fieldMissingStrategy = DirtyDataStrategy.SKIP;
         private DirtyDataStrategy fieldIncrementStrategy = DirtyDataStrategy.CUT;
@@ -476,6 +551,20 @@ public class RowDeserializationSchema
             return this;
         }
 
+        public Builder setKeyDeserialization(
+                org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+                        keyDeserialization) {
+            this.keyDeserialization = keyDeserialization;
+            return this;
+        }
+
+        public Builder setValueDeserialization(
+                org.apache.flink.api.common.serialization.DeserializationSchema<RowData>
+                        valueDeserialization) {
+            this.valueDeserialization = valueDeserialization;
+            return this;
+        }
+
         public Builder setFormatErrorStrategy(DirtyDataStrategy formatErrorStrategy) {
             this.formatErrorStrategy = formatErrorStrategy;
             return this;
@@ -488,6 +577,11 @@ public class RowDeserializationSchema
 
         public Builder setFieldIncrementStrategy(DirtyDataStrategy fieldIncrementStrategy) {
             this.fieldIncrementStrategy = fieldIncrementStrategy;
+            return this;
+        }
+
+        public Builder setKeyProjection(int[] keyProjection) {
+            this.keyProjection = keyProjection;
             return this;
         }
 
@@ -577,6 +671,9 @@ public class RowDeserializationSchema
         public RowDeserializationSchema build() {
             return new RowDeserializationSchema(
                     schema,
+                    keyDeserialization,
+                    valueDeserialization,
+                    keyProjection,
                     formatErrorStrategy,
                     fieldMissingStrategy,
                     fieldIncrementStrategy,
@@ -593,6 +690,7 @@ public class RowDeserializationSchema
 
     /** Options for {@link RowDeserializationSchema}. */
     public static class CollectorOption {
+
         public static final ConfigOption<String> ENCODING =
                 ConfigOptions.key("encoding".toLowerCase()).defaultValue("UTF-8");
         public static final ConfigOption<String> FIELD_DELIMITER =

@@ -29,7 +29,6 @@ import org.apache.rocketmq.flink.source.reader.deserializer.RocketMQDeserializat
 import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplit;
 import org.apache.rocketmq.flink.source.split.RocketMQPartitionSplitSerializer;
 
-import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.connector.source.Source;
@@ -123,12 +122,13 @@ public class RocketMQSource<OUT>
     }
 
     @Override
-    public SourceReader<OUT, RocketMQPartitionSplit> createReader(
-            SourceReaderContext readerContext) {
+    public SourceReader<OUT, RocketMQPartitionSplit> createReader(SourceReaderContext readerContext)
+            throws Exception {
         FutureCompletingBlockingQueue<RecordsWithSplitIds<Tuple3<OUT, Long, Long>>> elementsQueue =
                 new FutureCompletingBlockingQueue<>();
         deserializationSchema.open(
-                new DeserializationSchema.InitializationContext() {
+                new org.apache.flink.api.common.serialization.DeserializationSchema
+                        .InitializationContext() {
                     @Override
                     public MetricGroup getMetricGroup() {
                         return readerContext.metricGroup();

@@ -20,14 +20,23 @@ package org.apache.rocketmq.flink.source.table;
 
 import org.apache.rocketmq.flink.common.RocketMQOptions;
 
+import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.table.connector.format.DecodingFormat;
 import org.apache.flink.table.connector.source.DynamicTableSource;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.descriptors.DescriptorProperties;
+import org.apache.flink.table.factories.DeserializationFormatFactory;
 import org.apache.flink.table.factories.DynamicTableSourceFactory;
 import org.apache.flink.table.factories.FactoryUtil;
+import org.apache.flink.table.factories.FactoryUtil.TableFactoryHelper;
+import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.utils.TableSchemaUtils;
+import org.apache.flink.types.RowKind;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StringUtils;
 
@@ -36,11 +45,14 @@ import org.apache.commons.lang3.time.FastDateFormat;
 import java.text.ParseException;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TimeZone;
 
+import static org.apache.flink.table.factories.FactoryUtil.FORMAT;
 import static org.apache.flink.table.factories.FactoryUtil.createTableFactoryHelper;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.CONSUMER_GROUP;
+import static org.apache.rocketmq.flink.common.RocketMQOptions.KEY_FORMAT;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.NAME_SERVER_ADDRESS;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_ACCESS_KEY;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_COLUMN_ERROR_DEBUG;
@@ -61,7 +73,10 @@ import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_TAG;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_TIME_ZONE;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.OPTIONAL_USE_NEW_API;
 import static org.apache.rocketmq.flink.common.RocketMQOptions.TOPIC;
+import static org.apache.rocketmq.flink.common.RocketMQOptions.VALUE_FORMAT;
 import static org.apache.rocketmq.flink.legacy.RocketMQConfig.CONSUMER_OFFSET_LATEST;
+import static org.apache.rocketmq.flink.source.table.RocketMQConnectorOptionsUtil.createKeyFormatProjection;
+import static org.apache.rocketmq.flink.source.table.RocketMQConnectorOptionsUtil.createValueFormatProjection;
 
 /**
  * Defines the {@link DynamicTableSourceFactory} implementation to create {@link
@@ -106,12 +121,19 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         optionalOptions.add(OPTIONAL_SECRET_KEY);
         optionalOptions.add(OPTIONAL_SCAN_STARTUP_MODE);
         optionalOptions.add(OPTIONAL_CONSUMER_POLL_MS);
+        optionalOptions.add(FORMAT);
+        optionalOptions.add(KEY_FORMAT);
+        optionalOptions.add(VALUE_FORMAT);
         return optionalOptions;
     }
 
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
         FactoryUtil.TableFactoryHelper helper = createTableFactoryHelper(this, context);
+        final Optional<DecodingFormat<DeserializationSchema<RowData>>> keyDecodingFormat =
+                getKeyDecodingFormat(helper);
+        final Optional<DecodingFormat<DeserializationSchema<RowData>>> valueDecodingFormat =
+                getValueDecodingFormat(helper);
         helper.validate();
         Map<String, String> rawProperties = context.getCatalogTable().getOptions();
         Configuration configuration = Configuration.fromMap(rawProperties);
@@ -183,10 +205,24 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         long consumerOffsetTimestamp =
                 configuration.getLong(
                         RocketMQOptions.OPTIONAL_OFFSET_FROM_TIMESTAMP, System.currentTimeMillis());
+
+        final ReadableConfig tableOptions = helper.getOptions();
+
+        final DataType physicalDataType =
+                context.getCatalogTable().getResolvedSchema().toPhysicalRowDataType();
+        final int[] keyProjection = createKeyFormatProjection(tableOptions, physicalDataType);
+
+        final int[] valueProjection = createValueFormatProjection(tableOptions, physicalDataType);
+
         return new RocketMQScanTableSource(
                 configuration.getLong(OPTIONAL_CONSUMER_POLL_MS),
                 descriptorProperties,
                 physicalSchema,
+                keyDecodingFormat.orElse(null),
+                valueDecodingFormat.orElse(null),
+                keyProjection,
+                valueProjection,
+                physicalDataType,
                 topic,
                 consumerGroup,
                 nameServerAddress,
@@ -207,5 +243,38 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         FastDateFormat simpleDateFormat =
                 FastDateFormat.getInstance(DATE_FORMAT, TimeZone.getTimeZone(timeZone));
         return simpleDateFormat.parse(dateString).getTime();
+    }
+
+    private static Optional<DecodingFormat<DeserializationSchema<RowData>>> getValueDecodingFormat(
+            TableFactoryHelper helper) {
+        Optional<DecodingFormat<DeserializationSchema<RowData>>>
+                deserializationSchemaDecodingFormat =
+                        helper.discoverOptionalDecodingFormat(
+                                DeserializationFormatFactory.class, FORMAT);
+        if (deserializationSchemaDecodingFormat.isPresent()) {
+            return deserializationSchemaDecodingFormat;
+        }
+
+        return helper.discoverOptionalDecodingFormat(
+                DeserializationFormatFactory.class, VALUE_FORMAT);
+    }
+
+    private static Optional<DecodingFormat<DeserializationSchema<RowData>>> getKeyDecodingFormat(
+            TableFactoryHelper helper) {
+        final Optional<DecodingFormat<DeserializationSchema<RowData>>> keyDecodingFormat =
+                helper.discoverOptionalDecodingFormat(
+                        DeserializationFormatFactory.class, KEY_FORMAT);
+        keyDecodingFormat.ifPresent(
+                format -> {
+                    if (!format.getChangelogMode().containsOnly(RowKind.INSERT)) {
+                        throw new ValidationException(
+                                String.format(
+                                        "A key format should only deal with INSERT-only records. "
+                                                + "But %s has a changelog mode of %s.",
+                                        helper.getOptions().get(KEY_FORMAT),
+                                        format.getChangelogMode()));
+                    }
+                });
+        return keyDecodingFormat;
     }
 }
