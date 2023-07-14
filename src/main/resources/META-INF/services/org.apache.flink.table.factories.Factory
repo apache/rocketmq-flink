@@ -13,6 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.apache.rocketmq.flink.source.table.RocketMQDynamicTableSourceFactory
-org.apache.rocketmq.flink.sink.table.RocketMQDynamicTableSinkFactory
-org.apache.rocketmq.flink.catalog.RocketMQCatalogFactory
+org.apache.flink.connector.rocketmq.source.table.RocketMQDynamicTableSourceFactory
+org.apache.flink.connector.rocketmq.sink.table.RocketMQDynamicTableSinkFactory
+org.apache.flink.connector.rocketmq.catalog.RocketMQCatalogFactory
