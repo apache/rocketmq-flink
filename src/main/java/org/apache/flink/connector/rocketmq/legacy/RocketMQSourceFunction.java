@@ -62,6 +62,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.management.ManagementFactory;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -536,7 +537,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         }
     }
 
-    public void initOffsetTableFromRestoredOffsets(List<MessageQueue> messageQueues) {
+    public void initOffsetTableFromRestoredOffsets(List<MessageQueue> messageQueues) throws MQClientException {
         Preconditions.checkNotNull(restoredOffsets, "restoredOffsets can't be null");
         restoredOffsets.forEach(
                 (mq, offset) -> {
@@ -544,6 +545,17 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                         offsetTable.put(mq, offset);
                     }
                 });
+
+        List<MessageQueue> extMessageQueue = new ArrayList<>();
+        for (MessageQueue messageQueue : messageQueues) {
+            if (!offsetTable.containsKey(messageQueue)) {
+                extMessageQueue.add(messageQueue);
+            }
+        }
+        if (extMessageQueue.size() != 0) {
+            log.info("no restoredOffsets for {}, so init offset for these queues", extMessageQueue);
+            initOffsets(extMessageQueue);
+        }
         log.info("init offset table [{}] from restoredOffsets successful.", offsetTable);
     }
 
