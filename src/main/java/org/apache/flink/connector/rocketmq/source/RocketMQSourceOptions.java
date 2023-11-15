@@ -86,7 +86,7 @@ public class RocketMQSourceOptions extends RocketMQOptions {
     public static final ConfigOption<Long> OPTIONAL_STARTUP_OFFSET_TIMESTAMP =
             ConfigOptions.key(CONSUMER_PREFIX + "startup.offset.timestamp")
                     .longType()
-                    .noDefaultValue();
+                    .defaultValue(RocketMQConfig.DEFAULT_START_MESSAGE_OFFSET);
 
     public static final ConfigOption<String> OPTIONAL_STOP_OFFSET_TIMESTAMP =
             ConfigOptions.key(CONSUMER_PREFIX + "stop.offset.timestamp")
