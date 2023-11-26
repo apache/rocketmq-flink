@@ -36,13 +36,11 @@ import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
 import org.apache.flink.connector.rocketmq.source.util.UtilAll;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
-
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
-
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -190,7 +188,6 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
     public void wakeUp() {
         LOG.debug("Wake up the split reader in case the fetcher thread is blocking in fetch().");
         wakeup = true;
-        this.consumer.wakeup();
     }
 
     @Override

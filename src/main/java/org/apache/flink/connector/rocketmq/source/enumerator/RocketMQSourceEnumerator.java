@@ -18,6 +18,8 @@
 
 package org.apache.flink.connector.rocketmq.source.enumerator;
 
+import com.alibaba.fastjson.JSON;
+import com.google.common.collect.Sets;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.connector.source.Boundedness;
@@ -34,15 +36,11 @@ import org.apache.flink.connector.rocketmq.source.enumerator.allocate.AllocateSt
 import org.apache.flink.connector.rocketmq.source.enumerator.offset.OffsetsSelector;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
 import org.apache.flink.util.FlinkRuntimeException;
-
-import com.alibaba.fastjson.JSON;
-import com.google.common.collect.Sets;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -166,6 +164,9 @@ public class RocketMQSourceEnumerator
      */
     @Override
     public void addSplitsBack(List<RocketMQSourceSplit> splits, int subtaskId) {
+        SourceSplitChangeResult sourceSplitChangeResult =
+                new SourceSplitChangeResult(new HashSet<>(splits));
+        this.calculateSplitAssignment(sourceSplitChangeResult);
         // If the failed subtask has already restarted, we need to assign splits to it
         if (context.registeredReaders().containsKey(subtaskId)) {
             sendSplitChangesToRemote(Collections.singleton(subtaskId));
@@ -321,7 +322,7 @@ public class RocketMQSourceEnumerator
             }
 
             final Set<RocketMQSourceSplit> pendingAssignmentForReader =
-                    this.pendingSplitAssignmentMap.get(pendingReader);
+                    this.pendingSplitAssignmentMap.remove(pendingReader);
 
             // Put pending assignment into incremental assignment
             if (pendingAssignmentForReader != null && !pendingAssignmentForReader.isEmpty()) {
