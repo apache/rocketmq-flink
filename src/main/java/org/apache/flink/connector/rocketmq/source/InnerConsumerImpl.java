@@ -239,6 +239,7 @@ public class InnerConsumerImpl implements InnerConsumer {
                         long offset =
                                 consumer.getOffsetStore()
                                         .readOffset(messageQueue, ReadOffsetType.READ_FROM_STORE);
+
                         if (offset == -1) {
                             offset = adminExt.minOffset(messageQueue);
                             LOG.info(
