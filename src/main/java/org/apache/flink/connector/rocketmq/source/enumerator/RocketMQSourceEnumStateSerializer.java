@@ -18,9 +18,8 @@
 
 package org.apache.flink.connector.rocketmq.source.enumerator;
 
-import org.apache.flink.core.io.SimpleVersionedSerializer;
-
 import com.alibaba.fastjson.JSON;
+import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,7 +92,7 @@ public class RocketMQSourceEnumStateSerializer
                 String topic = in.readUTF();
                 int queueId = in.readInt();
 
-                MessageQueue queue = new MessageQueue(brokerName, topic, queueId);
+                MessageQueue queue = new MessageQueue(topic, brokerName, queueId);
                 result.add(queue);
             }
 

@@ -46,6 +46,7 @@
         <junit.version>4.13.2</junit.version>
         <junit-jupiter.version>5.9.2</junit-jupiter.version>
         <powermock.version>1.7.4</powermock.version>
+        <jaxb-api.version>2.3.1</jaxb-api.version>
     </properties>
 
     <dependencies>
