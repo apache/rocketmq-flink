@@ -64,6 +64,8 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
         Set<ConfigOption<?>> requiredOptions = new HashSet<>();
         requiredOptions.add(TOPIC);
         requiredOptions.add(PRODUCER_GROUP);
+        requiredOptions.add(ENDPOINTS);
+
         // requiredOptions.add(PERSIST_OFFSET_INTERVAL);
         return requiredOptions;
     }
@@ -76,6 +78,13 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
         optionalOptions.add(OPTIONAL_FIELD_DELIMITER);
         optionalOptions.add(OPTIONAL_ACCESS_KEY);
         optionalOptions.add(OPTIONAL_SECRET_KEY);
+        optionalOptions.add(OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN);
+        optionalOptions.add(OPTIONAL_WRITE_RETRY_TIMES);
+        optionalOptions.add(OPTIONAL_WRITE_SLEEP_TIME_MS);
+        optionalOptions.add(OPTIONAL_WRITE_IS_DYNAMIC_TAG);
+        optionalOptions.add(OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN_WRITE_INCLUDED);
+        optionalOptions.add(OPTIONAL_WRITE_KEYS_TO_BODY);
+        optionalOptions.add(OPTIONAL_WRITE_KEY_COLUMNS);
         return optionalOptions;
     }
 
@@ -122,8 +131,8 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
                 dynamicColumn,
                 fieldDelimiter,
                 encoding,
-                sleepTimeMs,
                 retryTimes,
+                sleepTimeMs,
                 isDynamicTag,
                 isDynamicTagIncluded,
                 writeKeysToBody,
