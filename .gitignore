@@ -34,3 +34,4 @@ nohup.out
 
 # Ignore it while not disable for some reason.
 dependency-reduced-pom.xml
+/logs/output.log.*
