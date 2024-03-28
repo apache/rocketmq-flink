@@ -18,8 +18,6 @@
 
 package org.apache.flink.connector.rocketmq.source.enumerator;
 
-import com.alibaba.fastjson.JSON;
-import com.google.common.collect.Sets;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.connector.source.Boundedness;
@@ -36,11 +34,15 @@ import org.apache.flink.connector.rocketmq.source.enumerator.allocate.AllocateSt
 import org.apache.flink.connector.rocketmq.source.enumerator.offset.OffsetsSelector;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
 import org.apache.flink.util.FlinkRuntimeException;
+
+import com.alibaba.fastjson.JSON;
+import com.google.common.collect.Sets;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;

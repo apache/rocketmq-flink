@@ -17,7 +17,6 @@
 
 package org.apache.flink.connector.rocketmq.source;
 
-import com.alibaba.fastjson.JSON;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.source.enumerator.offset.OffsetsSelector;
@@ -26,6 +25,8 @@ import org.apache.flink.connector.rocketmq.source.reader.MessageViewExt;
 import org.apache.flink.connector.rocketmq.source.util.UtilAll;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.StringUtils;
+
+import com.alibaba.fastjson.JSON;
 import org.apache.rocketmq.acl.common.AclClientRPCHook;
 import org.apache.rocketmq.acl.common.SessionCredentials;
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;

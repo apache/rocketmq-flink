@@ -26,7 +26,6 @@ import org.apache.flink.connector.rocketmq.legacy.common.serialization.SimpleStr
 import org.apache.flink.connector.rocketmq.legacy.common.util.TestUtils;
 
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
-import org.apache.rocketmq.client.consumer.DefaultMQPullConsumer;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.junit.Assert;
 import org.junit.Test;

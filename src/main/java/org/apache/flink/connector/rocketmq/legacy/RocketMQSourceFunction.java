@@ -33,10 +33,7 @@ import org.apache.flink.connector.rocketmq.legacy.common.util.RetryUtil;
 import org.apache.flink.connector.rocketmq.legacy.common.util.RocketMQUtils;
 import org.apache.flink.connector.rocketmq.legacy.common.watermark.WaterMarkForAll;
 import org.apache.flink.connector.rocketmq.legacy.common.watermark.WaterMarkPerQueue;
-import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Meter;
-import org.apache.flink.metrics.MeterView;
-import org.apache.flink.metrics.SimpleCounter;
 import org.apache.flink.runtime.state.CheckpointListener;
 import org.apache.flink.runtime.state.FunctionInitializationContext;
 import org.apache.flink.runtime.state.FunctionSnapshotContext;
@@ -115,7 +112,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
     private transient boolean enableCheckpoint;
     private volatile Object checkPointLock;
 
-    private Meter tpsMetric;
+    private Meter numRecordsInPerSecond;
     private MetricUtils.TimestampGauge fetchDelay = new MetricUtils.TimestampGauge();
     private MetricUtils.TimestampGauge emitDelay = new MetricUtils.TimestampGauge();
 
@@ -213,14 +210,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         consumer.setInstanceName(instanceName);
         consumer.start();
 
-        Counter outputCounter =
-                getRuntimeContext()
-                        .getMetricGroup()
-                        .counter(MetricUtils.METRICS_TPS + "_counter", new SimpleCounter());
-        tpsMetric =
-                getRuntimeContext()
-                        .getMetricGroup()
-                        .meter(MetricUtils.METRICS_TPS, new MeterView(outputCounter, 60));
+        numRecordsInPerSecond = MetricUtils.registerNumRecordsInPerSecond(getRuntimeContext());
 
         getRuntimeContext()
                 .getMetricGroup()
@@ -323,7 +313,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                                                             // waterMarkPerQueue.extractTimestamp(mq, msg.getBornTimestamp());
                                                             waterMarkForAll.extractTimestamp(
                                                                     msg.getBornTimestamp());
-                                                            tpsMetric.markEvent();
+                                                            numRecordsInPerSecond.markEvent();
                                                             long eventTime =
                                                                     msg.getStoreTimestamp();
                                                             fetchDelay.report(
@@ -537,7 +527,8 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         }
     }
 
-    public void initOffsetTableFromRestoredOffsets(List<MessageQueue> messageQueues) throws MQClientException {
+    public void initOffsetTableFromRestoredOffsets(List<MessageQueue> messageQueues)
+            throws MQClientException {
         Preconditions.checkNotNull(restoredOffsets, "restoredOffsets can't be null");
         restoredOffsets.forEach(
                 (mq, offset) -> {
