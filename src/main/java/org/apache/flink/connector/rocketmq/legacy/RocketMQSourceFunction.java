@@ -243,7 +243,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         if (restored) {
             initOffsetTableFromRestoredOffsets(messageQueues);
         } else {
-            initOffsets(messageQueues);
+            initOffsets(messageQueues, false);
         }
     }
 
@@ -370,10 +370,12 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
      * @param messageQueues
      * @throws MQClientException
      */
-    private void initOffsets(List<MessageQueue> messageQueues) throws MQClientException {
+    private void initOffsets(List<MessageQueue> messageQueues, boolean added) throws MQClientException {
+        StartupMode startupMode = startMode;
+        if(added) startupMode = StartupMode.EARLIEST;
         for (MessageQueue mq : messageQueues) {
             long offset;
-            switch (startMode) {
+            switch (startupMode) {
                 case LATEST:
                     consumer.seekToEnd(mq);
                     offset = consumer.committed(mq);
@@ -554,7 +556,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         }
         if (extMessageQueue.size() != 0) {
             log.info("no restoredOffsets for {}, so init offset for these queues", extMessageQueue);
-            initOffsets(extMessageQueue);
+            initOffsets(extMessageQueue, true);
         }
         log.info("init offset table [{}] from restoredOffsets successful.", offsetTable);
     }
