@@ -111,7 +111,9 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
         sinkInTps.markEvent();
 
         if (batchFlushOnCheckpoint) {
-            batchList.add(input);
+            synchronized (batchList) {
+                batchList.add(input);
+            }
             if (batchList.size() >= batchSize) {
                 flushSync();
             }
