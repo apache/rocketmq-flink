@@ -64,6 +64,7 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
     private boolean batchFlushOnCheckpoint; // false by default
     private int batchSize = 32;
     private List<Message> batchList;
+    private long batchMessageSize;
 
     private Meter sinkInTps;
     private Meter outTps;
@@ -112,6 +113,7 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
 
         if (batchFlushOnCheckpoint) {
             batchList.add(input);
+            batchMessageSize += input.getBody().length;
             if (batchList.size() >= batchSize) {
                 flushSync();
             }
@@ -220,8 +222,13 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
         if (batchFlushOnCheckpoint) {
             synchronized (batchList) {
                 if (batchList.size() > 0) {
+                    long startSinkTime = System.currentTimeMillis();
                     producer.send(batchList);
+                    latencyGauge.report(System.currentTimeMillis() - startSinkTime, 1);
+                    outTps.markEvent();
+                    outBps.markEvent(batchMessageSize);
                     batchList.clear();
+                    batchMessageSize = 0;
                 }
             }
         }
