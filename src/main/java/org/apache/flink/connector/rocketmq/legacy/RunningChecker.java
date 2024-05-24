@@ -20,6 +20,7 @@ import java.io.Serializable;
 
 public class RunningChecker implements Serializable {
     private volatile boolean isRunning = false;
+    private volatile Throwable error;
 
     public boolean isRunning() {
         return isRunning;
@@ -28,4 +29,14 @@ public class RunningChecker implements Serializable {
     public void setRunning(boolean running) {
         isRunning = running;
     }
+
+    public void setError(Throwable e) {
+        this.error = e;
+    }
+
+    public Throwable getError() {
+        return this.error;
+    }
+
+
 }
