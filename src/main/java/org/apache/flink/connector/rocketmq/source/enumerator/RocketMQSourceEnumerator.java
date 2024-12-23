@@ -24,10 +24,14 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.api.connector.source.SourceReader;
+import org.apache.flink.api.connector.source.SourceEvent;
 import org.apache.flink.api.connector.source.SplitEnumerator;
 import org.apache.flink.api.connector.source.SplitEnumeratorContext;
 import org.apache.flink.api.connector.source.SplitsAssignment;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.rocketmq.common.event.SourceCheckEvent;
+import org.apache.flink.connector.rocketmq.common.event.SourceInitAssignEvent;
+import org.apache.flink.connector.rocketmq.common.event.SourceReportOffsetEvent;
 import org.apache.flink.connector.rocketmq.source.InnerConsumer;
 import org.apache.flink.connector.rocketmq.source.InnerConsumerImpl;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
@@ -44,6 +48,8 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -69,6 +75,10 @@ public class RocketMQSourceEnumerator
     private final OffsetsSelector startingOffsetsSelector;
     private final OffsetsSelector stoppingOffsetsSelector;
 
+    // Used for queue dynamic allocation
+    private final Map<MessageQueue, Long> checkedOffsets;
+    private boolean[] initTask;
+
     // The internal states of the enumerator.
     // This set is only accessed by the partition discovery callable in the callAsync() method.
     // The current assignment by reader id. Only accessed by the coordinator thread.
@@ -76,6 +86,7 @@ public class RocketMQSourceEnumerator
     // ready.
     private final Set<MessageQueue> allocatedSet;
     private final Map<Integer, Set<RocketMQSourceSplit>> pendingSplitAssignmentMap;
+    private final Map<Integer, Set<MessageQueue>> assignedMap;
 
     // Param from configuration
     private final String groupId;
@@ -109,8 +120,10 @@ public class RocketMQSourceEnumerator
         this.boundedness = boundedness;
 
         // Support allocate splits to reader
+        this.checkedOffsets = new ConcurrentHashMap<>();
         this.pendingSplitAssignmentMap = new ConcurrentHashMap<>();
         this.allocatedSet = new HashSet<>(currentSplitAssignment);
+        this.assignedMap = new ConcurrentHashMap<>();
         this.allocateStrategy =
                 AllocateStrategyFactory.getStrategy(
                         configuration, context, new RocketMQSourceEnumState(allocatedSet));
@@ -121,6 +134,11 @@ public class RocketMQSourceEnumerator
         this.stoppingOffsetsSelector = stoppingOffsetsSelector;
         this.partitionDiscoveryIntervalMs =
                 configuration.getLong(RocketMQSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS);
+
+        // Initialize the task status
+        if (!allocatedSet.isEmpty()) {
+            this.initTask = new boolean[context.currentParallelism()];
+        }
     }
 
     @Override
@@ -202,6 +220,17 @@ public class RocketMQSourceEnumerator
             } catch (Exception e) {
                 log.error("Shutdown rocketmq internal consumer error", e);
             }
+        }
+    }
+
+    @Override
+    public void handleSourceEvent(int taskId, SourceEvent sourceEvent) {
+        if (sourceEvent instanceof SourceCheckEvent) {
+            handleCheckEvent(taskId, (SourceCheckEvent) sourceEvent);
+        } else if (sourceEvent instanceof SourceReportOffsetEvent) {
+            handleOffsetEvent(taskId, (SourceReportOffsetEvent) sourceEvent);
+        } else if (sourceEvent instanceof SourceInitAssignEvent) {
+            handleInitAssignEvent(taskId, (SourceInitAssignEvent) sourceEvent);
         }
     }
 
@@ -349,6 +378,61 @@ public class RocketMQSourceEnumerator
                             + "Sending NoMoreSplitsEvent to the readers in consumer group {}.",
                     groupId);
             pendingReaders.forEach(this.context::signalNoMoreSplits);
+        }
+    }
+
+    private void handleInitAssignEvent(int taskId, SourceInitAssignEvent initAssignEvent) {
+        if (this.initTask[taskId - 1]) {
+            return;
+        }
+
+        // sync assign result
+        if (initAssignEvent.getSplits() != null && !initAssignEvent.getSplits().isEmpty()) {
+            log.info(
+                    "Received SourceInitAssignEvent from reader {} with {} splits.",
+                    taskId,
+                    initAssignEvent.getSplits().toString());
+            initAssignEvent.getSplits().forEach(split -> {
+                this.assignedMap.computeIfAbsent(taskId, r -> new HashSet<>()).add(split.getMessageQueue());
+                this.checkedOffsets.put(split.getMessageQueue(), split.getStoppingOffset());
+            });
+        }
+        this.initTask[taskId - 1] = true;
+    }
+
+    private void handleOffsetEvent(int taskId, SourceReportOffsetEvent sourceReportOffsetEvent) {
+        // Update offset of message queue
+        if (sourceReportOffsetEvent != null && sourceReportOffsetEvent.getCheckpoint() != -1) {
+            log.info("Received SourceReportOffsetEvent from reader {} with offset {}", taskId, sourceReportOffsetEvent.getCheckpoint());
+            MessageQueue mq = new MessageQueue(sourceReportOffsetEvent.getTopic(), sourceReportOffsetEvent.getBroker(), sourceReportOffsetEvent.getQueueId());
+            this.checkedOffsets.put(mq, sourceReportOffsetEvent.getCheckpoint());
+        }
+    }
+
+    private void handleCheckEvent(int taskId, SourceCheckEvent sourceCheckEvent) {
+        // Checks whether the actual assignment is consistent with the mapping
+        if (sourceCheckEvent != null) {
+            log.info("Received SourceCheckEvent from reader {} with offset {}", taskId, sourceCheckEvent.getAssignedMq());
+            Map<Integer, Set<RocketMQSourceSplit>> assigningMQ;
+            Set<MessageQueue> idealAssignment = this.assignedMap.get(taskId);
+            Set<MessageQueue> actualAssignment = sourceCheckEvent.getAssignedMq();
+            List<MessageQueue> increase = new LinkedList<>(Sets.difference(idealAssignment, actualAssignment));
+            List<MessageQueue> delete = new LinkedList<>(Sets.difference(actualAssignment, idealAssignment));
+
+            if (!increase.isEmpty() || !delete.isEmpty()) {
+                log.info(
+                        "Received SourceCheckEvent from reader {} with offset {}, "
+                                + "ideal assignment {}, actual assignment {}, "
+                                + "increase {}, decrease {}",
+                        taskId,
+                        sourceCheckEvent.getAssignedMq(),
+                        idealAssignment,
+                        actualAssignment,
+                        increase,
+                        delete);
+                assigningMQ = new HashMap<>();
+                // TODO assign mq to reader
+            }
         }
     }
 

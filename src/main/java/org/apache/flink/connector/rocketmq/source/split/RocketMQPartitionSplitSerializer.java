@@ -47,6 +47,7 @@ public class RocketMQPartitionSplitSerializer
             out.writeInt(split.getQueueId());
             out.writeLong(split.getStartingOffset());
             out.writeLong(split.getStoppingOffset());
+            out.writeBoolean(split.getIsIncrease());
             out.flush();
             return byteArrayOutputStream.toByteArray();
         }
@@ -61,8 +62,9 @@ public class RocketMQPartitionSplitSerializer
             int partition = in.readInt();
             long startingOffset = in.readLong();
             long stoppingOffset = in.readLong();
+            boolean isIncrease = in.readBoolean();
             return new RocketMQSourceSplit(
-                    topic, broker, partition, startingOffset, stoppingOffset);
+                    topic, broker, partition, startingOffset, stoppingOffset, isIncrease);
         }
     }
 }
