@@ -45,4 +45,6 @@ public class RocketMQSourceReaderMetrics {
     public RocketMQSourceReaderMetrics(SourceReaderMetricGroup sourceReaderMetricGroup) {}
 
     public void registerNewMessageQueue(MessageQueue messageQueue) {}
+
+    public void unregisterMessageQueue(MessageQueue messageQueue) {}
 }

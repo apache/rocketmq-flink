@@ -18,18 +18,19 @@
 
 package org.apache.flink.connector.rocketmq.common.event;
 
+import org.apache.flink.api.connector.source.SourceEvent;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
 
-import java.util.Set;
+import java.util.List;
 
-public class SourceInitAssignEvent {
-    private Set<RocketMQSourceSplit> splits;
+public class SourceInitAssignEvent implements SourceEvent {
+    private List<RocketMQSourceSplit> splits;
 
-    public void setSplits(Set<RocketMQSourceSplit> splits) {
+    public void setSplits(List<RocketMQSourceSplit> splits) {
         this.splits = splits;
     }
 
-    public Set<RocketMQSourceSplit> getSplits() {
+    public List<RocketMQSourceSplit> getSplits() {
         return splits;
     }
 }

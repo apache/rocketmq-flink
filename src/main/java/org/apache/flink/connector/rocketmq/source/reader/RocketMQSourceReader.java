@@ -19,12 +19,17 @@
 package org.apache.flink.connector.rocketmq.source.reader;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.connector.source.SourceEvent;
 import org.apache.flink.api.connector.source.SourceReaderContext;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.source.reader.RecordEmitter;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.SingleThreadMultiplexSourceReaderBase;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
+import org.apache.flink.connector.rocketmq.common.event.SourceDetectEvent;
+import org.apache.flink.connector.rocketmq.common.event.SourceInitAssignEvent;
+import org.apache.flink.connector.rocketmq.common.event.SourceReportOffsetEvent;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
 import org.apache.flink.connector.rocketmq.source.metrics.RocketMQSourceReaderMetrics;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
@@ -37,6 +42,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -57,6 +63,7 @@ public class RocketMQSourceReader<T>
     private final SortedMap<Long, Map<MessageQueue, Long>> offsetsToCommit;
     private final ConcurrentMap<MessageQueue, Long> offsetsOfFinishedSplits;
     private final RocketMQSourceReaderMetrics rocketmqSourceReaderMetrics;
+    private final RocketMQSplitReader reader;
 
     public RocketMQSourceReader(
             FutureCompletingBlockingQueue<RecordsWithSplitIds<MessageView>> elementsQueue,
@@ -72,6 +79,7 @@ public class RocketMQSourceReader<T>
         this.commitOffsetsOnCheckpoint =
                 config.get(RocketMQSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT);
         this.rocketmqSourceReaderMetrics = rocketMQSourceReaderMetrics;
+        reader = rocketmqSourceFetcherManager.getSplitReader();
     }
 
     @Override
@@ -136,7 +144,40 @@ public class RocketMQSourceReader<T>
 
     @Override
     protected RocketMQSourceSplit toSplitType(String splitId, RocketMQSourceSplitState splitState) {
+        // Report checkpoint progress.
+        SourceReportOffsetEvent sourceEvent = new SourceReportOffsetEvent();
+        sourceEvent.setBroker(splitState.getBrokerName());
+        sourceEvent.setTopic(splitState.getTopic());
+        sourceEvent.setQueueId(splitState.getQueueId());
+        sourceEvent.setCheckpoint(splitState.getCurrentOffset());
+        context.sendSourceEventToCoordinator(sourceEvent);
+        LOG.info("Report checkpoint progress: {}", sourceEvent);
         return splitState.getSourceSplit();
+    }
+
+    @Override
+    public void handleSourceEvents(SourceEvent sourceEvent) {
+        if (sourceEvent instanceof SourceDetectEvent) {
+            SourceInitAssignEvent sourceEvent1 = new SourceInitAssignEvent();
+            List<RocketMQSourceSplit> splits = new LinkedList<>();
+            Map<MessageQueue, Tuple2<Long, Long>> currentOffsetTable =
+                    reader.getCurrentOffsetTable();
+
+            if (!currentOffsetTable.isEmpty()) {
+                for (Map.Entry<MessageQueue, Tuple2<Long, Long>> entry :
+                        currentOffsetTable.entrySet()) {
+                    MessageQueue messageQueue = entry.getKey();
+                    Long startOffset = entry.getValue().f0;
+                    Long stopOffset = entry.getValue().f1;
+                    RocketMQSourceSplit split =
+                            new RocketMQSourceSplit(messageQueue, startOffset, stopOffset);
+                    splits.add(split);
+                }
+            }
+            sourceEvent1.setSplits(splits);
+            context.sendSourceEventToCoordinator(sourceEvent1);
+            reader.setInitFinish(true);
+        }
     }
 
     // ------------------------

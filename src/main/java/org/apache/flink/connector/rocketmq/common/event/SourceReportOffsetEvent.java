@@ -18,7 +18,9 @@
 
 package org.apache.flink.connector.rocketmq.common.event;
 
-public class SourceReportOffsetEvent {
+import org.apache.flink.api.connector.source.SourceEvent;
+
+public class SourceReportOffsetEvent implements SourceEvent {
     private String topic;
     private String broker;
     private int queueId;

@@ -37,7 +37,7 @@ public class RocketMQSourceSplit implements SourceSplit {
     private final int queueId;
     private final long startingOffset;
     private final long stoppingOffset;
-    // whether the split is increase or decrease
+    // whether the split is increase or decrease: true-increase, false-decrease
     private final boolean isIncrease;
 
     public RocketMQSourceSplit(
@@ -51,7 +51,10 @@ public class RocketMQSourceSplit implements SourceSplit {
     }
 
     public RocketMQSourceSplit(
-            MessageQueue messageQueue, long startingOffset, long stoppingOffset, boolean isIncrease) {
+            MessageQueue messageQueue,
+            long startingOffset,
+            long stoppingOffset,
+            boolean isIncrease) {
         this(
                 messageQueue.getTopic(),
                 messageQueue.getBrokerName(),
@@ -116,6 +119,14 @@ public class RocketMQSourceSplit implements SourceSplit {
 
     public boolean getIsIncrease() {
         return isIncrease;
+    }
+
+    public static String toSplitId(MessageQueue messageQueue) {
+        return messageQueue.getTopic()
+                + SEPARATOR
+                + messageQueue.getBrokerName()
+                + SEPARATOR
+                + messageQueue.getQueueId();
     }
 
     @Override

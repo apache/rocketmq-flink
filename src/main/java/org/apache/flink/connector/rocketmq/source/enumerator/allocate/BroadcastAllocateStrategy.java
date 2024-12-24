@@ -40,4 +40,10 @@ public class BroadcastAllocateStrategy implements AllocateStrategy {
         }
         return result;
     }
+
+    @Override
+    public Map<Integer, Set<RocketMQSourceSplit>> allocate(
+            Collection<RocketMQSourceSplit> mqAll, int parallelism, int globalAssignedNumber) {
+        return allocate(mqAll, parallelism);
+    }
 }

@@ -18,7 +18,9 @@
 
 package org.apache.flink.connector.rocketmq.common.event;
 
-public class SourceDetectEvent {
+import org.apache.flink.api.connector.source.SourceEvent;
+
+public class SourceDetectEvent implements SourceEvent {
     // Request to resend the initial allocation result
     private boolean reSendInitAssign = true;
 

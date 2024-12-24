@@ -95,4 +95,8 @@ public class RocketMQSourceFetcherManager
                     public void wakeUp() {}
                 });
     }
+
+    public RocketMQSplitReader getSplitReader() {
+        return (RocketMQSplitReader) fetchers.get(0).getSplitReader();
+    }
 }

@@ -18,12 +18,13 @@
 
 package org.apache.flink.connector.rocketmq.common.event;
 
+import org.apache.flink.api.connector.source.SourceEvent;
 
 import org.apache.rocketmq.common.message.MessageQueue;
 
 import java.util.Set;
 
-public class SourceCheckEvent {
+public class SourceCheckEvent implements SourceEvent {
     private Set<MessageQueue> assignedMq;
 
     public Set<MessageQueue> getAssignedMq() {

@@ -44,4 +44,17 @@ public interface AllocateStrategy {
      */
     Map<Integer, Set<RocketMQSourceSplit>> allocate(
             final Collection<RocketMQSourceSplit> mqAll, final int parallelism);
+
+    /**
+     * Allocates RocketMQ source splits to Flink tasks based on the selected allocation strategy.
+     *
+     * @param mqAll a collection of all available RocketMQ source splits
+     * @param parallelism the desired parallelism for the Flink tasks
+     * @param globalAssignedNumber number of allocated queues
+     * @return a map of task indices to sets of corresponding RocketMQ source splits
+     */
+    Map<Integer, Set<RocketMQSourceSplit>> allocate(
+            final Collection<RocketMQSourceSplit> mqAll,
+            final int parallelism,
+            int globalAssignedNumber);
 }
