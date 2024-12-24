@@ -1,9 +1,14 @@
 package org.apache.flink.connector.rocketmq.source.enumerator.allocate;
 
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
+
 import org.junit.Test;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 
@@ -21,7 +26,11 @@ public class AverageAllocateStrategyTest {
         for (int i = 0; i < NUM_SPLITS; i++) {
             mqAll.add(
                     new RocketMQSourceSplit(
-                            PREFIX_TOPIC + (i + 1), BROKER_NAME, i, 0, SPLIT_SIZE[i % SPLIT_SIZE.length]));
+                            PREFIX_TOPIC + (i + 1),
+                            BROKER_NAME,
+                            i,
+                            0,
+                            SPLIT_SIZE[i % SPLIT_SIZE.length]));
         }
         int parallelism = 3;
         Map<Integer, Set<RocketMQSourceSplit>> result =
@@ -38,7 +47,11 @@ public class AverageAllocateStrategyTest {
         for (int i = 0; i < NUM_SPLITS; i++) {
             mqAll.add(
                     new RocketMQSourceSplit(
-                            PREFIX_TOPIC + (i + 1), BROKER_NAME, i, 0, SPLIT_SIZE[i % SPLIT_SIZE.length]));
+                            PREFIX_TOPIC + (i + 1),
+                            BROKER_NAME,
+                            i,
+                            0,
+                            SPLIT_SIZE[i % SPLIT_SIZE.length]));
         }
         int parallelism = 3;
         Map<Integer, Set<RocketMQSourceSplit>> result =
@@ -51,7 +64,11 @@ public class AverageAllocateStrategyTest {
         for (int i = NUM_SPLITS; i < 8 + NUM_SPLITS; i++) {
             mqAll.add(
                     new RocketMQSourceSplit(
-                            PREFIX_TOPIC + (i + 1), BROKER_NAME, i, 0, SPLIT_SIZE[i % SPLIT_SIZE.length]));
+                            PREFIX_TOPIC + (i + 1),
+                            BROKER_NAME,
+                            i,
+                            0,
+                            SPLIT_SIZE[i % SPLIT_SIZE.length]));
         }
         Map<Integer, Set<RocketMQSourceSplit>> result1 =
                 allocateStrategy.allocate(mqAll, parallelism, NUM_SPLITS);
@@ -60,7 +77,11 @@ public class AverageAllocateStrategyTest {
         for (int i = 8 + NUM_SPLITS; i < 8 + 7 + NUM_SPLITS; i++) {
             mqAll.add(
                     new RocketMQSourceSplit(
-                            PREFIX_TOPIC + (i + 1), BROKER_NAME, i, 0, SPLIT_SIZE[i % SPLIT_SIZE.length]));
+                            PREFIX_TOPIC + (i + 1),
+                            BROKER_NAME,
+                            i,
+                            0,
+                            SPLIT_SIZE[i % SPLIT_SIZE.length]));
         }
         Map<Integer, Set<RocketMQSourceSplit>> result2 =
                 allocateStrategy.allocate(mqAll, parallelism, NUM_SPLITS + 8);

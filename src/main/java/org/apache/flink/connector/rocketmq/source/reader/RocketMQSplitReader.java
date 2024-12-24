@@ -120,7 +120,8 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
         RocketMQRecordsWithSplitIds<MessageView> recordsWithSplitIds =
                 new RocketMQRecordsWithSplitIds<>(rocketmqSourceReaderMetrics);
         try {
-            this.recordsWithSplitIds.finishedSplits.forEach(splitId -> recordsWithSplitIds.addFinishedSplit(splitId));
+            this.recordsWithSplitIds.finishedSplits.forEach(
+                    splitId -> recordsWithSplitIds.addFinishedSplit(splitId));
             this.recordsWithSplitIds.finishedSplits.clear();
         } finally {
             lock.unlock();
