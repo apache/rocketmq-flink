@@ -40,11 +40,12 @@ public class RocketMQPartitionSplitSerializerTest {
     @Test
     public void testSerializeAndDeserialize() throws IOException {
         RocketMQPartitionSplitSerializer serializer = new RocketMQPartitionSplitSerializer();
-        RocketMQSourceSplit originalSplit = new RocketMQSourceSplit(
-                "testTopic", "testBroker", 0, 100L, 200L, false);
+        RocketMQSourceSplit originalSplit =
+                new RocketMQSourceSplit("testTopic", "testBroker", 0, 100L, 200L, false);
 
         byte[] serialized = serializer.serialize(originalSplit);
-        RocketMQSourceSplit deserializedSplit = serializer.deserialize(serializer.getVersion(), serialized);
+        RocketMQSourceSplit deserializedSplit =
+                serializer.deserialize(serializer.getVersion(), serialized);
 
         assertEquals(originalSplit.getTopic(), deserializedSplit.getTopic());
         assertEquals(originalSplit.getBrokerName(), deserializedSplit.getBrokerName());
@@ -57,8 +58,8 @@ public class RocketMQPartitionSplitSerializerTest {
     @Test
     public void testDeserializeWithOldVersion() throws IOException {
         RocketMQPartitionSplitSerializer serializer = new RocketMQPartitionSplitSerializer();
-        RocketMQSourceSplit originalSplit = new RocketMQSourceSplit(
-                "testTopic", "testBroker", 0, 100L, 200L, false);
+        RocketMQSourceSplit originalSplit =
+                new RocketMQSourceSplit("testTopic", "testBroker", 0, 100L, 200L, false);
 
         byte[] serialized = serializer.serialize(originalSplit);
         RocketMQSourceSplit deserializedSplit = serializer.deserialize(1, serialized);
@@ -74,8 +75,8 @@ public class RocketMQPartitionSplitSerializerTest {
     @Test
     public void testDeserializeWithOldVersion1() throws IOException {
         RocketMQPartitionSplitSerializer serializer = new RocketMQPartitionSplitSerializer();
-        RocketMQSourceSplit originalSplit = new RocketMQSourceSplit(
-                "testTopic", "testBroker", 0, 100L, 200L, false);
+        RocketMQSourceSplit originalSplit =
+                new RocketMQSourceSplit("testTopic", "testBroker", 0, 100L, 200L, false);
 
         byte[] serialized = serializer.serialize(originalSplit);
         RocketMQSourceSplit deserializedSplit = serializer.deserialize(0, serialized);
