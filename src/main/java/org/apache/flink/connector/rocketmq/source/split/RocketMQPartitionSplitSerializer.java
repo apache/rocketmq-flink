@@ -62,6 +62,10 @@ public class RocketMQPartitionSplitSerializer
             int partition = in.readInt();
             long startingOffset = in.readLong();
             long stoppingOffset = in.readLong();
+            if (version == SNAPSHOT_VERSION) {
+                return new RocketMQSourceSplit(
+                        topic, broker, partition, startingOffset, stoppingOffset);
+            }
             boolean isIncrease = in.readBoolean();
             return new RocketMQSourceSplit(
                     topic, broker, partition, startingOffset, stoppingOffset, isIncrease);
