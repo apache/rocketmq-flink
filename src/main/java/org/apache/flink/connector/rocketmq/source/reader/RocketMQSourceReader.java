@@ -26,6 +26,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.source.reader.RecordEmitter;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.SingleThreadMultiplexSourceReaderBase;
+import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.connector.rocketmq.common.event.SourceDetectEvent;
 import org.apache.flink.connector.rocketmq.common.event.SourceInitAssignEvent;
@@ -49,6 +50,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 
 /** The source reader for RocketMQ partitions. */
 public class RocketMQSourceReader<T>
@@ -71,7 +73,8 @@ public class RocketMQSourceReader<T>
             RecordEmitter<MessageView, T, RocketMQSourceSplitState> recordEmitter,
             Configuration config,
             SourceReaderContext context,
-            RocketMQSourceReaderMetrics rocketMQSourceReaderMetrics) {
+            RocketMQSourceReaderMetrics rocketMQSourceReaderMetrics,
+            Supplier<SplitReader<MessageView, RocketMQSourceSplit>> readerSupplier) {
 
         super(elementsQueue, rocketmqSourceFetcherManager, recordEmitter, config, context);
         this.offsetsToCommit = Collections.synchronizedSortedMap(new TreeMap<>());
@@ -79,7 +82,7 @@ public class RocketMQSourceReader<T>
         this.commitOffsetsOnCheckpoint =
                 config.get(RocketMQSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT);
         this.rocketmqSourceReaderMetrics = rocketMQSourceReaderMetrics;
-        reader = rocketmqSourceFetcherManager.getSplitReader();
+        this.reader = (RocketMQSplitReader) readerSupplier.get();
     }
 
     @Override

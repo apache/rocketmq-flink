@@ -146,7 +146,8 @@ public class RocketMQSource<OUT>
                 recordEmitter,
                 configuration,
                 readerContext,
-                rocketMQSourceReaderMetrics);
+                rocketMQSourceReaderMetrics,
+                splitReaderSupplier);
     }
 
     @Override

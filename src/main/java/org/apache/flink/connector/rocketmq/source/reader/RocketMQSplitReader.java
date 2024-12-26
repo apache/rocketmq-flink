@@ -27,7 +27,9 @@ import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsAddition;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsChange;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
+import org.apache.flink.connector.rocketmq.common.event.SourceCheckEvent;
 import org.apache.flink.connector.rocketmq.common.event.SourceInitAssignEvent;
+import org.apache.flink.connector.rocketmq.common.lock.SpinLock;
 import org.apache.flink.connector.rocketmq.source.InnerConsumer;
 import org.apache.flink.connector.rocketmq.source.InnerConsumerImpl;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
@@ -58,7 +60,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * A {@link SplitReader} implementation that reads records from RocketMQ partitions.
@@ -88,7 +89,7 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
     // Init status : true-finish init; false-not finish init
     private boolean initFinish;
     private final RocketMQRecordsWithSplitIds<MessageView> recordsWithSplitIds;
-    private final ReentrantLock lock;
+    private final SpinLock lock;
 
     public RocketMQSplitReader(
             Configuration configuration,
@@ -103,7 +104,7 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
         this.currentOffsetTable = new ConcurrentHashMap<>();
         this.recordsWithSplitIds = new RocketMQRecordsWithSplitIds<>(rocketmqSourceReaderMetrics);
         this.initFinish = false;
-        this.lock = new ReentrantLock();
+        this.lock = new SpinLock();
 
         this.consumer = new InnerConsumerImpl(configuration);
         this.consumer.start();
@@ -130,6 +131,11 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
             Duration duration =
                     Duration.ofMillis(this.configuration.getLong(RocketMQOptions.POLL_TIMEOUT));
             List<MessageView> messageExtList = consumer.poll(duration);
+            LOG.info(
+                    "pull message :{}, group:{}, mq:{}",
+                    messageExtList.size(),
+                    consumer.getConsumerGroup(),
+                    consumer.assignment());
             for (MessageView messageView : messageExtList) {
                 String splitId =
                         UtilAll.getSplitId(
@@ -149,6 +155,11 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
         } catch (Exception e) {
             LOG.error("Reader fetch split error", e);
         }
+
+        // check
+        SourceCheckEvent sourceCheckEvent = new SourceCheckEvent();
+        sourceCheckEvent.setAssignedMq(currentOffsetTable.keySet());
+        sourceReaderContext.sendSourceEventToCoordinator(sourceCheckEvent);
         return recordsWithSplitIds;
     }
 
@@ -171,6 +182,7 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
         }
         lock.lock();
 
+        LOG.info("Receive split change: " + splitsChange.splits().toString());
         // Assignment.
         ConcurrentMap<MessageQueue, Tuple2<Long, Long>> newOffsetTable = new ConcurrentHashMap<>();
 
@@ -186,27 +198,28 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
                                             split.getStoppingOffset(),
                                             recordsWithSplitIds);
                                 } else {
-                                    registerSplits(split);
-                                    newOffsetTable.put(
-                                            split.getMessageQueue(),
-                                            new Tuple2<>(
-                                                    split.getStartingOffset(),
-                                                    split.getStoppingOffset()));
+                                    if (!currentOffsetTable.containsKey(split.getMessageQueue())) {
+                                        registerSplits(split);
+                                        newOffsetTable.put(
+                                                split.getMessageQueue(),
+                                                new Tuple2<>(
+                                                        split.getStartingOffset(),
+                                                        split.getStoppingOffset()));
+                                    }
                                 }
                             });
         } finally {
             lock.unlock();
         }
         // It will replace the previous assignment
-        Set<MessageQueue> incrementalSplits = newOffsetTable.keySet();
-        consumer.assign(incrementalSplits);
+        consumer.assign(currentOffsetTable.keySet());
 
         // set offset to consumer
         for (Map.Entry<MessageQueue, Tuple2<Long, Long>> entry : newOffsetTable.entrySet()) {
             MessageQueue messageQueue = entry.getKey();
             Long startingOffset = entry.getValue().f0;
             try {
-                consumer.seek(messageQueue, startingOffset);
+                consumer.seek(messageQueue, startingOffset == -1L ? 0L : startingOffset);
             } catch (Exception e) {
                 String info =
                         String.format(
@@ -260,7 +273,6 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
             MessageQueue messageQueue,
             long currentOffset,
             RocketMQRecordsWithSplitIds<MessageView> recordsBySplits) {
-
         LOG.info("message queue {} has reached stopping offset {}", messageQueue, currentOffset);
 
         this.currentOffsetTable.remove(messageQueue);
