@@ -28,7 +28,7 @@ import java.util.Objects;
 import static org.apache.flink.connector.rocketmq.source.util.UtilAll.SEPARATOR;
 
 /** A {@link SourceSplit} for a RocketMQ partition. */
-public class RocketMQSourceSplit implements SourceSplit, Serializable {
+public class RocketMQSourceSplit implements SourceSplit {
 
     // -1 means Long.MAX_VALUE
     public static final long NO_STOPPING_OFFSET = -1L;
