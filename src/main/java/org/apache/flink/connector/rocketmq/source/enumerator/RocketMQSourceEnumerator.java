@@ -26,6 +26,7 @@ import org.apache.flink.api.connector.source.SourceReader;
 import org.apache.flink.api.connector.source.SplitEnumerator;
 import org.apache.flink.api.connector.source.SplitEnumeratorContext;
 import org.apache.flink.api.connector.source.SplitsAssignment;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.common.event.SourceCheckEvent;
 import org.apache.flink.connector.rocketmq.common.event.SourceDetectEvent;
@@ -53,11 +54,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -101,7 +104,8 @@ public class RocketMQSourceEnumerator
 
     // Indicates the number of allocated queues
     private int partitionId;
-    private SpinLock lock;
+    private final SpinLock lock;
+    private ScheduledExecutorService scheduledExecutorService;
 
     public RocketMQSourceEnumerator(
             OffsetsSelector startingOffsetsSelector,
@@ -149,6 +153,7 @@ public class RocketMQSourceEnumerator
         this.stoppingOffsetsSelector = stoppingOffsetsSelector;
         this.partitionDiscoveryIntervalMs =
                 configuration.getLong(RocketMQSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS);
+        this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
 
         // Initialize the task status
         log.info(
@@ -163,6 +168,8 @@ public class RocketMQSourceEnumerator
     public void start() {
         consumer = new InnerConsumerImpl(configuration);
         consumer.start();
+        scheduledExecutorService.scheduleAtFixedRate(
+                this::notifyAssignResult, 30 * 1000, 30 * 1000, TimeUnit.MILLISECONDS);
 
         if (partitionDiscoveryIntervalMs > 0) {
             log.info(
@@ -243,9 +250,7 @@ public class RocketMQSourceEnumerator
 
     @Override
     public void handleSourceEvent(int taskId, SourceEvent sourceEvent) {
-        if (sourceEvent instanceof SourceCheckEvent) {
-            handleCheckEvent(taskId, (SourceCheckEvent) sourceEvent);
-        } else if (sourceEvent instanceof SourceReportOffsetEvent) {
+        if (sourceEvent instanceof SourceReportOffsetEvent) {
             handleOffsetEvent(taskId, (SourceReportOffsetEvent) sourceEvent);
         } else if (sourceEvent instanceof SourceInitAssignEvent) {
             handleInitAssignEvent(taskId, (SourceInitAssignEvent) sourceEvent);
@@ -490,7 +495,9 @@ public class RocketMQSourceEnumerator
                     int taskId = (int) entry.getKey();
                     Set<RocketMQSourceSplit> splits = (Set<RocketMQSourceSplit>) entry.getValue();
                     for (RocketMQSourceSplit split : splits) {
-                        if (!split.getIsIncrease()) continue;
+                        if (!split.getIsIncrease()) {
+                            continue;
+                        }
                         if (taskId != reflectedQueueToTaskId.get(split.getMessageQueue())) {
                             migrationQueue
                                     .computeIfAbsent(
@@ -631,80 +638,27 @@ public class RocketMQSourceEnumerator
         }
     }
 
-    private void handleCheckEvent(int taskId, SourceCheckEvent sourceCheckEvent) {
-        // Checks whether the actual assignment is consistent with the mapping
+    private void notifyAssignResult() {
+        if (assignedMap.isEmpty()) {
+            return;
+        }
         lock.lock();
         try {
-            if (sourceCheckEvent != null) {
-                Map<Integer, List<RocketMQSourceSplit>> assigningMQ;
-                Set<MessageQueue> idealAssignment =
-                        assignedMap.get(taskId).stream()
-                                .map(r -> r.getMessageQueue())
-                                .collect(Collectors.toSet());
-                Set<MessageQueue> actualAssignment = sourceCheckEvent.getAssignedMq();
-                List<MessageQueue> increase =
-                        new LinkedList<>(Sets.difference(idealAssignment, actualAssignment));
-                List<MessageQueue> delete =
-                        new LinkedList<>(Sets.difference(actualAssignment, idealAssignment));
+            for (Map.Entry<Integer, Set<RocketMQSourceSplit>> entry : assignedMap.entrySet()) {
+                SourceCheckEvent sourceCheckEvent = new SourceCheckEvent();
+                Map<MessageQueue, Tuple2<Long, Long>> assignedMq = new HashMap<>();
 
-                if (!increase.isEmpty() || !delete.isEmpty()) {
-                    log.info(
-                            "Received SourceCheckEvent from reader {} with offset {}, "
-                                    + "ideal assignment {}, actual assignment {}, "
-                                    + "increase {}, decrease {}",
-                            taskId,
-                            sourceCheckEvent.getAssignedMq(),
-                            idealAssignment,
-                            actualAssignment,
-                            increase,
-                            delete);
-
-                    OffsetsSelector.MessageQueueOffsetsRetriever offsetsRetriever =
-                            new InnerConsumerImpl.RemotingOffsetsRetrieverImpl(consumer);
-                    Map<MessageQueue, Long> decreaseStop =
-                            stoppingOffsetsSelector.getMessageQueueOffsets(
-                                    delete, offsetsRetriever);
-                    Map<MessageQueue, Long> increaseStop =
-                            stoppingOffsetsSelector.getMessageQueueOffsets(
-                                    increase, offsetsRetriever);
-
-                    // Support for decrease and increase
-                    assigningMQ = new HashMap<>();
-                    if (!increase.isEmpty()) {
-                        increase.forEach(
-                                mq ->
-                                        assigningMQ
-                                                .computeIfAbsent(taskId, r -> new LinkedList<>())
-                                                .add(
-                                                        new RocketMQSourceSplit(
-                                                                mq,
-                                                                checkedOffsets.get(mq),
-                                                                increaseStop.getOrDefault(
-                                                                        mq,
-                                                                        RocketMQSourceSplit
-                                                                                .NO_STOPPING_OFFSET))));
-                    }
-                    if (!delete.isEmpty()) {
-                        delete.forEach(
-                                mq ->
-                                        assigningMQ
-                                                .computeIfAbsent(taskId, r -> new LinkedList<>())
-                                                .add(
-                                                        new RocketMQSourceSplit(
-                                                                mq,
-                                                                checkedOffsets.get(mq),
-                                                                decreaseStop.getOrDefault(
-                                                                        mq,
-                                                                        RocketMQSourceSplit
-                                                                                .NO_STOPPING_OFFSET),
-                                                                false)));
-                    }
-
-                    log.info(
-                            "Enumerator check : reassigning split(s) to readers {}",
-                            JSON.toJSONString(assigningMQ, false));
-                    context.assignSplits(new SplitsAssignment<>(assigningMQ));
-                }
+                entry.getValue()
+                        .forEach(
+                                split -> {
+                                    assignedMq.put(
+                                            split.getMessageQueue(),
+                                            new Tuple2<>(
+                                                    split.getStartingOffset(),
+                                                    split.getStoppingOffset()));
+                                });
+                sourceCheckEvent.setAssignedMq(assignedMq);
+                context.sendEventToSourceReader(entry.getKey(), sourceCheckEvent);
             }
         } finally {
             lock.unlock();

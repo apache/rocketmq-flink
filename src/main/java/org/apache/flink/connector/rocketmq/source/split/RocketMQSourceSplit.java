@@ -22,7 +22,6 @@ import org.apache.flink.api.connector.source.SourceSplit;
 
 import org.apache.rocketmq.common.message.MessageQueue;
 
-import java.io.Serializable;
 import java.util.Objects;
 
 import static org.apache.flink.connector.rocketmq.source.util.UtilAll.SEPARATOR;
