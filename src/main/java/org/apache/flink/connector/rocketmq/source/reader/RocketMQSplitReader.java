@@ -60,6 +60,9 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A {@link SplitReader} implementation that reads records from RocketMQ partitions.
@@ -90,6 +93,7 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
     private boolean initFinish;
     private final RocketMQRecordsWithSplitIds<MessageView> recordsWithSplitIds;
     private final SpinLock lock;
+    private final ScheduledExecutorService scheduledExecutorService;
 
     public RocketMQSplitReader(
             Configuration configuration,
@@ -112,6 +116,7 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
         this.rocketmqSourceReaderMetrics = rocketmqSourceReaderMetrics;
         this.commitOffsetsOnCheckpoint =
                 configuration.getBoolean(RocketMQOptions.COMMIT_OFFSETS_ON_CHECKPOINT);
+        this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
     }
 
     @Override
@@ -156,10 +161,6 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
             LOG.error("Reader fetch split error", e);
         }
 
-        // check
-        SourceCheckEvent sourceCheckEvent = new SourceCheckEvent();
-        sourceCheckEvent.setAssignedMq(currentOffsetTable.keySet());
-        sourceReaderContext.sendSourceEventToCoordinator(sourceCheckEvent);
         return recordsWithSplitIds;
     }
 
@@ -179,6 +180,12 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
             sourceEvent.setSplits(splitsChange.splits());
             sourceReaderContext.sendSourceEventToCoordinator(sourceEvent);
             initFinish = true;
+            scheduledExecutorService.scheduleAtFixedRate(() -> {
+                // check
+                SourceCheckEvent sourceCheckEvent = new SourceCheckEvent();
+                sourceCheckEvent.setAssignedMq(currentOffsetTable.keySet());
+                sourceReaderContext.sendSourceEventToCoordinator(sourceCheckEvent);
+            }, 1000, 30 * 1000, TimeUnit.MILLISECONDS);
         }
         lock.lock();
 
