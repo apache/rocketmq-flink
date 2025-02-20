@@ -20,16 +20,16 @@ package org.apache.flink.connector.rocketmq.common.lock;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SpinLock {
-    private AtomicBoolean lock = new AtomicBoolean(true);
+    private AtomicBoolean lock = new AtomicBoolean(false);
 
     public void lock() {
         boolean lock = false;
         do {
-            lock = this.lock.compareAndSet(true, false);
+            lock = this.lock.compareAndSet(false, true);
         } while (!lock);
     }
 
     public void unlock() {
-        this.lock.set(true);
+        this.lock.set(false);
     }
 }
