@@ -27,7 +27,9 @@ import org.apache.flink.connector.base.source.reader.RecordEmitter;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.SingleThreadMultiplexSourceReaderBase;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
+import org.apache.flink.connector.base.source.reader.splitreader.SplitsAddition;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
+import org.apache.flink.connector.rocketmq.common.event.SourceCheckEvent;
 import org.apache.flink.connector.rocketmq.common.event.SourceDetectEvent;
 import org.apache.flink.connector.rocketmq.common.event.SourceInitAssignEvent;
 import org.apache.flink.connector.rocketmq.common.event.SourceReportOffsetEvent;
@@ -37,6 +39,7 @@ import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplitState;
 import org.apache.flink.connector.rocketmq.source.util.UtilAll;
 
+import com.google.common.collect.Sets;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,11 +49,13 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /** The source reader for RocketMQ partitions. */
 public class RocketMQSourceReader<T>
@@ -161,29 +166,77 @@ public class RocketMQSourceReader<T>
     @Override
     public void handleSourceEvents(SourceEvent sourceEvent) {
         if (sourceEvent instanceof SourceDetectEvent) {
-            SourceInitAssignEvent sourceEvent1 = new SourceInitAssignEvent();
-            List<RocketMQSourceSplit> splits = new LinkedList<>();
-            Map<MessageQueue, Tuple2<Long, Long>> currentOffsetTable =
-                    reader.getCurrentOffsetTable();
-
-            if (!currentOffsetTable.isEmpty()) {
-                for (Map.Entry<MessageQueue, Tuple2<Long, Long>> entry :
-                        currentOffsetTable.entrySet()) {
-                    MessageQueue messageQueue = entry.getKey();
-                    Long startOffset = entry.getValue().f0;
-                    Long stopOffset = entry.getValue().f1;
-                    RocketMQSourceSplit split =
-                            new RocketMQSourceSplit(messageQueue, startOffset, stopOffset);
-                    splits.add(split);
-                }
-            }
-            sourceEvent1.setSplits(splits);
-            context.sendSourceEventToCoordinator(sourceEvent1);
-            reader.setInitFinish(true);
+            handleSourceDetectEvent();
+        } else if (sourceEvent instanceof SourceCheckEvent) {
+            handleSourceCheckEvent((SourceCheckEvent) sourceEvent);
         }
     }
 
     // ------------------------
+    private void handleSourceDetectEvent() {
+        SourceInitAssignEvent sourceEvent1 = new SourceInitAssignEvent();
+        List<RocketMQSourceSplit> splits = new LinkedList<>();
+        ConcurrentMap<MessageQueue, Tuple2<Long, Long>> currentOffsetTable =
+                reader.getCurrentOffsetTable();
+
+        if (!currentOffsetTable.isEmpty()) {
+            for (Map.Entry<MessageQueue, Tuple2<Long, Long>> entry :
+                    currentOffsetTable.entrySet()) {
+                MessageQueue messageQueue = entry.getKey();
+                Long startOffset = entry.getValue().f0;
+                Long stopOffset = entry.getValue().f1;
+                RocketMQSourceSplit split =
+                        new RocketMQSourceSplit(messageQueue, startOffset, stopOffset);
+                splits.add(split);
+            }
+        }
+        sourceEvent1.setSplits(splits);
+        context.sendSourceEventToCoordinator(sourceEvent1);
+        reader.setInitFinish(true);
+    }
+
+    private void handleSourceCheckEvent(SourceCheckEvent sourceEvent) {
+        Map<MessageQueue, Tuple2<Long, Long>> checkMap = sourceEvent.getAssignedMq();
+        Set<MessageQueue> assignedMq = checkMap.keySet();
+        Set<MessageQueue> currentMq = reader.getCurrentOffsetTable().keySet();
+        Set<MessageQueue> increaseSet = Sets.difference(assignedMq, currentMq);
+        Set<MessageQueue> decreaseSet = Sets.difference(currentMq, assignedMq);
+
+        if (increaseSet.isEmpty() && decreaseSet.isEmpty()) {
+            LOG.info("No need to checkpoint, current assigned mq is same as before.");
+        }
+
+        if (!increaseSet.isEmpty()) {
+            SplitsAddition<RocketMQSourceSplit> increase;
+            increase =
+                    new SplitsAddition<>(
+                            increaseSet.stream()
+                                    .map(
+                                            mq ->
+                                                    new RocketMQSourceSplit(
+                                                            mq,
+                                                            checkMap.get(mq).f0,
+                                                            checkMap.get(mq).f1,
+                                                            true))
+                                    .collect(Collectors.toList()));
+            reader.handleSplitsChanges(increase);
+        }
+        if (!decreaseSet.isEmpty()) {
+            SplitsAddition<RocketMQSourceSplit> decrease;
+            decrease =
+                    new SplitsAddition<>(
+                            decreaseSet.stream()
+                                    .map(
+                                            mq ->
+                                                    new RocketMQSourceSplit(
+                                                            mq,
+                                                            checkMap.get(mq).f0,
+                                                            checkMap.get(mq).f1,
+                                                            false))
+                                    .collect(Collectors.toList()));
+            reader.handleSplitsChanges(decrease);
+        }
+    }
 
     @VisibleForTesting
     SortedMap<Long, Map<MessageQueue, Long>> getOffsetsToCommit() {

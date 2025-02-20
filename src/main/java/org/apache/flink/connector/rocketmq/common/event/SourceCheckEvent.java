@@ -19,19 +19,20 @@
 package org.apache.flink.connector.rocketmq.common.event;
 
 import org.apache.flink.api.connector.source.SourceEvent;
+import org.apache.flink.api.java.tuple.Tuple2;
 
 import org.apache.rocketmq.common.message.MessageQueue;
 
-import java.util.Set;
+import java.util.Map;
 
 public class SourceCheckEvent implements SourceEvent {
-    private Set<MessageQueue> assignedMq;
+    private Map<MessageQueue, Tuple2<Long, Long>> assignedMq;
 
-    public Set<MessageQueue> getAssignedMq() {
+    public Map<MessageQueue, Tuple2<Long, Long>> getAssignedMq() {
         return assignedMq;
     }
 
-    public void setAssignedMq(Set<MessageQueue> assignedMq) {
+    public void setAssignedMq(Map<MessageQueue, Tuple2<Long, Long>> assignedMq) {
         this.assignedMq = assignedMq;
     }
 }

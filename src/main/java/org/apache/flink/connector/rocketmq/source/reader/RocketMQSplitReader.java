@@ -27,7 +27,6 @@ import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsAddition;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsChange;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
-import org.apache.flink.connector.rocketmq.common.event.SourceCheckEvent;
 import org.apache.flink.connector.rocketmq.common.event.SourceInitAssignEvent;
 import org.apache.flink.connector.rocketmq.common.lock.SpinLock;
 import org.apache.flink.connector.rocketmq.source.InnerConsumer;
@@ -156,10 +155,6 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
             LOG.error("Reader fetch split error", e);
         }
 
-        // check
-        SourceCheckEvent sourceCheckEvent = new SourceCheckEvent();
-        sourceCheckEvent.setAssignedMq(currentOffsetTable.keySet());
-        sourceReaderContext.sendSourceEventToCoordinator(sourceCheckEvent);
         return recordsWithSplitIds;
     }
 
