@@ -130,11 +130,6 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
             Duration duration =
                     Duration.ofMillis(this.configuration.getLong(RocketMQOptions.POLL_TIMEOUT));
             List<MessageView> messageExtList = consumer.poll(duration);
-            LOG.info(
-                    "pull message :{}, group:{}, mq:{}",
-                    messageExtList.size(),
-                    consumer.getConsumerGroup(),
-                    consumer.assignment());
             for (MessageView messageView : messageExtList) {
                 String splitId =
                         UtilAll.getSplitId(
