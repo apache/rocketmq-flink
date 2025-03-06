@@ -36,4 +36,56 @@ public class RocketMQPartitionSplitSerializerTest {
                 serializer.deserialize(serializer.getVersion(), serializer.serialize(expected));
         assertEquals(expected, actual);
     }
+
+    @Test
+    public void testSerializeAndDeserialize() throws IOException {
+        RocketMQPartitionSplitSerializer serializer = new RocketMQPartitionSplitSerializer();
+        RocketMQSourceSplit originalSplit =
+                new RocketMQSourceSplit("testTopic", "testBroker", 0, 100L, 200L, false);
+
+        byte[] serialized = serializer.serialize(originalSplit);
+        RocketMQSourceSplit deserializedSplit =
+                serializer.deserialize(serializer.getVersion(), serialized);
+
+        assertEquals(originalSplit.getTopic(), deserializedSplit.getTopic());
+        assertEquals(originalSplit.getBrokerName(), deserializedSplit.getBrokerName());
+        assertEquals(originalSplit.getQueueId(), deserializedSplit.getQueueId());
+        assertEquals(originalSplit.getStartingOffset(), deserializedSplit.getStartingOffset());
+        assertEquals(originalSplit.getStoppingOffset(), deserializedSplit.getStoppingOffset());
+        assertEquals(originalSplit.getIsIncrease(), deserializedSplit.getIsIncrease());
+    }
+
+    @Test
+    public void testDeserializeWithOldVersion() throws IOException {
+        RocketMQPartitionSplitSerializer serializer = new RocketMQPartitionSplitSerializer();
+        RocketMQSourceSplit originalSplit =
+                new RocketMQSourceSplit("testTopic", "testBroker", 0, 100L, 200L, false);
+
+        byte[] serialized = serializer.serialize(originalSplit);
+        RocketMQSourceSplit deserializedSplit = serializer.deserialize(1, serialized);
+
+        assertEquals(originalSplit.getTopic(), deserializedSplit.getTopic());
+        assertEquals(originalSplit.getBrokerName(), deserializedSplit.getBrokerName());
+        assertEquals(originalSplit.getQueueId(), deserializedSplit.getQueueId());
+        assertEquals(originalSplit.getStartingOffset(), deserializedSplit.getStartingOffset());
+        assertEquals(originalSplit.getStoppingOffset(), deserializedSplit.getStoppingOffset());
+        assertEquals(originalSplit.getIsIncrease(), deserializedSplit.getIsIncrease());
+    }
+
+    @Test
+    public void testDeserializeWithOldVersion1() throws IOException {
+        RocketMQPartitionSplitSerializer serializer = new RocketMQPartitionSplitSerializer();
+        RocketMQSourceSplit originalSplit =
+                new RocketMQSourceSplit("testTopic", "testBroker", 0, 100L, 200L, false);
+
+        byte[] serialized = serializer.serialize(originalSplit);
+        RocketMQSourceSplit deserializedSplit = serializer.deserialize(0, serialized);
+
+        assertEquals(originalSplit.getTopic(), deserializedSplit.getTopic());
+        assertEquals(originalSplit.getBrokerName(), deserializedSplit.getBrokerName());
+        assertEquals(originalSplit.getQueueId(), deserializedSplit.getQueueId());
+        assertEquals(originalSplit.getStartingOffset(), deserializedSplit.getStartingOffset());
+        assertEquals(originalSplit.getStoppingOffset(), deserializedSplit.getStoppingOffset());
+        assertEquals(true, deserializedSplit.getIsIncrease());
+    }
 }

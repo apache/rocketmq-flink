@@ -124,13 +124,14 @@ public class RocketMQSource<OUT>
         final RocketMQSourceReaderMetrics rocketMQSourceReaderMetrics =
                 new RocketMQSourceReaderMetrics(readerContext.metricGroup());
 
-        Supplier<SplitReader<MessageView, RocketMQSourceSplit>> splitReaderSupplier =
-                () ->
-                        new RocketMQSplitReader<>(
-                                configuration,
-                                readerContext,
-                                deserializationSchema,
-                                rocketMQSourceReaderMetrics);
+        // unique reader
+        RocketMQSplitReader<OUT> reader =
+                new RocketMQSplitReader<>(
+                        configuration,
+                        readerContext,
+                        deserializationSchema,
+                        rocketMQSourceReaderMetrics);
+        Supplier<SplitReader<MessageView, RocketMQSourceSplit>> splitReaderSupplier = () -> reader;
 
         RocketMQSourceFetcherManager rocketmqSourceFetcherManager =
                 new RocketMQSourceFetcherManager(
@@ -145,7 +146,8 @@ public class RocketMQSource<OUT>
                 recordEmitter,
                 configuration,
                 readerContext,
-                rocketMQSourceReaderMetrics);
+                rocketMQSourceReaderMetrics,
+                splitReaderSupplier);
     }
 
     @Override

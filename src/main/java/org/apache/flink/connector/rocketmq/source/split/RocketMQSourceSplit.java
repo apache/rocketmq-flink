@@ -37,6 +37,8 @@ public class RocketMQSourceSplit implements SourceSplit {
     private final int queueId;
     private final long startingOffset;
     private final long stoppingOffset;
+    // whether the split is increase or decrease: true-increase, false-decrease
+    private final boolean isIncrease;
 
     public RocketMQSourceSplit(
             MessageQueue messageQueue, long startingOffset, long stoppingOffset) {
@@ -46,6 +48,20 @@ public class RocketMQSourceSplit implements SourceSplit {
                 messageQueue.getQueueId(),
                 startingOffset,
                 stoppingOffset);
+    }
+
+    public RocketMQSourceSplit(
+            MessageQueue messageQueue,
+            long startingOffset,
+            long stoppingOffset,
+            boolean isIncrease) {
+        this(
+                messageQueue.getTopic(),
+                messageQueue.getBrokerName(),
+                messageQueue.getQueueId(),
+                startingOffset,
+                stoppingOffset,
+                isIncrease);
     }
 
     public RocketMQSourceSplit(
@@ -59,6 +75,22 @@ public class RocketMQSourceSplit implements SourceSplit {
         this.queueId = queueId;
         this.startingOffset = startingOffset;
         this.stoppingOffset = stoppingOffset;
+        this.isIncrease = true;
+    }
+
+    public RocketMQSourceSplit(
+            String topic,
+            String brokerName,
+            int queueId,
+            long startingOffset,
+            long stoppingOffset,
+            boolean isIncrease) {
+        this.topic = topic;
+        this.brokerName = brokerName;
+        this.queueId = queueId;
+        this.startingOffset = startingOffset;
+        this.stoppingOffset = stoppingOffset;
+        this.isIncrease = isIncrease;
     }
 
     public String getTopic() {
@@ -85,6 +117,28 @@ public class RocketMQSourceSplit implements SourceSplit {
         return new MessageQueue(topic, brokerName, queueId);
     }
 
+    public boolean getIsIncrease() {
+        return isIncrease;
+    }
+
+    public static String toSplitId(MessageQueue messageQueue) {
+        return messageQueue.getTopic()
+                + SEPARATOR
+                + messageQueue.getBrokerName()
+                + SEPARATOR
+                + messageQueue.getQueueId();
+    }
+
+    public static RocketMQSourceSplit clone(RocketMQSourceSplit split) {
+        return new RocketMQSourceSplit(
+                split.topic,
+                split.brokerName,
+                split.queueId,
+                split.startingOffset,
+                split.stoppingOffset,
+                split.isIncrease);
+    }
+
     @Override
     public String splitId() {
         return topic + SEPARATOR + brokerName + SEPARATOR + queueId;
@@ -93,13 +147,13 @@ public class RocketMQSourceSplit implements SourceSplit {
     @Override
     public String toString() {
         return String.format(
-                "(Topic: %s, BrokerName: %s, QueueId: %d, MinOffset: %d, MaxOffset: %d)",
-                topic, brokerName, queueId, startingOffset, stoppingOffset);
+                "(Topic: %s, BrokerName: %s, QueueId: %d, MinOffset: %d, MaxOffset: %d, status: %s)",
+                topic, brokerName, queueId, startingOffset, stoppingOffset, isIncrease);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(topic, brokerName, queueId, startingOffset, stoppingOffset);
+        return Objects.hash(topic, brokerName, queueId, startingOffset, stoppingOffset, isIncrease);
     }
 
     @Override
@@ -112,6 +166,7 @@ public class RocketMQSourceSplit implements SourceSplit {
                 && brokerName.equals(other.brokerName)
                 && queueId == other.queueId
                 && startingOffset == other.startingOffset
-                && stoppingOffset == other.stoppingOffset;
+                && stoppingOffset == other.stoppingOffset
+                && isIncrease == other.isIncrease;
     }
 }

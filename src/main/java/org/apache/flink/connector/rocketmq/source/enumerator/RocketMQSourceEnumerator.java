@@ -18,16 +18,21 @@
 
 package org.apache.flink.connector.rocketmq.source.enumerator;
 
-import com.alibaba.fastjson.JSON;
-import com.google.common.collect.Sets;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.connector.source.Boundedness;
+import org.apache.flink.api.connector.source.SourceEvent;
 import org.apache.flink.api.connector.source.SourceReader;
 import org.apache.flink.api.connector.source.SplitEnumerator;
 import org.apache.flink.api.connector.source.SplitEnumeratorContext;
 import org.apache.flink.api.connector.source.SplitsAssignment;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.rocketmq.common.event.SourceCheckEvent;
+import org.apache.flink.connector.rocketmq.common.event.SourceDetectEvent;
+import org.apache.flink.connector.rocketmq.common.event.SourceInitAssignEvent;
+import org.apache.flink.connector.rocketmq.common.event.SourceReportOffsetEvent;
+import org.apache.flink.connector.rocketmq.common.lock.SpinLock;
 import org.apache.flink.connector.rocketmq.source.InnerConsumer;
 import org.apache.flink.connector.rocketmq.source.InnerConsumerImpl;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
@@ -36,18 +41,26 @@ import org.apache.flink.connector.rocketmq.source.enumerator.allocate.AllocateSt
 import org.apache.flink.connector.rocketmq.source.enumerator.offset.OffsetsSelector;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
 import org.apache.flink.util.FlinkRuntimeException;
+
+import com.alibaba.fastjson.JSON;
+import com.google.common.collect.Sets;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -69,17 +82,30 @@ public class RocketMQSourceEnumerator
     private final OffsetsSelector startingOffsetsSelector;
     private final OffsetsSelector stoppingOffsetsSelector;
 
+    // Used for queue dynamic allocation
+    private final Map<MessageQueue, Long> checkedOffsets;
+    private boolean[] initTask;
+
     // The internal states of the enumerator.
     // This set is only accessed by the partition discovery callable in the callAsync() method.
     // The current assignment by reader id. Only accessed by the coordinator thread.
     // The discovered and initialized partition splits that are waiting for owner reader to be
     // ready.
-    private final Set<MessageQueue> allocatedSet;
+    private final Map<MessageQueue, Byte> allocatedSet;
     private final Map<Integer, Set<RocketMQSourceSplit>> pendingSplitAssignmentMap;
+
+    // Only Maintaining mapping relationship
+    private final Map<Integer, Set<RocketMQSourceSplit>> assignedMap;
+    private final Map<MessageQueue, Integer /* taskId */> reflectedQueueToTaskId;
 
     // Param from configuration
     private final String groupId;
     private final long partitionDiscoveryIntervalMs;
+
+    // Indicates the number of allocated queues
+    private int partitionId;
+    private final SpinLock lock;
+    private ScheduledExecutorService scheduledExecutorService;
 
     public RocketMQSourceEnumerator(
             OffsetsSelector startingOffsetsSelector,
@@ -107,13 +133,19 @@ public class RocketMQSourceEnumerator
         this.configuration = configuration;
         this.context = context;
         this.boundedness = boundedness;
+        this.lock = new SpinLock();
 
         // Support allocate splits to reader
+        this.checkedOffsets = new ConcurrentHashMap<>();
+        this.reflectedQueueToTaskId = new ConcurrentHashMap<>();
         this.pendingSplitAssignmentMap = new ConcurrentHashMap<>();
-        this.allocatedSet = new HashSet<>(currentSplitAssignment);
+        this.allocatedSet = new ConcurrentHashMap<>();
+        this.assignedMap = new ConcurrentHashMap<>();
         this.allocateStrategy =
                 AllocateStrategyFactory.getStrategy(
-                        configuration, context, new RocketMQSourceEnumState(allocatedSet));
+                        configuration,
+                        context,
+                        new RocketMQSourceEnumState(currentSplitAssignment));
 
         // For rocketmq setting
         this.groupId = configuration.getString(RocketMQSourceOptions.CONSUMER_GROUP);
@@ -121,12 +153,23 @@ public class RocketMQSourceEnumerator
         this.stoppingOffsetsSelector = stoppingOffsetsSelector;
         this.partitionDiscoveryIntervalMs =
                 configuration.getLong(RocketMQSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS);
+        this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
+
+        // Initialize the task status
+        log.info(
+                "Starting the RocketMQSourceEnumerator with current split assignment: {}",
+                currentSplitAssignment);
+        if (!currentSplitAssignment.isEmpty()) {
+            this.initTask = new boolean[context.currentParallelism()];
+        }
     }
 
     @Override
     public void start() {
         consumer = new InnerConsumerImpl(configuration);
         consumer.start();
+        scheduledExecutorService.scheduleAtFixedRate(
+                this::notifyAssignResult, 30 * 1000, 30 * 1000, TimeUnit.MILLISECONDS);
 
         if (partitionDiscoveryIntervalMs > 0) {
             log.info(
@@ -190,7 +233,7 @@ public class RocketMQSourceEnumerator
 
     @Override
     public RocketMQSourceEnumState snapshotState(long checkpointId) {
-        return new RocketMQSourceEnumState(allocatedSet);
+        return new RocketMQSourceEnumState(allocatedSet.keySet());
     }
 
     @Override
@@ -205,9 +248,32 @@ public class RocketMQSourceEnumerator
         }
     }
 
+    @Override
+    public void handleSourceEvent(int taskId, SourceEvent sourceEvent) {
+        if (sourceEvent instanceof SourceReportOffsetEvent) {
+            handleOffsetEvent(taskId, (SourceReportOffsetEvent) sourceEvent);
+        } else if (sourceEvent instanceof SourceInitAssignEvent) {
+            handleInitAssignEvent(taskId, (SourceInitAssignEvent) sourceEvent);
+        }
+    }
+
     // ----------------- private methods -------------------
 
     private Set<MessageQueue> requestServiceDiscovery() {
+        // Ensure all subtasks have been initialized
+        try {
+            if (initTask != null) {
+                for (int i = 0; i < context.currentParallelism(); i++) {
+                    if (!initTask[i]) {
+                        context.sendEventToSourceReader(i, new SourceDetectEvent());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("init request resend error, please check task has started");
+            return null;
+        }
+
         Set<String> topicSet =
                 Sets.newHashSet(
                         configuration
@@ -235,6 +301,9 @@ public class RocketMQSourceEnumerator
         if (t != null) {
             throw new FlinkRuntimeException("Failed to handle source splits change due to ", t);
         }
+        if (latestSet == null) {
+            return;
+        }
 
         final SourceChangeResult sourceChangeResult = getSourceChangeResult(latestSet);
         if (sourceChangeResult.isEmpty()) {
@@ -248,30 +317,59 @@ public class RocketMQSourceEnumerator
 
     // This method should only be invoked in the coordinator executor thread.
     private SourceSplitChangeResult initializeSourceSplits(SourceChangeResult sourceChangeResult) {
+        lock.lock();
+
         Set<MessageQueue> increaseSet = sourceChangeResult.getIncreaseSet();
+        Set<MessageQueue> decreaseSet = sourceChangeResult.getDecreaseSet();
 
         OffsetsSelector.MessageQueueOffsetsRetriever offsetsRetriever =
                 new InnerConsumerImpl.RemotingOffsetsRetrieverImpl(consumer);
 
-        Map<MessageQueue, Long> startingOffsets =
+        Map<MessageQueue, Long> increaseStartingOffsets =
                 startingOffsetsSelector.getMessageQueueOffsets(increaseSet, offsetsRetriever);
-        Map<MessageQueue, Long> stoppingOffsets =
+        Map<MessageQueue, Long> increaseStoppingOffsets =
                 stoppingOffsetsSelector.getMessageQueueOffsets(increaseSet, offsetsRetriever);
+        Map<MessageQueue, Long> decreaseStoppingOffsets =
+                stoppingOffsetsSelector.getMessageQueueOffsets(decreaseSet, offsetsRetriever);
+        Map<MessageQueue, Long> decreaseStartingOffsets =
+                startingOffsetsSelector.getMessageQueueOffsets(decreaseSet, offsetsRetriever);
 
         Set<RocketMQSourceSplit> increaseSplitSet =
                 increaseSet.stream()
                         .map(
                                 mq -> {
-                                    long startingOffset = startingOffsets.get(mq);
+                                    long startingOffset = increaseStartingOffsets.get(mq);
                                     long stoppingOffset =
-                                            stoppingOffsets.getOrDefault(
+                                            increaseStoppingOffsets.getOrDefault(
                                                     mq, RocketMQSourceSplit.NO_STOPPING_OFFSET);
                                     return new RocketMQSourceSplit(
                                             mq, startingOffset, stoppingOffset);
                                 })
                         .collect(Collectors.toSet());
+        // Update cache
+        increaseSet.forEach(
+                mq ->
+                        checkedOffsets.put(
+                                mq,
+                                increaseStartingOffsets.getOrDefault(
+                                        mq, RocketMQSourceSplit.NO_STOPPING_OFFSET)));
 
-        return new SourceSplitChangeResult(increaseSplitSet, sourceChangeResult.getDecreaseSet());
+        Set<RocketMQSourceSplit> decreaseSplitSet =
+                decreaseSet.stream()
+                        .map(
+                                mq -> {
+                                    long startingOffset = decreaseStartingOffsets.get(mq);
+                                    long stoppingOffset =
+                                            decreaseStoppingOffsets.getOrDefault(
+                                                    mq, RocketMQSourceSplit.NO_STOPPING_OFFSET);
+                                    allocatedSet.remove(mq);
+                                    checkedOffsets.remove(mq);
+                                    return new RocketMQSourceSplit(
+                                            mq, startingOffset, stoppingOffset, false);
+                                })
+                        .collect(Collectors.toSet());
+
+        return new SourceSplitChangeResult(increaseSplitSet, decreaseSplitSet);
     }
 
     /**
@@ -291,15 +389,145 @@ public class RocketMQSourceEnumerator
         if (partitionDiscoveryIntervalMs <= 0) {
             log.info("Split changes, but dynamic partition discovery is disabled.");
         }
-        this.calculateSplitAssignment(sourceSplitChangeResult);
-        this.sendSplitChangesToRemote(context.registeredReaders().keySet());
+        try {
+            this.calculateSplitAssignment(sourceSplitChangeResult);
+            this.sendSplitChangesToRemote(context.registeredReaders().keySet());
+        } finally {
+            lock.unlock();
+        }
     }
 
     /** Calculate new split assignment according allocate strategy */
     private void calculateSplitAssignment(SourceSplitChangeResult sourceSplitChangeResult) {
-        Map<Integer, Set<RocketMQSourceSplit>> newSourceSplitAllocateMap =
-                this.allocateStrategy.allocate(
-                        sourceSplitChangeResult.getIncreaseSet(), context.currentParallelism());
+        Map<Integer, Set<RocketMQSourceSplit>> newSourceSplitAllocateMap;
+
+        // Preliminary calculation of distribution results
+        {
+            // Allocate valid queues
+            if (sourceSplitChangeResult.decreaseSet != null
+                    && !sourceSplitChangeResult.decreaseSet.isEmpty()) {
+                partitionId = 0;
+
+                // Re-load balancing
+                Set<RocketMQSourceSplit> allMQ = new HashSet<>();
+                OffsetsSelector.MessageQueueOffsetsRetriever offsetsRetriever =
+                        new InnerConsumerImpl.RemotingOffsetsRetrieverImpl(consumer);
+                Map<MessageQueue, Long> stoppingOffsets =
+                        stoppingOffsetsSelector.getMessageQueueOffsets(
+                                allocatedSet.keySet(), offsetsRetriever);
+                Set<MessageQueue> delete =
+                        sourceSplitChangeResult.decreaseSet.stream()
+                                .map(RocketMQSourceSplit::getMessageQueue)
+                                .collect(Collectors.toSet());
+
+                // Calculate all queue
+                allMQ.addAll(sourceSplitChangeResult.increaseSet);
+                allocatedSet
+                        .keySet()
+                        .forEach(
+                                mq -> {
+                                    if (!delete.contains(mq)) {
+                                        allMQ.add(
+                                                new RocketMQSourceSplit(
+                                                        mq,
+                                                        checkedOffsets.get(mq),
+                                                        stoppingOffsets.getOrDefault(
+                                                                mq,
+                                                                RocketMQSourceSplit
+                                                                        .NO_STOPPING_OFFSET)));
+                                    }
+                                });
+                newSourceSplitAllocateMap =
+                        this.allocateStrategy.allocate(
+                                allMQ, context.currentParallelism(), partitionId);
+
+                // Update cache
+                assignedMap.clear();
+                for (Map.Entry entry : newSourceSplitAllocateMap.entrySet()) {
+                    assignedMap.put(
+                            (Integer) entry.getKey(),
+                            ((Set<RocketMQSourceSplit>) entry.getValue())
+                                    .stream()
+                                            .map(RocketMQSourceSplit::clone)
+                                            .collect(Collectors.toSet()));
+                }
+                partitionId = allMQ.size();
+            } else {
+                newSourceSplitAllocateMap =
+                        this.allocateStrategy.allocate(
+                                sourceSplitChangeResult.getIncreaseSet(),
+                                context.currentParallelism(),
+                                partitionId);
+
+                // Update cache
+                newSourceSplitAllocateMap.forEach(
+                        (k, v) ->
+                                v.forEach(
+                                        mq ->
+                                                assignedMap
+                                                        .computeIfAbsent(k, r -> new HashSet<>())
+                                                        .add(mq)));
+                partitionId += sourceSplitChangeResult.getIncreaseSet().size();
+            }
+
+            // Allocate deleted queues
+            if (sourceSplitChangeResult.decreaseSet != null
+                    && !sourceSplitChangeResult.decreaseSet.isEmpty()) {
+                sourceSplitChangeResult.decreaseSet.forEach(
+                        mq -> {
+                            newSourceSplitAllocateMap
+                                    .computeIfAbsent(
+                                            reflectedQueueToTaskId.get(mq.getMessageQueue()),
+                                            k -> new HashSet<>())
+                                    .add(mq);
+                            reflectedQueueToTaskId.remove(mq.getMessageQueue());
+                        });
+            }
+        }
+
+        {
+            // Calculate the result after queue migration
+            if (sourceSplitChangeResult.decreaseSet != null
+                    && !sourceSplitChangeResult.decreaseSet.isEmpty()) {
+                Map<Integer, Set<RocketMQSourceSplit>> migrationQueue = new HashMap<>();
+                Map<Integer, Set<RocketMQSourceSplit>> noMigrationQueue = new HashMap<>();
+                for (Map.Entry entry : newSourceSplitAllocateMap.entrySet()) {
+                    int taskId = (int) entry.getKey();
+                    Set<RocketMQSourceSplit> splits = (Set<RocketMQSourceSplit>) entry.getValue();
+                    for (RocketMQSourceSplit split : splits) {
+                        if (!split.getIsIncrease()) {
+                            continue;
+                        }
+                        if (taskId != reflectedQueueToTaskId.get(split.getMessageQueue())) {
+                            migrationQueue
+                                    .computeIfAbsent(
+                                            reflectedQueueToTaskId.get(split.getMessageQueue()),
+                                            k -> new HashSet<>())
+                                    .add(
+                                            new RocketMQSourceSplit(
+                                                    split.getMessageQueue(),
+                                                    split.getStartingOffset(),
+                                                    split.getStoppingOffset(),
+                                                    false));
+                        } else {
+                            noMigrationQueue
+                                    .computeIfAbsent(taskId, k -> new HashSet<>())
+                                    .add(split);
+                        }
+                    }
+                }
+
+                // finally result
+                migrationQueue.forEach(
+                        (taskId, splits) -> {
+                            newSourceSplitAllocateMap.get(taskId).addAll(splits);
+                        });
+                noMigrationQueue.forEach(
+                        (taskId, splits) -> {
+                            newSourceSplitAllocateMap.get(taskId).removeAll(splits);
+                        });
+            }
+        }
 
         for (Map.Entry<Integer, Set<RocketMQSourceSplit>> entry :
                 newSourceSplitAllocateMap.entrySet()) {
@@ -330,7 +558,12 @@ public class RocketMQSourceEnumerator
                         .computeIfAbsent(pendingReader, k -> new ArrayList<>())
                         .addAll(pendingAssignmentForReader);
                 pendingAssignmentForReader.forEach(
-                        split -> this.allocatedSet.add(split.getMessageQueue()));
+                        split -> {
+                            if (split.getIsIncrease()) {
+                                this.allocatedSet.put(split.getMessageQueue(), (byte) 1);
+                                reflectedQueueToTaskId.put(split.getMessageQueue(), pendingReader);
+                            }
+                        });
             }
         }
 
@@ -349,6 +582,86 @@ public class RocketMQSourceEnumerator
                             + "Sending NoMoreSplitsEvent to the readers in consumer group {}.",
                     groupId);
             pendingReaders.forEach(this.context::signalNoMoreSplits);
+        }
+    }
+
+    private void handleInitAssignEvent(int taskId, SourceInitAssignEvent initAssignEvent) {
+        if (this.initTask == null || this.initTask[taskId]) {
+            return;
+        }
+        lock.lock();
+        try {
+            // sync assign result
+            if (initAssignEvent.getSplits() != null && !initAssignEvent.getSplits().isEmpty()) {
+                log.info(
+                        "Received SourceInitAssignEvent from reader {} with {} splits.",
+                        taskId,
+                        initAssignEvent.getSplits().toString());
+                initAssignEvent
+                        .getSplits()
+                        .forEach(
+                                split -> {
+                                    this.assignedMap
+                                            .computeIfAbsent(taskId, r -> new HashSet<>())
+                                            .add(split);
+                                    this.checkedOffsets.put(
+                                            split.getMessageQueue(), split.getStoppingOffset());
+                                    this.reflectedQueueToTaskId.put(
+                                            split.getMessageQueue(), taskId);
+                                    this.allocatedSet.put(split.getMessageQueue(), (byte) 1);
+                                });
+            }
+            this.initTask[taskId] = true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void handleOffsetEvent(int taskId, SourceReportOffsetEvent sourceReportOffsetEvent) {
+        lock.lock();
+        try {
+            // Update offset of message queue
+            if (sourceReportOffsetEvent != null && sourceReportOffsetEvent.getCheckpoint() != -1) {
+                log.info(
+                        "Received SourceReportOffsetEvent from reader {} with offset {}",
+                        taskId,
+                        sourceReportOffsetEvent.getCheckpoint());
+                MessageQueue mq =
+                        new MessageQueue(
+                                sourceReportOffsetEvent.getTopic(),
+                                sourceReportOffsetEvent.getBroker(),
+                                sourceReportOffsetEvent.getQueueId());
+                this.checkedOffsets.put(mq, sourceReportOffsetEvent.getCheckpoint());
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void notifyAssignResult() {
+        if (assignedMap.isEmpty()) {
+            return;
+        }
+        lock.lock();
+        try {
+            for (Map.Entry<Integer, Set<RocketMQSourceSplit>> entry : assignedMap.entrySet()) {
+                SourceCheckEvent sourceCheckEvent = new SourceCheckEvent();
+                Map<MessageQueue, Tuple2<Long, Long>> assignedMq = new HashMap<>();
+
+                entry.getValue()
+                        .forEach(
+                                split -> {
+                                    assignedMq.put(
+                                            split.getMessageQueue(),
+                                            new Tuple2<>(
+                                                    split.getStartingOffset(),
+                                                    split.getStoppingOffset()));
+                                });
+                sourceCheckEvent.setAssignedMq(assignedMq);
+                context.sendEventToSourceReader(entry.getKey(), sourceCheckEvent);
+            }
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -380,7 +693,7 @@ public class RocketMQSourceEnumerator
     public static class SourceSplitChangeResult {
 
         private final Set<RocketMQSourceSplit> increaseSet;
-        private final Set<MessageQueue> decreaseSet;
+        private final Set<RocketMQSourceSplit> decreaseSet;
 
         private SourceSplitChangeResult(Set<RocketMQSourceSplit> increaseSet) {
             this.increaseSet = Collections.unmodifiableSet(increaseSet);
@@ -388,7 +701,7 @@ public class RocketMQSourceEnumerator
         }
 
         private SourceSplitChangeResult(
-                Set<RocketMQSourceSplit> increaseSet, Set<MessageQueue> decreaseSet) {
+                Set<RocketMQSourceSplit> increaseSet, Set<RocketMQSourceSplit> decreaseSet) {
             this.increaseSet = Collections.unmodifiableSet(increaseSet);
             this.decreaseSet = Collections.unmodifiableSet(decreaseSet);
         }
@@ -397,14 +710,14 @@ public class RocketMQSourceEnumerator
             return increaseSet;
         }
 
-        public Set<MessageQueue> getDecreaseSet() {
+        public Set<RocketMQSourceSplit> getDecreaseSet() {
             return decreaseSet;
         }
     }
 
     @VisibleForTesting
     private SourceChangeResult getSourceChangeResult(Set<MessageQueue> latestSet) {
-        Set<MessageQueue> currentSet = Collections.unmodifiableSet(this.allocatedSet);
+        Set<MessageQueue> currentSet = Collections.unmodifiableSet(this.allocatedSet.keySet());
         Set<MessageQueue> increaseSet = Sets.difference(latestSet, currentSet);
         Set<MessageQueue> decreaseSet = Sets.difference(currentSet, latestSet);
 

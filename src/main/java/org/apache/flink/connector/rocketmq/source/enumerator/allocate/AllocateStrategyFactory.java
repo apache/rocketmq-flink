@@ -27,6 +27,7 @@ public class AllocateStrategyFactory {
 
     public static final String STRATEGY_NAME_BROADCAST = "broadcast";
     public static final String STRATEGY_NAME_CONSISTENT_HASH = "hash";
+    public static final String STRATEGY_NAME_AVERAGE = "average";
 
     private AllocateStrategyFactory() {
         // No public constructor.
@@ -46,6 +47,8 @@ public class AllocateStrategyFactory {
                 return new ConsistentHashAllocateStrategy();
             case STRATEGY_NAME_BROADCAST:
                 return new BroadcastAllocateStrategy();
+            case STRATEGY_NAME_AVERAGE:
+                return new AverageAllocateStrategy();
             default:
                 throw new IllegalArgumentException(
                         "We don't support this allocate strategy: " + allocateStrategyName);

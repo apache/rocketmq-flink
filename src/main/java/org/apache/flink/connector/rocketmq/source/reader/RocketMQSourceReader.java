@@ -19,30 +19,43 @@
 package org.apache.flink.connector.rocketmq.source.reader;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.connector.source.SourceEvent;
 import org.apache.flink.api.connector.source.SourceReaderContext;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.source.reader.RecordEmitter;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.SingleThreadMultiplexSourceReaderBase;
+import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
+import org.apache.flink.connector.base.source.reader.splitreader.SplitsAddition;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
+import org.apache.flink.connector.rocketmq.common.event.SourceCheckEvent;
+import org.apache.flink.connector.rocketmq.common.event.SourceDetectEvent;
+import org.apache.flink.connector.rocketmq.common.event.SourceInitAssignEvent;
+import org.apache.flink.connector.rocketmq.common.event.SourceReportOffsetEvent;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
 import org.apache.flink.connector.rocketmq.source.metrics.RocketMQSourceReaderMetrics;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplitState;
 import org.apache.flink.connector.rocketmq.source.util.UtilAll;
 
+import com.google.common.collect.Sets;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /** The source reader for RocketMQ partitions. */
 public class RocketMQSourceReader<T>
@@ -57,6 +70,7 @@ public class RocketMQSourceReader<T>
     private final SortedMap<Long, Map<MessageQueue, Long>> offsetsToCommit;
     private final ConcurrentMap<MessageQueue, Long> offsetsOfFinishedSplits;
     private final RocketMQSourceReaderMetrics rocketmqSourceReaderMetrics;
+    private final RocketMQSplitReader reader;
 
     public RocketMQSourceReader(
             FutureCompletingBlockingQueue<RecordsWithSplitIds<MessageView>> elementsQueue,
@@ -64,7 +78,8 @@ public class RocketMQSourceReader<T>
             RecordEmitter<MessageView, T, RocketMQSourceSplitState> recordEmitter,
             Configuration config,
             SourceReaderContext context,
-            RocketMQSourceReaderMetrics rocketMQSourceReaderMetrics) {
+            RocketMQSourceReaderMetrics rocketMQSourceReaderMetrics,
+            Supplier<SplitReader<MessageView, RocketMQSourceSplit>> readerSupplier) {
 
         super(elementsQueue, rocketmqSourceFetcherManager, recordEmitter, config, context);
         this.offsetsToCommit = Collections.synchronizedSortedMap(new TreeMap<>());
@@ -72,6 +87,7 @@ public class RocketMQSourceReader<T>
         this.commitOffsetsOnCheckpoint =
                 config.get(RocketMQSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT);
         this.rocketmqSourceReaderMetrics = rocketMQSourceReaderMetrics;
+        this.reader = (RocketMQSplitReader) readerSupplier.get();
     }
 
     @Override
@@ -136,10 +152,91 @@ public class RocketMQSourceReader<T>
 
     @Override
     protected RocketMQSourceSplit toSplitType(String splitId, RocketMQSourceSplitState splitState) {
+        // Report checkpoint progress.
+        SourceReportOffsetEvent sourceEvent = new SourceReportOffsetEvent();
+        sourceEvent.setBroker(splitState.getBrokerName());
+        sourceEvent.setTopic(splitState.getTopic());
+        sourceEvent.setQueueId(splitState.getQueueId());
+        sourceEvent.setCheckpoint(splitState.getCurrentOffset());
+        context.sendSourceEventToCoordinator(sourceEvent);
+        LOG.info("Report checkpoint progress: {}", sourceEvent);
         return splitState.getSourceSplit();
     }
 
+    @Override
+    public void handleSourceEvents(SourceEvent sourceEvent) {
+        if (sourceEvent instanceof SourceDetectEvent) {
+            handleSourceDetectEvent();
+        } else if (sourceEvent instanceof SourceCheckEvent) {
+            handleSourceCheckEvent((SourceCheckEvent) sourceEvent);
+        }
+    }
+
     // ------------------------
+    private void handleSourceDetectEvent() {
+        SourceInitAssignEvent sourceEvent1 = new SourceInitAssignEvent();
+        List<RocketMQSourceSplit> splits = new LinkedList<>();
+        ConcurrentMap<MessageQueue, Tuple2<Long, Long>> currentOffsetTable =
+                reader.getCurrentOffsetTable();
+
+        if (!currentOffsetTable.isEmpty()) {
+            for (Map.Entry<MessageQueue, Tuple2<Long, Long>> entry :
+                    currentOffsetTable.entrySet()) {
+                MessageQueue messageQueue = entry.getKey();
+                Long startOffset = entry.getValue().f0;
+                Long stopOffset = entry.getValue().f1;
+                RocketMQSourceSplit split =
+                        new RocketMQSourceSplit(messageQueue, startOffset, stopOffset);
+                splits.add(split);
+            }
+        }
+        sourceEvent1.setSplits(splits);
+        context.sendSourceEventToCoordinator(sourceEvent1);
+        reader.setInitFinish(true);
+    }
+
+    private void handleSourceCheckEvent(SourceCheckEvent sourceEvent) {
+        Map<MessageQueue, Tuple2<Long, Long>> checkMap = sourceEvent.getAssignedMq();
+        Set<MessageQueue> assignedMq = checkMap.keySet();
+        Set<MessageQueue> currentMq = reader.getCurrentOffsetTable().keySet();
+        Set<MessageQueue> increaseSet = Sets.difference(assignedMq, currentMq);
+        Set<MessageQueue> decreaseSet = Sets.difference(currentMq, assignedMq);
+
+        if (increaseSet.isEmpty() && decreaseSet.isEmpty()) {
+            LOG.info("No need to checkpoint, current assigned mq is same as before.");
+        }
+
+        if (!increaseSet.isEmpty()) {
+            SplitsAddition<RocketMQSourceSplit> increase;
+            increase =
+                    new SplitsAddition<>(
+                            increaseSet.stream()
+                                    .map(
+                                            mq ->
+                                                    new RocketMQSourceSplit(
+                                                            mq,
+                                                            checkMap.get(mq).f0,
+                                                            checkMap.get(mq).f1,
+                                                            true))
+                                    .collect(Collectors.toList()));
+            reader.handleSplitsChanges(increase);
+        }
+        if (!decreaseSet.isEmpty()) {
+            SplitsAddition<RocketMQSourceSplit> decrease;
+            decrease =
+                    new SplitsAddition<>(
+                            decreaseSet.stream()
+                                    .map(
+                                            mq ->
+                                                    new RocketMQSourceSplit(
+                                                            mq,
+                                                            checkMap.get(mq).f0,
+                                                            checkMap.get(mq).f1,
+                                                            false))
+                                    .collect(Collectors.toList()));
+            reader.handleSplitsChanges(decrease);
+        }
+    }
 
     @VisibleForTesting
     SortedMap<Long, Map<MessageQueue, Long>> getOffsetsToCommit() {

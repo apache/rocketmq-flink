@@ -48,6 +48,11 @@ public class RocketMQSourceSplitState extends RocketMQSourceSplit {
      */
     public RocketMQSourceSplit getSourceSplit() {
         return new RocketMQSourceSplit(
-                getTopic(), getBrokerName(), getQueueId(), getCurrentOffset(), getStoppingOffset());
+                getTopic(),
+                getBrokerName(),
+                getQueueId(),
+                getCurrentOffset(),
+                getStoppingOffset(),
+                getIsIncrease());
     }
 }
