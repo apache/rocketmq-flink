@@ -359,8 +359,11 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
     }
 
     private void awaitTermination() throws InterruptedException {
-        while (runningChecker.isRunning()) {
+        while (runningChecker.isRunning() && runningChecker.getError()==null) {
             Thread.sleep(50);
+        }
+        if(runningChecker.getError()!=null){
+            throw new RuntimeException(runningChecker.getError());
         }
     }
 
