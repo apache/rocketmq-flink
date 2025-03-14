@@ -66,7 +66,7 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
     private List<Message> batchList;
 
     private Meter sinkInTps;
-    private Meter outTps;
+    private Meter numRecordsOutPerSecond;
     private Meter outBps;
     private MetricUtils.LatencyGauge latencyGauge;
 
@@ -101,7 +101,7 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
             throw new RuntimeException(e);
         }
         sinkInTps = MetricUtils.registerSinkInTps(getRuntimeContext());
-        outTps = MetricUtils.registerOutTps(getRuntimeContext());
+        numRecordsOutPerSecond = MetricUtils.registerNumRecordsOutPerSecond(getRuntimeContext());
         outBps = MetricUtils.registerOutBps(getRuntimeContext());
         latencyGauge = MetricUtils.registerOutLatency(getRuntimeContext());
     }
@@ -130,7 +130,7 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
                                 LOG.debug("Async send message success! result: {}", sendResult);
                                 long end = System.currentTimeMillis();
                                 latencyGauge.report(end - timeStartWriting, 1);
-                                outTps.markEvent();
+                                numRecordsOutPerSecond.markEvent();
                                 outBps.markEvent(input.getBody().length);
                             }
 
@@ -171,7 +171,7 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
                 }
                 long end = System.currentTimeMillis();
                 latencyGauge.report(end - timeStartWriting, 1);
-                outTps.markEvent();
+                numRecordsOutPerSecond.markEvent();
                 outBps.markEvent(input.getBody().length);
             } catch (Exception e) {
                 LOG.error("Sync send message exception: ", e);
