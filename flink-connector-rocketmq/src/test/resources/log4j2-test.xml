@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} %-5level [%t] %logger{36} - %msg%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <!-- RocketMQ connector internals -->
+        <Logger name="org.apache.flink.connector.rocketmq" level="DEBUG"/>
+        <!-- Flink runtime source/scheduler -->
+        <Logger name="org.apache.flink.runtime.source" level="DEBUG"/>
+        <Logger name="org.apache.flink.runtime.scheduler" level="INFO"/>
+        <Logger name="org.apache.flink.runtime.executiongraph" level="INFO"/>
+        <Logger name="org.apache.flink.runtime.taskmanager" level="INFO"/>
+        <Logger name="org.apache.flink.streaming" level="INFO"/>
+        <!-- RocketMQ client -->
+        <Logger name="org.apache.rocketmq" level="WARN"/>
+        <!-- Root -->
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>

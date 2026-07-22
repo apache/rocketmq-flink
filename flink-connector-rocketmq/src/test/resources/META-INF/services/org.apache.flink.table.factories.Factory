@@ -1,0 +1,2 @@
+org.apache.flink.streaming.connectors.rocketmq.table.RocketMQDynamicTableSourceFactory
+org.apache.flink.streaming.connectors.rocketmq.table.RocketMQDynamicTableSinkFactory
