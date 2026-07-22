@@ -35,7 +35,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.flink.table.api.DataTypes.BIGINT;
-import static org.apache.flink.table.api.DataTypes.STRING;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

@@ -21,13 +21,13 @@ import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.connector.sink2.Committer;
 import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.connectors.rocketmq.common.selector.MessageQueueSelector;
 import org.apache.flink.connector.rocketmq.sink.committer.RocketMQCommitter;
 import org.apache.flink.connector.rocketmq.sink.committer.SendCommittable;
 import org.apache.flink.connector.rocketmq.sink.committer.SendCommittableSerializer;
 import org.apache.flink.connector.rocketmq.sink.writer.RocketMQWriter;
 import org.apache.flink.connector.rocketmq.sink.writer.serializer.RocketMQSerializationSchema;
 import org.apache.flink.core.io.SimpleVersionedSerializer;
+import org.apache.flink.streaming.connectors.rocketmq.common.selector.MessageQueueSelector;
 
 @PublicEvolving
 public class RocketMQSink<IN> implements TwoPhaseCommittingSink<IN, SendCommittable> {

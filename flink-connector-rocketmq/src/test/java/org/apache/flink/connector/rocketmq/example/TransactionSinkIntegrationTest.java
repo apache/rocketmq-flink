@@ -54,8 +54,8 @@ import static org.junit.Assert.assertTrue;
  *   <li>Record the current max offsets of the transaction topic
  *   <li>Run a bounded Flink job writing messages with EXACTLY_ONCE; checkpointing triggers the
  *       two-phase commit (prepareCommit → Committer.commit → endTransaction COMMIT)
- *   <li>Consume the topic from the recorded offsets and verify every message became visible,
- *       which only happens after a successful transaction commit
+ *   <li>Consume the topic from the recorded offsets and verify every message became visible, which
+ *       only happens after a successful transaction commit
  * </ol>
  *
  * <p>Skipped automatically when environment variables are not set. The topic must be a

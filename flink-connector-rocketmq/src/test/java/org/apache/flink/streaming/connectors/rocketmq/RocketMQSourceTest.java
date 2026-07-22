@@ -18,10 +18,10 @@
 
 package org.apache.flink.streaming.connectors.rocketmq;
 
+import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext;
 import org.apache.flink.streaming.connectors.rocketmq.common.serialization.KeyValueDeserializationSchema;
 import org.apache.flink.streaming.connectors.rocketmq.common.serialization.SimpleKeyValueDeserializationSchema;
 import org.apache.flink.streaming.connectors.rocketmq.common.util.TestUtils;
-import org.apache.flink.streaming.api.functions.source.SourceFunction.SourceContext;
 
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
 import org.apache.rocketmq.client.consumer.PullResult;

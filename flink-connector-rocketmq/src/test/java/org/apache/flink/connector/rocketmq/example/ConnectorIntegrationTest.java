@@ -43,9 +43,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.apache.flink.connector.rocketmq.example.ConnectorConfig.ACCESS_KEY;
 import static org.apache.flink.connector.rocketmq.example.ConnectorConfig.CONSUMER_GROUP;
@@ -122,8 +120,8 @@ public class ConnectorIntegrationTest {
     // ---- Step 1: Start Flink Source → Sink pipeline ----
 
     private Thread startFlinkPipeline() throws Exception {
-        System.out.println("[Step 1] Starting Flink pipeline: "
-                + SOURCE_TOPIC_1 + " → " + SINK_TOPIC_1);
+        System.out.println(
+                "[Step 1] Starting Flink pipeline: " + SOURCE_TOPIC_1 + " → " + SINK_TOPIC_1);
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment(1);
 
@@ -138,8 +136,7 @@ public class ConnectorIntegrationTest {
                         .setMinOffsets(OffsetsSelector.latest())
                         .setConfig(RocketMQOptions.OPTIONAL_ACCESS_KEY, ACCESS_KEY)
                         .setConfig(RocketMQOptions.OPTIONAL_SECRET_KEY, SECRET_KEY)
-                        .setConfig(
-                                RocketMQOptions.OPTIONAL_ACCESS_CHANNEL, AccessChannel.CLOUD)
+                        .setConfig(RocketMQOptions.OPTIONAL_ACCESS_CHANNEL, AccessChannel.CLOUD)
                         .setDeserializer(new StringBodyDeserializationSchema())
                         .build();
 
@@ -150,8 +147,7 @@ public class ConnectorIntegrationTest {
                         .setGroupId(PRODUCER_GROUP)
                         .setConfig(RocketMQOptions.OPTIONAL_ACCESS_KEY, ACCESS_KEY)
                         .setConfig(RocketMQOptions.OPTIONAL_SECRET_KEY, SECRET_KEY)
-                        .setConfig(
-                                RocketMQOptions.OPTIONAL_ACCESS_CHANNEL, AccessChannel.CLOUD)
+                        .setConfig(RocketMQOptions.OPTIONAL_ACCESS_CHANNEL, AccessChannel.CLOUD)
                         .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
                         .setSerializer(
                                 (element, context, timestamp) ->
@@ -215,8 +211,7 @@ public class ConnectorIntegrationTest {
             producer.shutdown();
         }
 
-        System.out.printf(
-                "[Step 2] Done: %d/%d messages sent%n%n", successCount, MESSAGE_COUNT);
+        System.out.printf("[Step 2] Done: %d/%d messages sent%n%n", successCount, MESSAGE_COUNT);
         if (successCount < MESSAGE_COUNT) {
             throw new RuntimeException(
                     "Failed to produce all messages: " + successCount + "/" + MESSAGE_COUNT);
@@ -265,7 +260,9 @@ public class ConnectorIntegrationTest {
                 receivedMessages.size(), MESSAGE_COUNT);
 
         assertTrue(
-                "Expected at least " + MESSAGE_COUNT + " messages in sink, got "
+                "Expected at least "
+                        + MESSAGE_COUNT
+                        + " messages in sink, got "
                         + receivedMessages.size(),
                 receivedMessages.size() >= MESSAGE_COUNT);
     }

@@ -19,10 +19,6 @@ package org.apache.flink.streaming.connectors.rocketmq.table;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
-import org.apache.flink.streaming.connectors.rocketmq.RocketMQConfig;
-import org.apache.flink.streaming.connectors.rocketmq.RocketMQSourceFunction;
-import org.apache.flink.streaming.connectors.rocketmq.common.serialization.KeyValueDeserializationSchema;
-import org.apache.flink.streaming.connectors.rocketmq.common.serialization.RowKeyValueDeserializationSchema;
 import org.apache.flink.connector.rocketmq.source.RocketMQSource;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceBuilder;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
@@ -32,6 +28,10 @@ import org.apache.flink.connector.rocketmq.source.reader.deserializer.BytesMessa
 import org.apache.flink.connector.rocketmq.source.reader.deserializer.RocketMQDeserializationSchema;
 import org.apache.flink.connector.rocketmq.source.reader.deserializer.RocketMQRowDeserializationSchema;
 import org.apache.flink.connector.rocketmq.source.reader.deserializer.RowDeserializationSchema.MetadataConverter;
+import org.apache.flink.streaming.connectors.rocketmq.RocketMQConfig;
+import org.apache.flink.streaming.connectors.rocketmq.RocketMQSourceFunction;
+import org.apache.flink.streaming.connectors.rocketmq.common.serialization.KeyValueDeserializationSchema;
+import org.apache.flink.streaming.connectors.rocketmq.common.serialization.RowKeyValueDeserializationSchema;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.connector.ChangelogMode;

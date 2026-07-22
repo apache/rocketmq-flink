@@ -48,7 +48,6 @@ import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.UserCodeClassLoader;
 
-
 import java.util.function.Supplier;
 
 /** The Source implementation of RocketMQ. */

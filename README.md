@@ -11,8 +11,10 @@ Two connector tracks are shipped:
 | Track | Module | RocketMQ client | Best for |
 | --- | --- | --- | --- |
 | **Remoting** | `flink-connector-rocketmq` | `rocketmq-client` (remoting protocol) | Classic topics, FLIP-27 source + SinkV2 sink, SQL |
+| **gRPC** | `flink-connector-rocketmq-grpc` | `rocketmq-client-java` (gRPC protocol) | RocketMQ 5.x lite topics, downstream ack / fair throttling |
 
-The SQL fat-jar is packaged by `flink-sql-connector-rocketmq`.
+The SQL fat-jars are packaged by `flink-sql-connector-rocketmq` and
+`flink-sql-connector-rocketmq-grpc`.
 
 ## Apache Flink
 
@@ -93,6 +95,20 @@ CREATE TABLE rocketmq_source (
 );
 ```
 
+### gRPC lite consumer (RocketMQ 5.x)
+
+```java
+RocketMQGrpcSource<String> source = RocketMQGrpcSource.<String>builder()
+        .setEndpoints("127.0.0.1:8081")
+        .setConsumerGroup("GID-lite")
+        .setMainTopic("LiteMainTopic")        // wildcard-subscribes all lite topics under it
+        .setValueOnlyDeserializer(new SimpleStringSchema())
+        .build();
+```
+
+The gRPC source emits `AckableMessage<OUT>` and never acks by itself: the downstream operators own
+the ack / throttle decision. See the gRPC connector doc for the ack operator wirings.
+
 ## Documentation
 
 Connector documentation is located in the `docs/` directory of this repository:
@@ -100,6 +116,7 @@ Connector documentation is located in the `docs/` directory of this repository:
 | Document | Content |
 | --- | --- |
 | [docs/remoting-connector.md](docs/remoting-connector.md) | Remoting DataStream connector: usage and all configuration options |
+| [docs/grpc-connector.md](docs/grpc-connector.md) | gRPC lite connector: prerequisites, downstream ack / throttling, options |
 | [docs/sql-connector.md](docs/sql-connector.md) | Table/SQL connector: DDL, metadata columns, fat-jar notes |
 | [docs/legacy-connector.md](docs/legacy-connector.md) | Legacy `RocketMQSourceFunction` / `RocketMQSink` (deprecated) |
 | [docs/connector-overview.md](docs/connector-overview.md) | Feature comparison with other messaging connectors |

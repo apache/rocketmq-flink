@@ -128,7 +128,8 @@ public class SqlIntegrationTest {
     }
 
     private void produceMessages() throws Exception {
-        System.out.println("[Step 2] Producing " + MESSAGE_COUNT + " messages to " + SOURCE_TOPIC_2);
+        System.out.println(
+                "[Step 2] Producing " + MESSAGE_COUNT + " messages to " + SOURCE_TOPIC_2);
         DefaultMQProducer producer =
                 new DefaultMQProducer(PRODUCER_GROUP, getAclRpcHook(), true, null);
         producer.setNamesrvAddr(ENDPOINTS);

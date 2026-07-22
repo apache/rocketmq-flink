@@ -73,7 +73,9 @@ under the License.
 
     <modules>
         <module>flink-connector-rocketmq</module>
+        <module>flink-connector-rocketmq-grpc</module>
         <module>flink-sql-connector-rocketmq</module>
+        <module>flink-sql-connector-rocketmq-grpc</module>
     </modules>
 
     <properties>

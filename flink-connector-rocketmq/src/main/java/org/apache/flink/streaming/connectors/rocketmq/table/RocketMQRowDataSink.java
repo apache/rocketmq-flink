@@ -16,8 +16,8 @@ package org.apache.flink.streaming.connectors.rocketmq.table;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.connectors.rocketmq.RocketMQSink;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
+import org.apache.flink.streaming.connectors.rocketmq.RocketMQSink;
 import org.apache.flink.table.data.RowData;
 
 import org.apache.rocketmq.common.message.Message;

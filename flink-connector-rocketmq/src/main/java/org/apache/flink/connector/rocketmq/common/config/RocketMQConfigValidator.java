@@ -97,8 +97,10 @@ public class RocketMQConfigValidator {
         }
 
         public RocketMQConfigValidator build() {
-            List<Set<ConfigOption<?>>> conflict = Collections.unmodifiableList(new ArrayList<>(conflictOptions));
-            Set<ConfigOption<?>> required = Collections.unmodifiableSet(new HashSet<>(requiredOptions));
+            List<Set<ConfigOption<?>>> conflict =
+                    Collections.unmodifiableList(new ArrayList<>(conflictOptions));
+            Set<ConfigOption<?>> required =
+                    Collections.unmodifiableSet(new HashSet<>(requiredOptions));
 
             return new RocketMQConfigValidator(conflict, required);
         }

@@ -25,12 +25,6 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.connectors.rocketmq.common.config.OffsetResetStrategy;
-import org.apache.flink.streaming.connectors.rocketmq.common.config.StartupMode;
-import org.apache.flink.streaming.connectors.rocketmq.common.serialization.KeyValueDeserializationSchema;
-import org.apache.flink.streaming.connectors.rocketmq.common.util.MetricUtils;
-import org.apache.flink.streaming.connectors.rocketmq.common.util.RetryUtil;
-import org.apache.flink.streaming.connectors.rocketmq.common.util.RocketMQUtils;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Meter;
 import org.apache.flink.metrics.MeterView;
@@ -41,6 +35,12 @@ import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
+import org.apache.flink.streaming.connectors.rocketmq.common.config.OffsetResetStrategy;
+import org.apache.flink.streaming.connectors.rocketmq.common.config.StartupMode;
+import org.apache.flink.streaming.connectors.rocketmq.common.serialization.KeyValueDeserializationSchema;
+import org.apache.flink.streaming.connectors.rocketmq.common.util.MetricUtils;
+import org.apache.flink.streaming.connectors.rocketmq.common.util.RetryUtil;
+import org.apache.flink.streaming.connectors.rocketmq.common.util.RocketMQUtils;
 import org.apache.flink.util.Preconditions;
 
 import org.apache.commons.collections.CollectionUtils;
@@ -70,7 +70,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -268,8 +267,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         }
     }
 
-    private void consumeMessages(
-            MessageQueue mq, SourceContext<OUT> context, int pullBatchSize) {
+    private void consumeMessages(MessageQueue mq, SourceContext<OUT> context, int pullBatchSize) {
         RetryUtil.call(
                 () -> {
                     pollAndEmitLoop(mq, context, pullBatchSize);
@@ -279,8 +277,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                 runningChecker);
     }
 
-    private void pollAndEmitLoop(
-            MessageQueue mq, SourceContext<OUT> context, int pullBatchSize) {
+    private void pollAndEmitLoop(MessageQueue mq, SourceContext<OUT> context, int pullBatchSize) {
         while (runningChecker.isRunning()) {
             try {
                 pollAndEmit(mq, context, pullBatchSize);
@@ -313,8 +310,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         }
 
         if (!found) {
-            RetryUtil.waitForMs(
-                    RocketMQConfig.DEFAULT_CONSUMER_DELAY_WHEN_MESSAGE_NOT_FOUND);
+            RetryUtil.waitForMs(RocketMQConfig.DEFAULT_CONSUMER_DELAY_WHEN_MESSAGE_NOT_FOUND);
         }
     }
 
@@ -322,9 +318,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         long fetchTime = System.currentTimeMillis();
         for (MessageExt msg : messages) {
             byte[] key =
-                    msg.getKeys() != null
-                            ? msg.getKeys().getBytes(StandardCharsets.UTF_8)
-                            : null;
+                    msg.getKeys() != null ? msg.getKeys().getBytes(StandardCharsets.UTF_8) : null;
             byte[] value = msg.getBody();
             OUT data = schema.deserializeKeyAndValue(key, value);
 

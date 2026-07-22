@@ -1,7 +1,9 @@
 # Table / SQL Connector
 
 The remoting SQL connector is packaged as the fat-jar `flink-sql-connector-rocketmq`
-(identifier `rocketmq`).
+(identifier `rocketmq`). The gRPC SQL connector is `flink-sql-connector-rocketmq-grpc`
+(identifier `rocketmq-grpc`); both fat-jars relocate their dependencies and can be deployed on
+the same classpath.
 
 ## Creating tables
 

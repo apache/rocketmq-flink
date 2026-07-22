@@ -66,8 +66,7 @@ class RocketMQScanTableSourceFilterTest {
     @Test
     void sqlFilterShouldBePreservedOnCopy() {
         DescriptorProperties props = new DescriptorProperties();
-        TableSchema schema =
-                TableSchema.builder().field("id", DataTypes.BIGINT()).build();
+        TableSchema schema = TableSchema.builder().field("id", DataTypes.BIGINT()).build();
 
         RocketMQScanTableSource source =
                 new RocketMQScanTableSource(
@@ -97,8 +96,7 @@ class RocketMQScanTableSourceFilterTest {
     void wildcardTagShouldMatchAllMessages() {
         // "*" is the default tag and should not filter any messages
         DescriptorProperties props = new DescriptorProperties();
-        TableSchema schema =
-                TableSchema.builder().field("id", DataTypes.BIGINT()).build();
+        TableSchema schema = TableSchema.builder().field("id", DataTypes.BIGINT()).build();
 
         RocketMQScanTableSource source =
                 new RocketMQScanTableSource(

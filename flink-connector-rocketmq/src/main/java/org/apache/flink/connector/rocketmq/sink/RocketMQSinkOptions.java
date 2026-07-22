@@ -97,7 +97,9 @@ public class RocketMQSinkOptions extends RocketMQOptions {
             ConfigOptions.key("rocketmq.sink.tag.dynamic.column").stringType().noDefaultValue();
 
     public static final ConfigOption<Boolean> OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN_WRITE_INCLUDED =
-            ConfigOptions.key("rocketmq.sink.tag.dynamic.write.included").booleanType().defaultValue(true);
+            ConfigOptions.key("rocketmq.sink.tag.dynamic.write.included")
+                    .booleanType()
+                    .defaultValue(true);
 
     public static final ConfigOption<String> OPTIONAL_WRITE_KEY_COLUMNS =
             ConfigOptions.key("rocketmq.sink.key.columns").stringType().noDefaultValue();

@@ -19,9 +19,9 @@
 package org.apache.flink.connector.rocketmq.source.enumerator.offset;
 
 import org.apache.flink.annotation.PublicEvolving;
-import org.apache.flink.streaming.connectors.rocketmq.common.config.OffsetResetStrategy;
 import org.apache.flink.connector.rocketmq.source.RocketMQSource;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
+import org.apache.flink.streaming.connectors.rocketmq.common.config.OffsetResetStrategy;
 
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.message.MessageQueue;

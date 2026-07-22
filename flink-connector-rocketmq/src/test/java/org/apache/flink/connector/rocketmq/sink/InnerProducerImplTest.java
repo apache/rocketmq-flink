@@ -29,7 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** Tests for verifying that configuration parameters are applied to the RocketMQ producer. */
 class InnerProducerImplTest {
 
-    private TransactionMQProducer getProducerViaReflection(InnerProducerImpl impl) throws Exception {
+    private TransactionMQProducer getProducerViaReflection(InnerProducerImpl impl)
+            throws Exception {
         Field field = InnerProducerImpl.class.getDeclaredField("producer");
         field.setAccessible(true);
         return (TransactionMQProducer) field.get(impl);
