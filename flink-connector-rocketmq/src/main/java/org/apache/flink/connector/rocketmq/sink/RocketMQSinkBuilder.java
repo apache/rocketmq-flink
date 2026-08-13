@@ -26,10 +26,10 @@ import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQConfigBuilder;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQConfigValidator;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
-import org.apache.flink.streaming.connectors.rocketmq.common.selector.MessageQueueSelector;
 import org.apache.flink.connector.rocketmq.sink.writer.serializer.RocketMQSerializationSchema;
 import org.apache.flink.connector.rocketmq.source.RocketMQSource;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
+import org.apache.flink.streaming.connectors.rocketmq.common.selector.MessageQueueSelector;
 
 import org.apache.commons.lang3.StringUtils;
 

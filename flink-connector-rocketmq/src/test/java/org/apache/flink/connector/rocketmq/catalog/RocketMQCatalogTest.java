@@ -23,15 +23,9 @@ import org.apache.flink.table.catalog.CatalogDatabase;
 import org.apache.flink.table.catalog.CatalogPartition;
 import org.apache.flink.table.catalog.CatalogPartitionSpec;
 import org.apache.flink.table.catalog.ObjectPath;
-import org.apache.flink.table.catalog.exceptions.DatabaseAlreadyExistException;
-import org.apache.flink.table.catalog.exceptions.DatabaseNotEmptyException;
 import org.apache.flink.table.catalog.exceptions.DatabaseNotExistException;
-import org.apache.flink.table.catalog.exceptions.FunctionAlreadyExistException;
 import org.apache.flink.table.catalog.exceptions.FunctionNotExistException;
-import org.apache.flink.table.catalog.exceptions.PartitionAlreadyExistsException;
 import org.apache.flink.table.catalog.exceptions.PartitionNotExistException;
-import org.apache.flink.table.catalog.exceptions.PartitionSpecInvalidException;
-import org.apache.flink.table.catalog.exceptions.TableAlreadyExistException;
 import org.apache.flink.table.catalog.exceptions.TableNotExistException;
 import org.apache.flink.table.catalog.exceptions.TableNotPartitionedException;
 import org.apache.flink.table.catalog.stats.CatalogColumnStatistics;
@@ -215,8 +209,7 @@ public class RocketMQCatalogTest {
     @Test
     public void testDropTable() {
         assertThrows(
-                UnsupportedOperationException.class,
-                () -> rocketMQCatalog.dropTable(null, false));
+                UnsupportedOperationException.class, () -> rocketMQCatalog.dropTable(null, false));
     }
 
     @Test
@@ -239,8 +232,7 @@ public class RocketMQCatalogTest {
     @Test
     public void testFunctionExists() {
         assertThrows(
-                UnsupportedOperationException.class,
-                () -> rocketMQCatalog.functionExists(null));
+                UnsupportedOperationException.class, () -> rocketMQCatalog.functionExists(null));
     }
 
     @Test
@@ -274,8 +266,7 @@ public class RocketMQCatalogTest {
     @Test
     public void testListViews() {
         assertThrows(
-                UnsupportedOperationException.class,
-                () -> rocketMQCatalog.listViews("default"));
+                UnsupportedOperationException.class, () -> rocketMQCatalog.listViews("default"));
     }
 
     @Test

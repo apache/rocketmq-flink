@@ -22,8 +22,8 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQConfigValidator;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
-import org.apache.flink.streaming.connectors.rocketmq.RocketMQConfig;
 import org.apache.flink.connector.rocketmq.source.enumerator.allocate.AllocateStrategyFactory;
+import org.apache.flink.streaming.connectors.rocketmq.RocketMQConfig;
 
 /** Includes config options of RocketMQ connector type. */
 public class RocketMQSourceOptions extends RocketMQOptions {

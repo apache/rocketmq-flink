@@ -85,8 +85,7 @@ public class RocketMQRowDeserializationSchema implements RocketMQDeserialization
             bytesMessage.setProperties(message.getProperties());
         }
         bytesMessage.setProperty("__topic__", message.getTopic());
-        bytesMessage.setProperty(
-                "__store_timestamp__", String.valueOf(message.getIngestionTime()));
+        bytesMessage.setProperty("__store_timestamp__", String.valueOf(message.getIngestionTime()));
         bytesMessage.setProperty("__born_timestamp__", String.valueOf(message.getEventTime()));
         bytesMessage.setProperty("__queue_id__", String.valueOf(message.getQueueId()));
         bytesMessage.setProperty("__queue_offset__", String.valueOf(message.getQueueOffset()));

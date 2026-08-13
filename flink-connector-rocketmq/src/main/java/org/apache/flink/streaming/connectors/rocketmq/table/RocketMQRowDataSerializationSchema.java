@@ -26,8 +26,8 @@ import org.apache.rocketmq.common.message.Message;
 
 /**
  * A {@link RocketMQSerializationSchema} adapter that bridges the Table/SQL {@link RowData} to
- * RocketMQ {@link Message} conversion. Delegates to {@link RocketMQRowDataConverter} for the
- * actual conversion logic.
+ * RocketMQ {@link Message} conversion. Delegates to {@link RocketMQRowDataConverter} for the actual
+ * conversion logic.
  */
 public class RocketMQRowDataSerializationSchema implements RocketMQSerializationSchema<RowData> {
 

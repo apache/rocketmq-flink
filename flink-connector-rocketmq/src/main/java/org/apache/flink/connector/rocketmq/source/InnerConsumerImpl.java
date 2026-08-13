@@ -74,10 +74,8 @@ public class InnerConsumerImpl implements InnerConsumer {
         String accessKey = configuration.getString(RocketMQSourceOptions.OPTIONAL_ACCESS_KEY);
         String secretKey = configuration.getString(RocketMQSourceOptions.OPTIONAL_SECRET_KEY);
 
-        boolean enableTrace =
-                configuration.getBoolean(RocketMQSourceOptions.ENABLE_MESSAGE_TRACE);
-        String traceTopic =
-                configuration.getString(RocketMQSourceOptions.CUSTOMIZED_TRACE_TOPIC);
+        boolean enableTrace = configuration.getBoolean(RocketMQSourceOptions.ENABLE_MESSAGE_TRACE);
+        String traceTopic = configuration.getString(RocketMQSourceOptions.CUSTOMIZED_TRACE_TOPIC);
 
         // Note: sync pull thread num may not enough
         if (!StringUtils.isNullOrWhitespaceOnly(accessKey)
@@ -496,17 +494,13 @@ public class InnerConsumerImpl implements InnerConsumer {
         @Override
         public Map<MessageQueue, Long> minOffsets(Collection<MessageQueue> messageQueues) {
             return fetchOffsets(
-                    messageQueues,
-                    mq -> innerConsumer.seekMinOffset(mq),
-                    "fetch min offset");
+                    messageQueues, mq -> innerConsumer.seekMinOffset(mq), "fetch min offset");
         }
 
         @Override
         public Map<MessageQueue, Long> maxOffsets(Collection<MessageQueue> messageQueues) {
             return fetchOffsets(
-                    messageQueues,
-                    mq -> innerConsumer.seekMaxOffset(mq),
-                    "fetch max offset");
+                    messageQueues, mq -> innerConsumer.seekMaxOffset(mq), "fetch max offset");
         }
 
         @Override

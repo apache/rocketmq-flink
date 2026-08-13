@@ -22,7 +22,6 @@ import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.DeliveryGuarantee;
-import org.apache.flink.streaming.connectors.rocketmq.common.selector.MessageQueueSelector;
 import org.apache.flink.connector.rocketmq.sink.InnerProducer;
 import org.apache.flink.connector.rocketmq.sink.InnerProducerImpl;
 import org.apache.flink.connector.rocketmq.sink.RocketMQSinkOptions;
@@ -30,6 +29,7 @@ import org.apache.flink.connector.rocketmq.sink.committer.SendCommittable;
 import org.apache.flink.connector.rocketmq.sink.writer.context.RocketMQSinkContext;
 import org.apache.flink.connector.rocketmq.sink.writer.context.RocketMQSinkContextImpl;
 import org.apache.flink.connector.rocketmq.sink.writer.serializer.RocketMQSerializationSchema;
+import org.apache.flink.streaming.connectors.rocketmq.common.selector.MessageQueueSelector;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.apache.rocketmq.client.producer.SendResult;
