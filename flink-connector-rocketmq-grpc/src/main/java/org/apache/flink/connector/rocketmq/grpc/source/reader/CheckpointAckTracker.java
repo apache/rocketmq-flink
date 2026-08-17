@@ -26,10 +26,10 @@ import java.util.List;
 import java.util.TreeMap;
 
 /**
- * Tracks the receipt handles of emitted-but-unacknowledged messages of the SIMPLE mode, grouped
- * by the checkpoint that observed them. Handles snapshotted with checkpoint N are acknowledged
- * once checkpoint N completes; a failure before completion simply leaves the messages un-acked so
- * the broker redelivers them after their invisible duration (at-least-once).
+ * Tracks the receipt handles of emitted-but-unacknowledged messages of the SIMPLE mode, grouped by
+ * the checkpoint that observed them. Handles snapshotted with checkpoint N are acknowledged once
+ * checkpoint N completes; a failure before completion simply leaves the messages un-acked so the
+ * broker redelivers them after their invisible duration (at-least-once).
  *
  * <p>The tracker holds no state that must survive failures: losing pending handles only causes
  * redelivery, never loss. All methods are synchronized because the record emitter (reader thread)
@@ -55,8 +55,8 @@ public class CheckpointAckTracker {
     }
 
     /**
-     * Return every handle whose checkpoint id is at most the completed one, removing them from
-     * the tracker.
+     * Return every handle whose checkpoint id is at most the completed one, removing them from the
+     * tracker.
      */
     public synchronized List<RocketMQReceiptHandle> completeUpTo(long checkpointId) {
         final List<RocketMQReceiptHandle> completed = new ArrayList<>();

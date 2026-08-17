@@ -59,9 +59,8 @@ import static org.apache.flink.util.Preconditions.checkArgument;
  * reader does not partition topics. Instead every subtask consumes the same topic: the main lite
  * topic in {@link ConsumerMode#LITE}, or the subscribed normal topic in {@link
  * ConsumerMode#SIMPLE}. To raise a single subtask's throughput it runs {@code fetch-concurrency}
- * worker threads that share a single {@link PopConsumer}, each issuing a blocking {@code
- * receive()} long poll. Received messages are handed to the (single) fetcher thread through an
- * internal queue.
+ * worker threads that share a single {@link PopConsumer}, each issuing a blocking {@code receive()}
+ * long poll. Received messages are handed to the (single) fetcher thread through an internal queue.
  *
  * <p>Acknowledgement depends on the mode. In {@link ConsumerMode#LITE} this reader never
  * acknowledges messages: acknowledgement is deferred to a downstream operator that receives the

@@ -47,12 +47,12 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A credential-free acknowledgement client that acknowledges RocketMQ Pop messages of both lite
- * and normal topics. A downstream operator uses it to acknowledge or re-schedule the messages
- * described by a {@link RocketMQReceiptHandle}, which is what the LITE mode of the source relies
- * on: the ack decision is only known after downstream processing, possibly on the other side of a
- * shuffle. The credentials used to talk to the RocketMQ proxy are configured on the operator that
- * owns the client and are <b>never</b> carried in the data stream.
+ * A credential-free acknowledgement client that acknowledges RocketMQ Pop messages of both lite and
+ * normal topics. A downstream operator uses it to acknowledge or re-schedule the messages described
+ * by a {@link RocketMQReceiptHandle}, which is what the LITE mode of the source relies on: the ack
+ * decision is only known after downstream processing, possibly on the other side of a shuffle. The
+ * credentials used to talk to the RocketMQ proxy are configured on the operator that owns the
+ * client and are <b>never</b> carried in the data stream.
  *
  * <p>The client keeps a lazily populated pool of same-group {@link LiteSimpleConsumer}s, one per
  * {@link ConsumerKey routing triple} carried by the incoming handles, and issues the {@code ack} /

@@ -65,8 +65,7 @@ public class PopConsumerProvider {
                                     ClientConfigurationProvider.getClientConfiguration(
                                             configuration))
                             .setConsumerGroup(
-                                    configuration.get(
-                                            RocketMQGrpcSourceOptions.CONSUMER_GROUP))
+                                    configuration.get(RocketMQGrpcSourceOptions.CONSUMER_GROUP))
                             .setAwaitDuration(
                                     configuration.get(RocketMQGrpcSourceOptions.AWAIT_DURATION))
                             .setSubscriptionExpressions(
@@ -81,8 +80,7 @@ public class PopConsumerProvider {
                         .setClientConfiguration(
                                 ClientConfigurationProvider.getClientConfiguration(configuration))
                         .setConsumerGroup(
-                                configuration.get(
-                                        RocketMQGrpcSourceOptions.CONSUMER_GROUP))
+                                configuration.get(RocketMQGrpcSourceOptions.CONSUMER_GROUP))
                         .setAwaitDuration(
                                 configuration.get(RocketMQGrpcSourceOptions.AWAIT_DURATION))
                         .bindTopic(configuration.get(RocketMQGrpcSourceOptions.MAIN_TOPIC))

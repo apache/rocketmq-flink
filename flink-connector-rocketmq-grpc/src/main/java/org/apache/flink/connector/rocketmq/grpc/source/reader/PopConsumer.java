@@ -30,8 +30,8 @@ import java.util.List;
 /**
  * The minimal consumer surface the split reader needs. Both SDK consumers ({@code
  * LiteSimpleConsumer} and {@code SimpleConsumer}) expose the same Pop-model receive / ack /
- * change-invisible-duration operations but share no common interface, so the connector adapts
- * them to this single type.
+ * change-invisible-duration operations but share no common interface, so the connector adapts them
+ * to this single type.
  */
 @Internal
 public interface PopConsumer extends Closeable {

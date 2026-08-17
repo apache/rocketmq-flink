@@ -43,8 +43,8 @@ import java.util.Map;
  * its acknowledgement behaviour depends on the consumer mode:
  *
  * <ul>
- *   <li>LITE mode: the reader does not acknowledge messages itself; acknowledgement is performed
- *       by a downstream operator using the self-contained receipt handle carried by each emitted
+ *   <li>LITE mode: the reader does not acknowledge messages itself; acknowledgement is performed by
+ *       a downstream operator using the self-contained receipt handle carried by each emitted
  *       record.
  *   <li>SIMPLE mode: the reader acknowledges the emitted messages itself once the checkpoint that
  *       observed them completes, issuing the acks through the very {@link

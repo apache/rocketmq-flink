@@ -81,8 +81,7 @@ public class RocketMQGrpcSourceBuilder<OUT> {
      * ConsumerMode#SIMPLE}; ignored in {@link ConsumerMode#LITE}.
      */
     public RocketMQGrpcSourceBuilder<OUT> setTopic(String topic) {
-        checkArgument(
-                topic != null && !topic.trim().isEmpty(), "topic must not be null or blank");
+        checkArgument(topic != null && !topic.trim().isEmpty(), "topic must not be null or blank");
         this.topic = topic;
         return this;
     }

@@ -32,10 +32,10 @@ import java.util.Objects;
  * RocketMQAckClient} so they can acknowledge or re-schedule RocketMQ Pop messages directly from
  * their own business logic via {@link #ack} and {@link #changeInvisibleDuration}.
  *
- * <p>The client is shared per TaskManager through {@link RocketMQAckClient#acquire}: it is
- * acquired in {@link #open(OpenContext)} and released in {@link #close()}. The RocketMQ client
- * options (endpoints, namespace, credentials, TLS, timeout) are provided through the {@link
- * Configuration} passed to the constructor and never travel in the data stream.
+ * <p>The client is shared per TaskManager through {@link RocketMQAckClient#acquire}: it is acquired
+ * in {@link #open(OpenContext)} and released in {@link #close()}. The RocketMQ client options
+ * (endpoints, namespace, credentials, TLS, timeout) are provided through the {@link Configuration}
+ * passed to the constructor and never travel in the data stream.
  *
  * @param <IN> the input record type, typically {@code AckableMessage<T>}.
  * @param <OUT> the output record type.

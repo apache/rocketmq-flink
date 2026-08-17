@@ -294,8 +294,7 @@ class RocketMQGrpcITCase extends AbstractTestBase {
                             try {
                                 env.execute("Simple Mode Collecting Job");
                             } catch (Exception e) {
-                                LOG.info(
-                                        "Simple mode collecting job ended: {}", e.getMessage());
+                                LOG.info("Simple mode collecting job ended: {}", e.getMessage());
                             }
                         });
         jobThread.setDaemon(true);

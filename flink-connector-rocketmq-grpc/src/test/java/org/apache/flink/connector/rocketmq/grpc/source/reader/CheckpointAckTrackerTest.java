@@ -89,7 +89,6 @@ class CheckpointAckTrackerTest {
 
     private static RocketMQReceiptHandle handle(int id) {
         return new RocketMQReceiptHandle(
-                "127.0.0.1:8080", "", "group", "topic", null,
-                "msg-" + id, "receipt-" + id, 1);
+                "127.0.0.1:8080", "", "group", "topic", null, "msg-" + id, "receipt-" + id, 1);
     }
 }
