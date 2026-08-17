@@ -19,11 +19,15 @@
 package org.apache.flink.connector.rocketmq.grpc.source.reader;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.source.reader.RecordsBySplits;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsChange;
+import org.apache.flink.connector.rocketmq.grpc.ack.RocketMQReceiptHandle;
+import org.apache.flink.connector.rocketmq.grpc.ack.RocketMQReceiptHandleCodec;
+import org.apache.flink.connector.rocketmq.grpc.source.ConsumerMode;
 import org.apache.flink.connector.rocketmq.grpc.source.InvisibleDurationRenewalPolicies;
 import org.apache.flink.connector.rocketmq.grpc.source.InvisibleDurationRenewalPolicy;
 import org.apache.flink.connector.rocketmq.grpc.source.RocketMQGrpcSourceOptions;
@@ -31,7 +35,6 @@ import org.apache.flink.connector.rocketmq.grpc.source.split.RocketMQGrpcSourceS
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.apache.rocketmq.client.apis.ClientException;
-import org.apache.rocketmq.client.apis.consumer.LiteSimpleConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,15 +56,20 @@ import static org.apache.flink.util.Preconditions.checkArgument;
  * The {@link SplitReader} implementation for the RocketMQ gRPC Pop model.
  *
  * <p>Because the broker performs message-level load balancing across the consumer group, this
- * reader does not partition topics. Instead every subtask binds the same main lite topic. To raise
- * a single subtask's throughput it runs {@code fetch-concurrency} worker threads that share a
- * single {@link LiteSimpleConsumer}, each issuing a blocking {@code receive()} long poll. Received
- * messages are handed to the (single) fetcher thread through an internal queue.
+ * reader does not partition topics. Instead every subtask consumes the same topic: the main lite
+ * topic in {@link ConsumerMode#LITE}, or the subscribed normal topic in {@link
+ * ConsumerMode#SIMPLE}. To raise a single subtask's throughput it runs {@code fetch-concurrency}
+ * worker threads that share a single {@link PopConsumer}, each issuing a blocking {@code
+ * receive()} long poll. Received messages are handed to the (single) fetcher thread through an
+ * internal queue.
  *
- * <p>This reader never acknowledges messages: acknowledgement is deferred to a downstream operator
- * that receives the {@code AckableMessage} records carrying a self-contained receipt handle.
- * Messages that are never acked become visible again after their invisible duration and are
- * redelivered by the broker, which provides the at-least-once guarantee.
+ * <p>Acknowledgement depends on the mode. In {@link ConsumerMode#LITE} this reader never
+ * acknowledges messages: acknowledgement is deferred to a downstream operator that receives the
+ * {@code AckableMessage} records carrying a self-contained receipt handle. In {@link
+ * ConsumerMode#SIMPLE} the source reader acknowledges through {@link #ack(RocketMQReceiptHandle)}
+ * on this very consumer once the checkpoint that observed the messages completes. Messages that are
+ * never acked become visible again after their invisible duration and are redelivered by the
+ * broker, which provides the at-least-once guarantee.
  *
  * <p>When an {@link InvisibleDurationRenewalPolicy} is configured, messages that are still buffered
  * in the internal queue shortly before they would become visible again are offered to the policy,
@@ -90,7 +98,13 @@ public class RocketMQGrpcSourceSplitReader
 
     private volatile boolean closed = false;
     private ReceiveWorker[] workers;
-    private LiteSimpleConsumer consumer;
+
+    /**
+     * Written by the fetcher thread in {@link #startWorkers()} and read by the receive workers, the
+     * renewal thread and the mailbox thread ({@link #ack(RocketMQReceiptHandle)}), hence volatile.
+     */
+    private volatile PopConsumer consumer;
+
     @Nullable private ScheduledThreadPoolExecutor renewalExecutor;
 
     public RocketMQGrpcSourceSplitReader(Configuration configuration) {
@@ -158,10 +172,10 @@ public class RocketMQGrpcSourceSplitReader
             return;
         }
         try {
-            consumer = LiteSimpleConsumerProvider.create(configuration);
+            consumer = PopConsumerProvider.create(configuration);
         } catch (ClientException e) {
             started.set(false);
-            throw new FlinkRuntimeException("Failed to create RocketMQ gRPC LiteSimpleConsumer", e);
+            throw new FlinkRuntimeException("Failed to create the RocketMQ gRPC consumer", e);
         }
         if (renewalPolicy != null) {
             renewalExecutor =
@@ -180,10 +194,49 @@ public class RocketMQGrpcSourceSplitReader
             workers[i] = worker;
             worker.start();
         }
+        final boolean simple =
+                configuration.get(RocketMQGrpcSourceOptions.MODE) == ConsumerMode.SIMPLE;
         LOG.info(
-                "Started {} receive worker(s) sharing one lite consumer bound to topic {}",
+                "Started {} receive worker(s) sharing one {} consumer bound to topic {}",
                 fetchConcurrency,
-                configuration.get(RocketMQGrpcSourceOptions.MAIN_TOPIC));
+                simple ? "simple" : "lite",
+                configuration.get(
+                        simple
+                                ? RocketMQGrpcSourceOptions.TOPIC
+                                : RocketMQGrpcSourceOptions.MAIN_TOPIC));
+    }
+
+    /**
+     * Acknowledge a message that this reader received, removing it from the Pop invisible set. Used
+     * by the source reader in SIMPLE mode once the checkpoint that observed the message completes.
+     *
+     * <p>The credential-free {@link RocketMQReceiptHandle} is passed instead of the SDK {@code
+     * MessageView} on purpose: it keeps the checkpoint ack tracker from pinning message bodies in
+     * memory, and the minimal view the ack RPC needs is rebuilt here.
+     *
+     * <p>SDK Pop consumers are thread-safe, so acking from the mailbox thread while the receive
+     * workers block in {@code receive()} on the same instance is safe.
+     *
+     * @param handle the receipt handle of a message emitted by this reader.
+     * @throws ClientException if the ack RPC fails.
+     * @throws IllegalStateException if the consumer has not been started yet or is already closed.
+     */
+    public void ack(RocketMQReceiptHandle handle) throws ClientException {
+        final PopConsumer currentConsumer = consumer;
+        if (currentConsumer == null || closed) {
+            throw new IllegalStateException(
+                    "Cannot acknowledge message "
+                            + handle.getMessageId()
+                            + ": the RocketMQ gRPC consumer is "
+                            + (currentConsumer == null ? "not started yet" : "already closed"));
+        }
+        currentConsumer.ack(RocketMQReceiptHandleCodec.toAckable(handle));
+    }
+
+    /** Inject a consumer so that ack / renewal behaviour can be tested without a live cluster. */
+    @VisibleForTesting
+    void setConsumer(PopConsumer consumer) {
+        this.consumer = consumer;
     }
 
     @Override
@@ -262,7 +315,7 @@ public class RocketMQGrpcSourceSplitReader
     }
 
     /**
-     * A single receive loop over the shared {@link LiteSimpleConsumer}. Because the consumer is
+     * A single receive loop over the shared {@link PopConsumer}. Because the consumer is
      * thread-safe, several workers can call {@code receive()} on it concurrently; a blocking {@code
      * receive()} only occupies its calling thread, which is why several threads are used to keep
      * that many long polls in flight.

@@ -122,6 +122,37 @@ public class RocketMQGrpcConnectorOptions {
                     .noDefaultValue()
                     .withDescription("The consumer group of the SimpleConsumer.");
 
+    public static final ConfigOption<String> MODE =
+            ConfigOptions.key("source.mode")
+                    .stringType()
+                    .defaultValue("simple")
+                    .withDescription(
+                            "The consumption mode. 'simple' (the default) subscribes to the "
+                                    + "configured topic as a normal topic via a SimpleConsumer and "
+                                    + "the source acknowledges messages when their checkpoint "
+                                    + "completes (checkpointing must be enabled and "
+                                    + "'source.invisible-duration' must exceed the checkpoint "
+                                    + "interval plus timeout); 'lite' binds the configured topic "
+                                    + "as a main lite topic via a LiteSimpleConsumer and defers "
+                                    + "acknowledgement to a downstream operator.");
+
+    public static final ConfigOption<String> FILTER_EXPRESSION =
+            ConfigOptions.key("source.filter-expression")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "The filter expression of the 'simple' mode subscription, e.g. a tag "
+                                    + "expression 'tagA||tagB' or a SQL92 expression. When absent, "
+                                    + "all messages are received.");
+
+    public static final ConfigOption<String> FILTER_TYPE =
+            ConfigOptions.key("source.filter-type")
+                    .stringType()
+                    .defaultValue("TAG")
+                    .withDescription(
+                            "The type of 'source.filter-expression': TAG or SQL92. Only effective "
+                                    + "in 'simple' mode.");
+
     public static final ConfigOption<Duration> AWAIT_DURATION =
             ConfigOptions.key("source.await-duration")
                     .durationType()
@@ -134,9 +165,13 @@ public class RocketMQGrpcConnectorOptions {
                     .durationType()
                     .defaultValue(Duration.ofSeconds(60))
                     .withDescription(
-                            "The invisible duration of a received message. It must be larger than "
-                                    + "the checkpoint interval plus the checkpoint timeout so that "
-                                    + "un-acked messages are redelivered after a failure.");
+                            "The invisible duration of a received message; un-acked messages are "
+                                    + "redelivered after it expires. In 'simple' mode the source "
+                                    + "acknowledges on checkpoint completion, so size it with "
+                                    + "headroom above two checkpoint intervals plus the checkpoint "
+                                    + "timeout, because a failed checkpoint defers the ack to the "
+                                    + "next successful one. In 'lite' mode it must cover the full "
+                                    + "downstream processing time instead.");
 
     public static final ConfigOption<Integer> MAX_MESSAGE_NUM =
             ConfigOptions.key("source.max-message-num")

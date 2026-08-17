@@ -21,8 +21,10 @@ package org.apache.flink.connector.rocketmq.grpc;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.rocketmq.grpc.ack.AckableMessage;
 import org.apache.flink.connector.rocketmq.grpc.ack.RocketMQThrottleProcessFunction;
 import org.apache.flink.connector.rocketmq.grpc.sink.RocketMQGrpcSink;
+import org.apache.flink.connector.rocketmq.grpc.source.ConsumerMode;
 import org.apache.flink.connector.rocketmq.grpc.source.RocketMQGrpcSource;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -31,13 +33,16 @@ import org.apache.flink.test.util.AbstractTestBase;
 import org.apache.rocketmq.client.apis.ClientConfiguration;
 import org.apache.rocketmq.client.apis.ClientServiceProvider;
 import org.apache.rocketmq.client.apis.StaticSessionCredentialsProvider;
+import org.apache.rocketmq.client.apis.consumer.FilterExpression;
+import org.apache.rocketmq.client.apis.consumer.SimpleConsumer;
 import org.apache.rocketmq.client.apis.message.Message;
+import org.apache.rocketmq.client.apis.message.MessageView;
 import org.apache.rocketmq.client.apis.producer.Producer;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,14 +60,12 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration tests for the RocketMQ gRPC connector. Requires a running RocketMQ 5.x instance with
- * gRPC proxy enabled. Connection details are read from environment variables, so this test is
- * {@link Disabled} by default and must be run manually after exporting {@code
- * ROCKETMQ_GRPC_ENDPOINTS}, {@code ROCKETMQ_GRPC_ACCESS_KEY} and {@code ROCKETMQ_GRPC_SECRET_KEY}.
+ * Integration tests for the RocketMQ gRPC connector. They require a running RocketMQ 5.x instance
+ * with the gRPC proxy enabled and are therefore skipped unless {@code ROCKETMQ_GRPC_ENDPOINTS} is
+ * set; export it together with {@code ROCKETMQ_GRPC_ACCESS_KEY} and {@code
+ * ROCKETMQ_GRPC_SECRET_KEY} to run them against a real cluster.
  */
-@Disabled(
-        "Requires a running RocketMQ 5.x instance with gRPC proxy. Set the ROCKETMQ_GRPC_* "
-                + "environment variables and run manually.")
+@EnabledIfEnvironmentVariable(named = "ROCKETMQ_GRPC_ENDPOINTS", matches = ".+")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class RocketMQGrpcITCase extends AbstractTestBase {
 
@@ -80,6 +83,8 @@ class RocketMQGrpcITCase extends AbstractTestBase {
     private static final String E2E_SOURCE_TOPIC = "flink-source-1";
     private static final String E2E_SINK_TOPIC = "flink-sink-2";
     private static final String E2E_SINK_LITE_TOPIC = "flink-sink-2-lite";
+    private static final String SIMPLE_SOURCE_TOPIC =
+            System.getProperty("rocketmq.simple.topic", "flink-source-simple");
     private static final String CONSUMER_GROUP = "GID-flink";
 
     private static final int NUM_MESSAGES = 50;
@@ -141,6 +146,7 @@ class RocketMQGrpcITCase extends AbstractTestBase {
                 RocketMQGrpcSource.<String>builder()
                         .setEndpoints(ENDPOINTS)
                         .setConsumerGroup(CONSUMER_GROUP)
+                        .setMode(ConsumerMode.LITE)
                         .setMainTopic(SOURCE_TOPIC)
                         .setConfig(RocketMQGrpcOptions.ACCESS_KEY, ACCESS_KEY)
                         .setConfig(RocketMQGrpcOptions.SECRET_KEY, SECRET_KEY)
@@ -186,6 +192,7 @@ class RocketMQGrpcITCase extends AbstractTestBase {
                 RocketMQGrpcSource.<String>builder()
                         .setEndpoints(ENDPOINTS)
                         .setConsumerGroup(CONSUMER_GROUP)
+                        .setMode(ConsumerMode.LITE)
                         .setMainTopic(E2E_SOURCE_TOPIC)
                         .setConfig(RocketMQGrpcOptions.ACCESS_KEY, ACCESS_KEY)
                         .setConfig(RocketMQGrpcOptions.SECRET_KEY, SECRET_KEY)
@@ -243,6 +250,121 @@ class RocketMQGrpcITCase extends AbstractTestBase {
         assertThat(results).hasSize(NUM_MESSAGES);
         for (int i = 0; i < NUM_MESSAGES; i++) {
             assertThat(results).contains(upperPrefix + i);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    //  Test: Simple mode consumes a normal topic with checkpoint-based ack
+    // -----------------------------------------------------------------------
+
+    @Test
+    void testSimpleModeConsumesNormalTopic() throws Exception {
+        final String prefix = "simple-" + runId + "-";
+
+        seedMessagesViaProducer(SIMPLE_SOURCE_TOPIC, NUM_MESSAGES, prefix);
+
+        final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1);
+        env.enableCheckpointing(5_000);
+
+        final RocketMQGrpcSource<String> source =
+                RocketMQGrpcSource.<String>builder()
+                        .setEndpoints(ENDPOINTS)
+                        .setConsumerGroup(CONSUMER_GROUP)
+                        .setMode(ConsumerMode.SIMPLE)
+                        .setTopic(SIMPLE_SOURCE_TOPIC)
+                        .setConfig(RocketMQGrpcOptions.ACCESS_KEY, ACCESS_KEY)
+                        .setConfig(RocketMQGrpcOptions.SECRET_KEY, SECRET_KEY)
+                        .setValueOnlyDeserializer(new SimpleStringSchema())
+                        .build();
+
+        final DataStream<String> stream =
+                env.fromSource(source, WatermarkStrategy.noWatermarks(), "RocketMQ gRPC Source")
+                        .map(AckableMessage::getValue)
+                        .returns(String.class);
+        stream.addSink(new CollectingSinkFunction());
+
+        // Start the job in a daemon thread (same pattern as startAndCollect), but keep it
+        // alive after enough records are collected: SIMPLE mode acks only after a checkpoint
+        // completes, and closing the job immediately would leave nothing acked.
+        CollectingSinkFunction.QUEUE.clear();
+        final Thread jobThread =
+                new Thread(
+                        () -> {
+                            try {
+                                env.execute("Simple Mode Collecting Job");
+                            } catch (Exception e) {
+                                LOG.info(
+                                        "Simple mode collecting job ended: {}", e.getMessage());
+                            }
+                        });
+        jobThread.setDaemon(true);
+        jobThread.start();
+
+        // Collect messages matching the prefix until we have enough or timeout.
+        final List<String> results = new ArrayList<>();
+        final long deadline = System.currentTimeMillis() + COLLECT_TIMEOUT_SECONDS * 1000;
+        while (results.size() < NUM_MESSAGES && System.currentTimeMillis() < deadline) {
+            final String item = CollectingSinkFunction.QUEUE.poll(500, TimeUnit.MILLISECONDS);
+            if (item != null && item.startsWith(prefix)) {
+                results.add(item);
+            }
+        }
+        LOG.info("Collected {} messages (prefix={}) in simple mode", results.size(), prefix);
+
+        assertThat(results).hasSize(NUM_MESSAGES);
+        for (int i = 0; i < NUM_MESSAGES; i++) {
+            assertThat(results).contains(prefix + i);
+        }
+
+        // Keep the job running so that at least one checkpoint completes (interval is 5s)
+        // and the reader acks the tracked receipt handles.
+        Thread.sleep(20_000);
+
+        env.close();
+        jobThread.interrupt();
+        jobThread.join(10_000);
+
+        // Wait for the default 60s invisible duration to expire so that any un-acked message
+        // would become visible for redelivery again.
+        Thread.sleep(75_000);
+
+        // Verify no un-acked messages remain: a fresh consumer under the same group must not
+        // receive any message of this run's prefix.
+        final ClientServiceProvider provider = ClientServiceProvider.loadService();
+        final ClientConfiguration clientConfig =
+                ClientConfiguration.newBuilder()
+                        .setEndpoints(ENDPOINTS)
+                        .setCredentialProvider(
+                                new StaticSessionCredentialsProvider(ACCESS_KEY, SECRET_KEY))
+                        .build();
+
+        try (SimpleConsumer consumer =
+                provider.newSimpleConsumerBuilder()
+                        .setClientConfiguration(clientConfig)
+                        .setConsumerGroup(CONSUMER_GROUP)
+                        .setAwaitDuration(Duration.ofSeconds(5))
+                        .setSubscriptionExpressions(
+                                Collections.singletonMap(
+                                        SIMPLE_SOURCE_TOPIC, FilterExpression.SUB_ALL))
+                        .build()) {
+            int redelivered = 0;
+            final List<MessageView> messages = consumer.receive(32, Duration.ofSeconds(20));
+            for (MessageView msg : messages) {
+                final ByteBuffer buf = msg.getBody();
+                final byte[] bytes = new byte[buf.remaining()];
+                buf.get(bytes);
+                final String body = new String(bytes, StandardCharsets.UTF_8);
+                if (body.startsWith(prefix)) {
+                    redelivered++;
+                }
+            }
+            assertThat(redelivered)
+                    .withFailMessage(
+                            "Expected no redelivered messages after checkpoint-aligned ack,"
+                                    + " but got %d",
+                            redelivered)
+                    .isEqualTo(0);
         }
     }
 

@@ -39,6 +39,7 @@ import org.apache.flink.connector.rocketmq.grpc.source.deserialization.RocketMQG
 import org.apache.flink.connector.rocketmq.grpc.source.enumerator.RocketMQGrpcSourceEnumState;
 import org.apache.flink.connector.rocketmq.grpc.source.enumerator.RocketMQGrpcSourceEnumStateSerializer;
 import org.apache.flink.connector.rocketmq.grpc.source.enumerator.RocketMQGrpcSourceEnumerator;
+import org.apache.flink.connector.rocketmq.grpc.source.reader.CheckpointAckTracker;
 import org.apache.flink.connector.rocketmq.grpc.source.reader.MessageViewImpl;
 import org.apache.flink.connector.rocketmq.grpc.source.reader.RocketMQGrpcSourceFetcherManager;
 import org.apache.flink.connector.rocketmq.grpc.source.reader.RocketMQGrpcSourceReader;
@@ -116,17 +117,27 @@ public class RocketMQGrpcSource<OUT>
         final RocketMQGrpcSourceFetcherManager fetcherManager =
                 new RocketMQGrpcSourceFetcherManager(elementsQueue, splitReaderSupplier);
 
+        final ConsumerMode mode = configuration.get(RocketMQGrpcSourceOptions.MODE);
+        final CheckpointAckTracker ackTracker =
+                mode == ConsumerMode.SIMPLE ? new CheckpointAckTracker() : null;
+
         final RocketMQGrpcSourceRecordEmitter<OUT> recordEmitter =
                 new RocketMQGrpcSourceRecordEmitter<>(
                         deserializationSchema,
                         configuration.get(RocketMQGrpcOptions.NAMESPACE),
-                        configuration.get(RocketMQGrpcSourceOptions.CONSUMER_GROUP));
+                        configuration.get(RocketMQGrpcSourceOptions.CONSUMER_GROUP),
+                        ackTracker == null ? null : ackTracker::add);
 
-        final RocketMQGrpcSourceReader<OUT> reader =
-                new RocketMQGrpcSourceReader<>(
-                        elementsQueue, fetcherManager, recordEmitter, configuration, readerContext);
-
-        return reader;
+        // The same split reader instance is handed to the fetcher manager and to the source reader:
+        // in SIMPLE mode the reader acks through the very consumer that received the messages.
+        return new RocketMQGrpcSourceReader<>(
+                elementsQueue,
+                fetcherManager,
+                recordEmitter,
+                configuration,
+                readerContext,
+                ackTracker,
+                splitReader);
     }
 
     @Override

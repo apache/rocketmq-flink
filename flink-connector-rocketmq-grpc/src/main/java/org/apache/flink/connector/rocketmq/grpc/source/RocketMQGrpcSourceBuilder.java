@@ -37,6 +37,8 @@ public class RocketMQGrpcSourceBuilder<OUT> {
 
     private final Configuration configuration;
     private String mainTopic;
+    private ConsumerMode mode = ConsumerMode.SIMPLE;
+    private String topic;
     private Boundedness boundedness;
     private RocketMQGrpcDeserializationSchema<OUT> deserializationSchema;
 
@@ -55,13 +57,44 @@ public class RocketMQGrpcSourceBuilder<OUT> {
         return setConfig(RocketMQGrpcSourceOptions.CONSUMER_GROUP, consumerGroup);
     }
 
-    /** Set the main lite topic bound by the LiteSimpleConsumer. Every subtask binds this topic. */
+    /**
+     * Set the main lite topic bound by the LiteSimpleConsumer. Every subtask binds this topic.
+     * Required in {@link ConsumerMode#LITE}, which must be selected explicitly via {@link
+     * #setMode(ConsumerMode)}; ignored in {@link ConsumerMode#SIMPLE}.
+     */
     public RocketMQGrpcSourceBuilder<OUT> setMainTopic(String mainTopic) {
         checkArgument(
                 mainTopic != null && !mainTopic.trim().isEmpty(),
                 "main topic must not be null or blank");
         this.mainTopic = mainTopic;
         return this;
+    }
+
+    /** Set the consumption mode. Defaults to {@link ConsumerMode#SIMPLE}. */
+    public RocketMQGrpcSourceBuilder<OUT> setMode(ConsumerMode mode) {
+        this.mode = checkNotNull(mode);
+        return this;
+    }
+
+    /**
+     * Set the normal topic subscribed by the SimpleConsumer. Required in the default {@link
+     * ConsumerMode#SIMPLE}; ignored in {@link ConsumerMode#LITE}.
+     */
+    public RocketMQGrpcSourceBuilder<OUT> setTopic(String topic) {
+        checkArgument(
+                topic != null && !topic.trim().isEmpty(), "topic must not be null or blank");
+        this.topic = topic;
+        return this;
+    }
+
+    /** Set the SIMPLE mode filter expression, e.g. {@code "tagA||tagB"} or a SQL92 expression. */
+    public RocketMQGrpcSourceBuilder<OUT> setFilterExpression(String filterExpression) {
+        return setConfig(RocketMQGrpcSourceOptions.FILTER_EXPRESSION, filterExpression);
+    }
+
+    /** Set the SIMPLE mode filter expression type: {@code TAG} (default) or {@code SQL92}. */
+    public RocketMQGrpcSourceBuilder<OUT> setFilterType(String filterType) {
+        return setConfig(RocketMQGrpcSourceOptions.FILTER_TYPE, filterType);
     }
 
     /**
@@ -131,14 +164,23 @@ public class RocketMQGrpcSourceBuilder<OUT> {
         checkNotNull(
                 configuration.get(RocketMQGrpcSourceOptions.CONSUMER_GROUP),
                 "consumer group must be configured");
-        checkArgument(
-                mainTopic != null && !mainTopic.trim().isEmpty(),
-                "the main topic must be configured");
+        checkNotNull(mode, "the consumer mode must be configured");
+        if (mode == ConsumerMode.LITE) {
+            checkArgument(
+                    mainTopic != null && !mainTopic.trim().isEmpty(),
+                    "the main topic must be configured");
+            configuration.set(RocketMQGrpcSourceOptions.MAIN_TOPIC, mainTopic);
+        } else {
+            checkArgument(
+                    topic != null && !topic.trim().isEmpty(),
+                    "the topic must be configured in SIMPLE mode");
+            configuration.set(RocketMQGrpcSourceOptions.TOPIC, topic);
+        }
         checkArgument(
                 configuration.get(RocketMQGrpcSourceOptions.FETCH_CONCURRENCY) >= 1,
                 "fetch concurrency must be at least 1");
         checkNotNull(deserializationSchema, "deserializer must be configured");
-        configuration.set(RocketMQGrpcSourceOptions.MAIN_TOPIC, mainTopic);
+        configuration.set(RocketMQGrpcSourceOptions.MODE, mode);
         return new RocketMQGrpcSource<>(configuration, boundedness, deserializationSchema);
     }
 }
