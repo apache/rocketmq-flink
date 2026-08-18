@@ -25,8 +25,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Tests for the reference counting behaviour of {@link RocketMQLiteAckClient#acquire}. */
-class RocketMQLiteAckClientTest {
+/** Tests for the reference counting behaviour of {@link RocketMQAckClient#acquire}. */
+class RocketMQAckClientTest {
 
     private static Configuration config(String endpoints) {
         final Configuration configuration = new Configuration();
@@ -37,20 +37,20 @@ class RocketMQLiteAckClientTest {
     @Test
     void sameConfigurationSharesASingleReferenceCountedClient() {
         final Configuration configuration = config("127.0.0.1:8080");
-        assertThat(RocketMQLiteAckClient.getReferenceCount(configuration)).isZero();
+        assertThat(RocketMQAckClient.getReferenceCount(configuration)).isZero();
 
-        final RocketMQLiteAckClient first = RocketMQLiteAckClient.acquire(configuration);
-        final RocketMQLiteAckClient second = RocketMQLiteAckClient.acquire(configuration);
+        final RocketMQAckClient first = RocketMQAckClient.acquire(configuration);
+        final RocketMQAckClient second = RocketMQAckClient.acquire(configuration);
 
         // The same client is shared and the reference count is incremented per acquire.
         assertThat(second).isSameAs(first);
-        assertThat(RocketMQLiteAckClient.getReferenceCount(configuration)).isEqualTo(2);
+        assertThat(RocketMQAckClient.getReferenceCount(configuration)).isEqualTo(2);
 
-        RocketMQLiteAckClient.release(configuration);
-        assertThat(RocketMQLiteAckClient.getReferenceCount(configuration)).isEqualTo(1);
+        RocketMQAckClient.release(configuration);
+        assertThat(RocketMQAckClient.getReferenceCount(configuration)).isEqualTo(1);
 
-        RocketMQLiteAckClient.release(configuration);
-        assertThat(RocketMQLiteAckClient.getReferenceCount(configuration)).isZero();
+        RocketMQAckClient.release(configuration);
+        assertThat(RocketMQAckClient.getReferenceCount(configuration)).isZero();
     }
 
     @Test
@@ -58,25 +58,25 @@ class RocketMQLiteAckClientTest {
         final Configuration a = config("host-a:8080");
         final Configuration b = config("host-b:8080");
 
-        final RocketMQLiteAckClient clientA = RocketMQLiteAckClient.acquire(a);
-        final RocketMQLiteAckClient clientB = RocketMQLiteAckClient.acquire(b);
+        final RocketMQAckClient clientA = RocketMQAckClient.acquire(a);
+        final RocketMQAckClient clientB = RocketMQAckClient.acquire(b);
         try {
             assertThat(clientA).isNotSameAs(clientB);
-            assertThat(RocketMQLiteAckClient.getReferenceCount(a)).isEqualTo(1);
-            assertThat(RocketMQLiteAckClient.getReferenceCount(b)).isEqualTo(1);
+            assertThat(RocketMQAckClient.getReferenceCount(a)).isEqualTo(1);
+            assertThat(RocketMQAckClient.getReferenceCount(b)).isEqualTo(1);
         } finally {
-            RocketMQLiteAckClient.release(a);
-            RocketMQLiteAckClient.release(b);
+            RocketMQAckClient.release(a);
+            RocketMQAckClient.release(b);
         }
 
-        assertThat(RocketMQLiteAckClient.getReferenceCount(a)).isZero();
-        assertThat(RocketMQLiteAckClient.getReferenceCount(b)).isZero();
+        assertThat(RocketMQAckClient.getReferenceCount(a)).isZero();
+        assertThat(RocketMQAckClient.getReferenceCount(b)).isZero();
     }
 
     @Test
     void releaseWithoutAcquireIsANoOp() {
         final Configuration configuration = config("no-acquire:8080");
-        RocketMQLiteAckClient.release(configuration);
-        assertThat(RocketMQLiteAckClient.getReferenceCount(configuration)).isZero();
+        RocketMQAckClient.release(configuration);
+        assertThat(RocketMQAckClient.getReferenceCount(configuration)).isZero();
     }
 }

@@ -23,6 +23,7 @@ import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.grpc.ack.RocketMQThrottleProcessFunction;
 import org.apache.flink.connector.rocketmq.grpc.sink.RocketMQGrpcSink;
+import org.apache.flink.connector.rocketmq.grpc.source.ConsumerMode;
 import org.apache.flink.connector.rocketmq.grpc.source.InvisibleDurationRenewalPolicy;
 import org.apache.flink.connector.rocketmq.grpc.source.RocketMQGrpcSource;
 import org.apache.flink.connector.rocketmq.grpc.source.RocketMQGrpcSourceOptions;
@@ -111,6 +112,7 @@ public class RocketMQGrpcLiteE2EVerify {
                 RocketMQGrpcSource.<String>builder()
                         .setEndpoints(ENDPOINTS)
                         .setConsumerGroup(CONSUMER_GROUP)
+                        .setMode(ConsumerMode.LITE)
                         .setMainTopic(MAIN_TOPIC)
                         .setValueOnlyDeserializer(new SimpleStringSchema())
                         .build();
@@ -195,6 +197,7 @@ public class RocketMQGrpcLiteE2EVerify {
                 RocketMQGrpcSource.<String>builder()
                         .setEndpoints(ENDPOINTS)
                         .setConsumerGroup(CONSUMER_GROUP)
+                        .setMode(ConsumerMode.LITE)
                         .setMainTopic(MAIN_TOPIC)
                         .setConfig(
                                 RocketMQGrpcSourceOptions.INVISIBLE_DURATION,

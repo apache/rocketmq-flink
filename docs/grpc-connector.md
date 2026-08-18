@@ -1,8 +1,11 @@
-# gRPC Connector (LiteSimpleConsumer)
+# gRPC Connector
 
-The gRPC connector (`flink-connector-rocketmq-grpc`) targets RocketMQ 5.x **lite topics** using
-`rocketmq-client-java` 5.2.1+. The source binds one main lite topic with a wildcard subscription,
-never acks by itself, and hands the ack / throttle decision to downstream operators.
+The gRPC connector (`flink-connector-rocketmq-grpc`) targets RocketMQ 5.x using
+`rocketmq-client-java` 5.2.1+ and offers two consumption modes. In **SIMPLE** mode — the default —
+the source subscribes to a normal topic (with an optional tag / SQL92 filter) and acknowledges the
+messages itself once the enclosing checkpoint completes. In **LITE** mode, which must be selected
+explicitly, the source binds one main lite topic with a wildcard subscription, never acks by itself,
+and hands the ack / throttle decision to downstream operators. Section 2 details both modes.
 
 This document covers both the design (architecture, semantics, decisions and trade-offs) and the
 usage of the connector.
@@ -43,8 +46,21 @@ This leads to the two defining properties of the connector:
 
 ## 2. Consumption model
 
+**Two modes.** A single `rocketmq.source.mode` option selects how the source subscribes and who
+acknowledges:
+
+- **SIMPLE** (default) — the source subscribes to one **normal** topic via a `SimpleConsumer` with
+  an optional tag / SQL92 filter expression. Here the source itself acknowledges messages: it
+  batches the receipt handles and acks them through that very consumer once the enclosing
+  checkpoint completes (at-least-once).
+- **LITE** (opt-in, requires `rocketmq.source.mode` = `LITE`) — the source binds one main lite topic
+  via a `LiteSimpleConsumer` with a wildcard (generalized) subscription, so the broker funnels the
+  messages of all sub topics through one receive stream. The source never acks: every emitted record
+  carries a self-contained receipt handle, and the downstream operator takes the ack / throttle
+  decision — which is what enables fair per-sub-topic throttling.
+
 RocketMQ 5.x offers a push client (`PushConsumer`) and pull/Pop clients
-(`SimpleConsumer` / `LiteSimpleConsumer`). The connector uses **`LiteSimpleConsumer`**
+(`SimpleConsumer` / `LiteSimpleConsumer`). Both connector modes build on the Pop clients
 (available since `rocketmq-client-java` 5.2.1), whose consumption is split into three explicit
 phases that map cleanly onto a Flink pipeline:
 
@@ -82,9 +98,12 @@ start. Per subtask:
 ```
 subtask
  └─ SourceReader (mailbox thread)
+     │   SIMPLE mode only: on notifyCheckpointComplete, ack the handles of that
+     │   checkpoint through the SplitReader's consumer (see below)
      └─ SingleThreadFetcherManager → 1 fetcher thread
          └─ SplitReader
-             ├─ 1 shared LiteSimpleConsumer            (thread-safe)
+             ├─ 1 shared Pop consumer                  (thread-safe)
+             │    SimpleConsumer in SIMPLE mode, LiteSimpleConsumer in LITE mode
              ├─ N ReceiveWorker threads                (N = rocketmq.source.fetch-concurrency)
              │    loop: consumer.receive(maxMessageNum, invisibleDuration)
              │    → put into a bounded in-memory queue (capacity = maxMessageNum × N)
@@ -96,6 +115,11 @@ subtask
   flight — raising a single subtask's throughput without extra clientIds, heartbeats, connections
   or route caches. Total throughput scales with
   `parallelism × fetch-concurrency × maxMessageNum / receive-latency`.
+- **SIMPLE-mode acks go through that same consumer.** The reader hands its completed receipt
+  handles to `RocketMQGrpcSourceSplitReader#ack`, which issues the ack RPC on the consumer that
+  received the messages. No second client, connection, clientId or credential resolution is
+  involved, and no LITE-only client is used for normal topics. Pop consumers are thread-safe, so
+  the mailbox thread may ack while the receive workers block in `receive()` on the same instance.
 - **Backpressure = stop receiving.** When the bounded queue is full, workers block on `put()`;
   the pull model has no explicit pause API and does not need one.
 - **Receive failures back off exponentially** (100 ms doubling up to 30 s) instead of
@@ -124,11 +148,14 @@ it on the source side and rebuilding a minimal message view on the ack side requ
 types. Confining that (experimental) coupling to one `@Internal` adapter keeps the rest of the
 connector SDK-clean.
 
-### 3.3 Downstream acknowledgement
+### 3.3 Downstream acknowledgement (LITE mode)
 
-Downstream operators obtain a shared, credential-free ack client:
+This section applies to **LITE mode only**: it is the path where the ack decision is taken outside
+the source, so the ack RPC cannot reuse the receiving consumer. (SIMPLE mode acks source-side
+through the consumer that received the messages — see §3.1.) Downstream operators obtain a shared,
+credential-free ack client:
 
-- **Pooling.** `RocketMQLiteAckClient` is shared per TaskManager JVM via reference-counted
+- **Pooling.** `RocketMQAckClient` is shared per TaskManager JVM via reference-counted
   `acquire`/`release` keyed by the client configuration. Internally it lazily keeps one
   same-group `LiteSimpleConsumer` per routing triple `(endpoint, namespace, consumerGroup)`
   carried by the incoming handles. The consumer built for a handle uses the *handle's* endpoints
@@ -191,6 +218,10 @@ Alternatives that were evaluated and rejected:
 | Carrying credentials in the record stream | Security red line. Credentials stay in operator configuration, resolved locally per TaskManager. |
 | Serializing the SDK protobuf receipt blob | Unnecessary — the server-side handle string self-encodes routing; a handful of strings suffice. |
 
+(The rejection of source-side checkpoint ack applies to the LITE requirement, where the ack decision
+is only known downstream. SIMPLE mode has no such decision and intentionally adopts that very
+approach — see §5.)
+
 Other decisions:
 
 - **Commit point is user-driven.** The connector does not align acks with checkpoints; the user
@@ -202,17 +233,65 @@ Other decisions:
 
 ## 5. Delivery semantics
 
-- **At-least-once.** The source never acks; un-acked messages are redelivered after
-  `invisible-duration` expires. Downstream must be idempotent.
+Both modes provide **at-least-once**: un-acked messages are redelivered by the broker once their
+`invisible-duration` expires, so downstream processing must be idempotent. What differs is *who*
+acks and *when*.
+
+### LITE mode
+
+- The source never acks; the ack decision is deferred to downstream operators, which gives
+  at-least-once with user-controlled granularity.
 - `invisible-duration` must cover the full downstream processing time of a message (including
   shuffles and slow operators such as model inference); use the renewal policy when queueing
   time is unpredictable.
 - Exactly-once is out of scope for the Pop model: there is no offset the connector could
   checkpoint-align, and acks are user-driven by design.
 
+### SIMPLE mode
+
+- Once a message is emitted, its receipt handle is registered with a checkpoint-aligned tracker;
+  the handle is snapshotted together with the enclosing checkpoint and the source batch-acks all
+  handles of a checkpoint from `notifyCheckpointComplete` after that checkpoint completes.
+- The acks are issued **through the consumer that received the messages** (the split reader's
+  `SimpleConsumer`), not through the pooled `RocketMQAckClient` of §3.3. The reader therefore opens
+  no second gRPC connection, resolves no credentials of its own, and never routes normal-topic acks
+  through a LITE client.
+- On a failure before completion the pending handles are simply dropped; the un-acked messages are
+  redelivered by the broker after their `invisible-duration` expires. That redelivery *is* the
+  at-least-once guarantee, which is why the tracker holds no failure-survivable state.
+- **Checkpointing is required.** Without it `notifyCheckpointComplete` never fires, nothing is ever
+  acked, and every message is redelivered forever.
+- **Size `invisible-duration` with headroom — do not compute it as a tight bound.** The invisible
+  window is consumed by more than one checkpoint cycle:
+
+  | Consumer of the window | Why it counts |
+  | --- | --- |
+  | Queueing before emission | The window starts when the broker serves `receive()`, not when the record is emitted. Time spent in the reader's internal queue (`max-message-num` × `fetch-concurrency` slots) and in deserialization is already gone. |
+  | Waiting for the next barrier | A record emitted just after a barrier waits almost a full checkpoint interval for the next one. |
+  | Completing that checkpoint | Barrier alignment plus state materialisation, bounded by the checkpoint timeout. |
+  | **A failed or timed-out checkpoint** | The tracker only clears handles for checkpoints that actually complete, so handles of a failed checkpoint wait for the next successful one — roughly **another full interval**, more if failures repeat. |
+  | Draining the ack batch | `notifyCheckpointComplete` acks the batch one handle per RPC, so the last handles of a large batch wait for the earlier ones. |
+
+  A practical starting point is therefore
+
+  ```
+  invisible-duration ≥ 2 × checkpoint interval + checkpoint timeout + headroom
+  ```
+
+  Configuring it as merely `interval + timeout` still satisfies at-least-once, but a single failed
+  checkpoint is then enough to make the batch visible again and reprocessed.
+- Emitted-but-not-yet-acked handles are **not renewed**. The SDK's `changeInvisibleDuration` does
+  not return the new receipt handle, so the source cannot refresh a handle it has already handed to
+  the tracker; sizing `invisible-duration` as above is the substitute. A renewal policy (§7) only
+  covers the *first* row of the table above — messages still queued inside the reader — because the
+  reader freezes a handle the moment the record is emitted.
+
 ---
 
 ## 6. Prerequisites
+
+The default SIMPLE mode only needs an ordinary RocketMQ 5.x topic plus a consumer group. The
+following applies to the opt-in LITE mode:
 
 - RocketMQ 5.x cluster with lite topic support enabled on the broker
   (`enableMultiDispatch`, `enableLmq`, etc. — preset by the official Helm chart).
@@ -229,12 +308,16 @@ wildcard subscription receives nothing.
 
 ## 7. Source
 
+The source runs in **SIMPLE** mode unless another mode is selected, i.e. it subscribes to a normal
+topic and acks the messages itself once the enclosing checkpoint completes (checkpointing must be
+enabled):
+
 ```java
 RocketMQGrpcSource<String> source = RocketMQGrpcSource.<String>builder()
         .setEndpoints("127.0.0.1:8081")
-        .setConsumerGroup("GID-lite")
-        .setMainTopic("LiteMainTopic")
-        .setFetchConcurrency(4)
+        .setConsumerGroup("GID-example")
+        .setTopic("normal-topic")
+        .setFilterExpression("tagA||tagB")
         .setValueOnlyDeserializer(new SimpleStringSchema())
         .build();
 
@@ -244,9 +327,30 @@ DataStream<AckableMessage<String>> stream =
 
 The output type is `AckableMessage<OUT>`: the payload plus a serializable
 `RocketMQReceiptHandle` (endpoint, namespace, consumerGroup, lite topic, receipt handle). The
-handle can cross keyBy/shuffle boundaries; credentials never travel with it.
+handle can cross keyBy/shuffle boundaries; credentials never travel with it. In SIMPLE mode the
+handle is acknowledged automatically by the source once the enclosing checkpoint completes, so
+downstream neither needs nor should invoke the ack / throttle operators.
+
+### LITE mode
+
+LITE mode is opt-in: select it explicitly and bind a main lite topic instead of a normal topic. The
+source then never acks by itself and the downstream operators take the ack / throttle decision.
+
+```java
+RocketMQGrpcSource<String> source = RocketMQGrpcSource.<String>builder()
+        .setEndpoints("127.0.0.1:8081")
+        .setConsumerGroup("GID-lite")
+        .setMode(ConsumerMode.LITE)
+        .setMainTopic("LiteMainTopic")
+        .setFetchConcurrency(4)
+        .setValueOnlyDeserializer(new SimpleStringSchema())
+        .build();
+```
 
 ### Downstream ack / throttling
+
+The ack / throttle wirings below apply to LITE mode only; in SIMPLE mode the source acks the
+messages itself.
 
 Unacked messages are redelivered by the broker after `invisible-duration` expires
 (at-least-once — downstream must be idempotent). Two wirings are provided:
@@ -272,6 +376,12 @@ redelivered. Configure a renewal policy to extend the invisible time before it e
 builder.setRenewalPolicyClass("com.example.MyRenewalPolicy")
        .setRenewalAheadTime(Duration.ofSeconds(5));
 ```
+
+Renewal only covers records that are **still queued inside the reader**: the reader freezes a
+handle the moment the record is emitted, because renewing would invalidate the handle that has
+already travelled downstream. Consequently it does not extend the window for a record that is
+waiting for its downstream ack (LITE) or for its checkpoint to complete (SIMPLE) — in SIMPLE mode a
+renewal policy is therefore no substitute for sizing `invisible-duration` as described in §5.
 
 ## 8. Sink
 
@@ -301,11 +411,15 @@ RocketMQGrpcSink<String> sink = RocketMQGrpcSink.<String>builder()
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `rocketmq.source.main-topic` | String | (none) | Main lite topic to bind, required |
+| `rocketmq.source.mode` | ConsumerMode | `SIMPLE` | Consumption mode: `SIMPLE` (default; normal topic, checkpoint-aligned source ack) or `LITE` (main lite topic, downstream ack) |
+| `rocketmq.source.main-topic` | String | (none) | Main lite topic to bind, required in LITE mode |
+| `rocketmq.source.topic` | String | (none) | Normal topic to subscribe, required in SIMPLE mode |
+| `rocketmq.source.filter-expression` | String | (none) | SIMPLE-mode tag / SQL92 filter expression (absent = receive all messages) |
+| `rocketmq.source.filter-type` | String | `TAG` | Type of `filter-expression`: `TAG` or `SQL92` |
 | `rocketmq.source.consumer-group` | String | (none) | Consumer group, required |
 | `rocketmq.source.fetch-concurrency` | Integer | 1 | Concurrent long-polling receive workers |
 | `rocketmq.source.await-duration` | Duration | 20s | Long-polling await time |
-| `rocketmq.source.invisible-duration` | Duration | 60s | Invisible time per receive (min 10s) |
+| `rocketmq.source.invisible-duration` | Duration | 60s | Invisible time per receive (min 10s); size it with headroom — see §5 |
 | `rocketmq.source.max-message-num` | Integer | 32 | Max messages per receive |
 | `rocketmq.source.renewal-policy-class` | String | (none) | `InvisibleDurationRenewalPolicy` implementation |
 | `rocketmq.source.renewal-ahead-time` | Duration | 5s | Renew this long before invisible expiry |
@@ -325,9 +439,34 @@ The SQL connector identifier is `rocketmq-grpc` (fat-jar module
 `rocketmq.source.fetch-concurrency`. The SQL/Table path consumes message values only; the
 downstream ack / throttling APIs are DataStream-only.
 
+The SQL source runs in `simple` mode by default (`source.mode` defaults to `simple`), i.e. the
+configured `topic` is consumed as a normal topic and the source acks on checkpoint completion, so
+checkpointing must be enabled:
+
+```sql
+CREATE TABLE orders (
+    f0 STRING
+) WITH (
+    'connector' = 'rocketmq-grpc',
+    'endpoints' = '127.0.0.1:8081',
+    'topic' = 'normal-topic',
+    'source.consumer-group' = 'GID-example',
+    'source.filter-expression' = 'tagA || tagB',
+    'format' = 'json'
+);
+```
+
+To consume a main lite topic instead, opt into `lite` mode explicitly with
+`'source.mode' = 'lite'`; the `topic` option is then bound as the main lite topic and the SQL path
+performs no acknowledgement (the ack / throttling APIs are DataStream-only).
+
 ## 11. Known limitations
 
 - `LiteSimpleConsumer` is experimental in the SDK (5.2.1+) and offers synchronous APIs only.
+- SIMPLE mode requires checkpointing; without checkpoints messages are never acknowledged and are
+  redelivered indefinitely.
+- SIMPLE mode has no way to renew a handle it has already emitted, so an `invisible-duration` sized
+  as a tight bound turns any failed checkpoint into reprocessed messages (see §5).
 - One main lite topic per source; no startup-offset control in wildcard-subscription mode
   (`OffsetOption` is limited to exact `subscribeLite`).
 - Throttling defers messages per message (extra RPC per defer, reordering, `deliveryAttempt`

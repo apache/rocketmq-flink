@@ -47,10 +47,12 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A credential-free acknowledgement client that a downstream operator uses to acknowledge or
- * re-schedule RocketMQ Pop messages described by a {@link RocketMQReceiptHandle}. The credentials
- * used to talk to the RocketMQ proxy are configured on the operator that owns the client and are
- * <b>never</b> carried in the data stream.
+ * A credential-free acknowledgement client that acknowledges RocketMQ Pop messages of both lite and
+ * normal topics. A downstream operator uses it to acknowledge or re-schedule the messages described
+ * by a {@link RocketMQReceiptHandle}, which is what the LITE mode of the source relies on: the ack
+ * decision is only known after downstream processing, possibly on the other side of a shuffle. The
+ * credentials used to talk to the RocketMQ proxy are configured on the operator that owns the
+ * client and are <b>never</b> carried in the data stream.
  *
  * <p>The client keeps a lazily populated pool of same-group {@link LiteSimpleConsumer}s, one per
  * {@link ConsumerKey routing triple} carried by the incoming handles, and issues the {@code ack} /
@@ -59,16 +61,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * come from the handle (so the ack RPC is routed to the right proxy and resource) and whose
  * credentials/TLS/timeout come from the operator {@link Configuration}. This is required because
  * the SDK stamps the ack request with the <em>consumer's</em> namespace, so a pooled consumer must
- * share the handle's namespace.
+ * share the handle's namespace. The pooled consumers are built through {@code LiteSimpleConsumer},
+ * but the ack RPC itself is protocol-level identical for lite and normal topic handles, so handles
+ * of normal topics are acknowledged without any semantic difference.
  *
  * <p>Instances are shared per TaskManager JVM: {@link #acquire(Configuration)} reference-counts a
  * client per distinct client configuration and {@link #release(Configuration)} closes it once no
  * operator instance references it anymore, so callers must not close a client directly.
  */
 @Internal
-public final class RocketMQLiteAckClient {
+public final class RocketMQAckClient {
 
-    private static final Logger LOG = LoggerFactory.getLogger(RocketMQLiteAckClient.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RocketMQAckClient.class);
 
     /**
      * The await duration is only consulted by {@code receive}, which this ack-only client never
@@ -90,7 +94,7 @@ public final class RocketMQLiteAckClient {
 
     private volatile boolean closed = false;
 
-    private RocketMQLiteAckClient(Configuration configuration) {
+    private RocketMQAckClient(Configuration configuration) {
         this.configuration =
                 Objects.requireNonNull(configuration, "configuration should not be null");
         this.credentialsResolver = CredentialsResolvers.createFromConfiguration(configuration);
@@ -103,12 +107,12 @@ public final class RocketMQLiteAckClient {
      * @param configuration the operator configuration carrying the RocketMQ client options.
      * @return the shared ack client; callers must not close it directly.
      */
-    public static synchronized RocketMQLiteAckClient acquire(Configuration configuration) {
+    public static synchronized RocketMQAckClient acquire(Configuration configuration) {
         Objects.requireNonNull(configuration, "configuration should not be null");
         final String key = keyOf(configuration);
         RefCounted ref = CLIENTS.get(key);
         if (ref == null) {
-            ref = new RefCounted(new RocketMQLiteAckClient(configuration));
+            ref = new RefCounted(new RocketMQAckClient(configuration));
             CLIENTS.put(key, ref);
         }
         ref.count++;
@@ -128,8 +132,8 @@ public final class RocketMQLiteAckClient {
     public static void release(Configuration configuration) {
         Objects.requireNonNull(configuration, "configuration should not be null");
         final String key = keyOf(configuration);
-        RocketMQLiteAckClient toClose = null;
-        synchronized (RocketMQLiteAckClient.class) {
+        RocketMQAckClient toClose = null;
+        synchronized (RocketMQAckClient.class) {
             final RefCounted ref = CLIENTS.get(key);
             if (ref == null) {
                 return;
@@ -337,10 +341,10 @@ public final class RocketMQLiteAckClient {
     }
 
     private static final class RefCounted {
-        private final RocketMQLiteAckClient client;
+        private final RocketMQAckClient client;
         private int count;
 
-        private RefCounted(RocketMQLiteAckClient client) {
+        private RefCounted(RocketMQAckClient client) {
             this.client = client;
         }
     }
