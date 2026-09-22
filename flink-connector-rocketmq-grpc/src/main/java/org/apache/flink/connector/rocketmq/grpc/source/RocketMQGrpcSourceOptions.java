@@ -47,14 +47,52 @@ public class RocketMQGrpcSourceOptions {
                     .noDefaultValue()
                     .withDescription("The consumer group of the SimpleConsumer.");
 
+    public static final ConfigOption<ConsumerMode> MODE =
+            ConfigOptions.key(CONSUMER_CONFIG_PREFIX + "mode")
+                    .enumType(ConsumerMode.class)
+                    .defaultValue(ConsumerMode.SIMPLE)
+                    .withDescription(
+                            "The consumption mode. SIMPLE (the default) subscribes to a normal "
+                                    + "topic via a SimpleConsumer and the source acknowledges "
+                                    + "messages when their checkpoint completes; LITE binds a main "
+                                    + "lite topic via a LiteSimpleConsumer and defers "
+                                    + "acknowledgement to a downstream operator.");
+
+    public static final ConfigOption<String> TOPIC =
+            ConfigOptions.key(CONSUMER_CONFIG_PREFIX + "topic")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "The normal topic subscribed by the SimpleConsumer. Required in "
+                                    + "SIMPLE mode; ignored in LITE mode.");
+
+    public static final ConfigOption<String> FILTER_EXPRESSION =
+            ConfigOptions.key(CONSUMER_CONFIG_PREFIX + "filter-expression")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "The filter expression applied to the SIMPLE mode subscription, e.g. "
+                                    + "a tag expression 'tagA||tagB' or a SQL92 expression. When "
+                                    + "absent, all messages are received. Only effective in "
+                                    + "SIMPLE mode.");
+
+    public static final ConfigOption<String> FILTER_TYPE =
+            ConfigOptions.key(CONSUMER_CONFIG_PREFIX + "filter-type")
+                    .stringType()
+                    .defaultValue("TAG")
+                    .withDescription(
+                            "The type of 'filter-expression': TAG or SQL92. Only effective in "
+                                    + "SIMPLE mode.");
+
     public static final ConfigOption<String> MAIN_TOPIC =
             ConfigOptions.key(CONSUMER_CONFIG_PREFIX + "main-topic")
                     .stringType()
                     .noDefaultValue()
                     .withDescription(
-                            "The main lite topic bound by the LiteSimpleConsumer. Every subtask "
-                                    + "binds this topic; the broker performs message-level load "
-                                    + "balancing across the consumer group.");
+                            "The main lite topic bound by the LiteSimpleConsumer. Required in "
+                                    + "LITE mode; ignored in SIMPLE mode. Every subtask binds this "
+                                    + "topic; the broker performs message-level load balancing "
+                                    + "across the consumer group.");
 
     public static final ConfigOption<Integer> FETCH_CONCURRENCY =
             ConfigOptions.key(CONSUMER_CONFIG_PREFIX + "fetch-concurrency")
@@ -79,12 +117,15 @@ public class RocketMQGrpcSourceOptions {
                     .durationType()
                     .defaultValue(Duration.ofSeconds(60))
                     .withDescription(
-                            "The invisible duration of a received message. Because messages are "
-                                    + "acknowledged by a downstream operator, it must be larger "
-                                    + "than the full downstream processing time of a message so "
-                                    + "that a message is not prematurely redelivered while still "
-                                    + "in flight; un-acked messages are redelivered after this "
-                                    + "duration, which provides the at-least-once guarantee.");
+                            "The invisible duration of a received message; un-acked messages are "
+                                    + "redelivered after it expires, which provides the "
+                                    + "at-least-once guarantee. In LITE mode it must be larger than "
+                                    + "the full downstream processing time of a message, because a "
+                                    + "downstream operator acknowledges it. In SIMPLE mode the "
+                                    + "source acknowledges on checkpoint completion, so size it "
+                                    + "with headroom above two checkpoint intervals plus the "
+                                    + "checkpoint timeout: a failed checkpoint defers the ack to "
+                                    + "the next successful one.");
 
     public static final ConfigOption<Integer> MAX_MESSAGE_NUM =
             ConfigOptions.key(CONSUMER_CONFIG_PREFIX + "max-message-num")

@@ -29,13 +29,13 @@ import java.util.Objects;
 
 /**
  * An abstract {@link ProcessFunction} that gives subclasses a ready-to-use {@link
- * RocketMQLiteAckClient} so they can acknowledge or re-schedule RocketMQ Pop messages directly from
+ * RocketMQAckClient} so they can acknowledge or re-schedule RocketMQ Pop messages directly from
  * their own business logic via {@link #ack} and {@link #changeInvisibleDuration}.
  *
- * <p>The client is shared per TaskManager through {@link RocketMQLiteAckClient#acquire}: it is
- * acquired in {@link #open(OpenContext)} and released in {@link #close()}. The RocketMQ client
- * options (endpoints, namespace, credentials, TLS, timeout) are provided through the {@link
- * Configuration} passed to the constructor and never travel in the data stream.
+ * <p>The client is shared per TaskManager through {@link RocketMQAckClient#acquire}: it is acquired
+ * in {@link #open(OpenContext)} and released in {@link #close()}. The RocketMQ client options
+ * (endpoints, namespace, credentials, TLS, timeout) are provided through the {@link Configuration}
+ * passed to the constructor and never travel in the data stream.
  *
  * @param <IN> the input record type, typically {@code AckableMessage<T>}.
  * @param <OUT> the output record type.
@@ -47,7 +47,7 @@ public abstract class RocketMQAckProcessFunction<IN, OUT> extends ProcessFunctio
 
     private final Configuration configuration;
 
-    private transient RocketMQLiteAckClient ackClient;
+    private transient RocketMQAckClient ackClient;
     private transient boolean acquired;
     private transient Counter numAcksSucceeded;
     private transient Counter numAcksFailed;
@@ -63,7 +63,7 @@ public abstract class RocketMQAckProcessFunction<IN, OUT> extends ProcessFunctio
     @Override
     public void open(OpenContext openContext) throws Exception {
         super.open(openContext);
-        this.ackClient = RocketMQLiteAckClient.acquire(configuration);
+        this.ackClient = RocketMQAckClient.acquire(configuration);
         this.acquired = true;
         this.numAcksSucceeded = getRuntimeContext().getMetricGroup().counter("numAcksSucceeded");
         this.numAcksFailed = getRuntimeContext().getMetricGroup().counter("numAcksFailed");
@@ -80,7 +80,7 @@ public abstract class RocketMQAckProcessFunction<IN, OUT> extends ProcessFunctio
         // Only release when open() actually acquired the client; Flink calls close() even after a
         // failed open(), and a stray release would decrement another operator's reference.
         if (acquired) {
-            RocketMQLiteAckClient.release(configuration);
+            RocketMQAckClient.release(configuration);
             acquired = false;
         }
         this.ackClient = null;

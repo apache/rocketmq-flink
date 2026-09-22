@@ -27,7 +27,9 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.connector.rocketmq.grpc.RocketMQGrpcOptions;
 import org.apache.flink.connector.rocketmq.grpc.sink.RocketMQGrpcSinkOptions;
+import org.apache.flink.connector.rocketmq.grpc.source.ConsumerMode;
 import org.apache.flink.connector.rocketmq.grpc.source.RocketMQGrpcSourceOptions;
+import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.connector.format.DecodingFormat;
 import org.apache.flink.table.connector.format.EncodingFormat;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
@@ -80,6 +82,9 @@ public class RocketMQGrpcDynamicTableFactory
         options.add(RocketMQGrpcConnectorOptions.REQUEST_TIMEOUT);
         options.add(RocketMQGrpcConnectorOptions.LITE_TOPIC);
         options.add(RocketMQGrpcConnectorOptions.CONSUMER_GROUP);
+        options.add(RocketMQGrpcConnectorOptions.MODE);
+        options.add(RocketMQGrpcConnectorOptions.FILTER_EXPRESSION);
+        options.add(RocketMQGrpcConnectorOptions.FILTER_TYPE);
         options.add(RocketMQGrpcConnectorOptions.AWAIT_DURATION);
         options.add(RocketMQGrpcConnectorOptions.INVISIBLE_DURATION);
         options.add(RocketMQGrpcConnectorOptions.MAX_MESSAGE_NUM);
@@ -194,6 +199,31 @@ public class RocketMQGrpcDynamicTableFactory
                 configuration,
                 RocketMQGrpcConnectorOptions.CONSUMER_GROUP,
                 RocketMQGrpcSourceOptions.CONSUMER_GROUP);
+        final String mode = options.get(RocketMQGrpcConnectorOptions.MODE);
+        if (mode != null) {
+            final ConsumerMode consumerMode;
+            try {
+                consumerMode = ConsumerMode.valueOf(mode.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new ValidationException(
+                        "Unsupported value '"
+                                + mode
+                                + "' for option '"
+                                + RocketMQGrpcConnectorOptions.MODE.key()
+                                + "'. Supported values are 'lite' and 'simple'.");
+            }
+            configuration.set(RocketMQGrpcSourceOptions.MODE, consumerMode);
+        }
+        copyMapped(
+                options,
+                configuration,
+                RocketMQGrpcConnectorOptions.FILTER_EXPRESSION,
+                RocketMQGrpcSourceOptions.FILTER_EXPRESSION);
+        copyMapped(
+                options,
+                configuration,
+                RocketMQGrpcConnectorOptions.FILTER_TYPE,
+                RocketMQGrpcSourceOptions.FILTER_TYPE);
         copyMapped(
                 options,
                 configuration,

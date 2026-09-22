@@ -34,6 +34,7 @@ class RocketMQGrpcSourceBuilderTest {
                 RocketMQGrpcSource.<String>builder()
                         .setEndpoints("127.0.0.1:8080")
                         .setConsumerGroup("group")
+                        .setMode(ConsumerMode.LITE)
                         .setMainTopic("topic")
                         .setValueOnlyDeserializer(new SimpleStringSchema())
                         .build();
@@ -46,6 +47,7 @@ class RocketMQGrpcSourceBuilderTest {
                         () ->
                                 RocketMQGrpcSource.<String>builder()
                                         .setConsumerGroup("group")
+                                        .setMode(ConsumerMode.LITE)
                                         .setMainTopic("topic")
                                         .setValueOnlyDeserializer(new SimpleStringSchema())
                                         .build())
@@ -59,6 +61,7 @@ class RocketMQGrpcSourceBuilderTest {
                         () ->
                                 RocketMQGrpcSource.<String>builder()
                                         .setEndpoints("127.0.0.1:8080")
+                                        .setMode(ConsumerMode.LITE)
                                         .setMainTopic("topic")
                                         .setValueOnlyDeserializer(new SimpleStringSchema())
                                         .build())
@@ -73,6 +76,7 @@ class RocketMQGrpcSourceBuilderTest {
                                 RocketMQGrpcSource.<String>builder()
                                         .setEndpoints("127.0.0.1:8080")
                                         .setConsumerGroup("group")
+                                        .setMode(ConsumerMode.LITE)
                                         .setValueOnlyDeserializer(new SimpleStringSchema())
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class)
@@ -86,9 +90,68 @@ class RocketMQGrpcSourceBuilderTest {
                                 RocketMQGrpcSource.<String>builder()
                                         .setEndpoints("127.0.0.1:8080")
                                         .setConsumerGroup("group")
+                                        .setMode(ConsumerMode.LITE)
                                         .setMainTopic("topic")
                                         .build())
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("deserializer");
+    }
+
+    @Test
+    void buildSucceedsWithSimpleModeTest() {
+        final RocketMQGrpcSource<String> source =
+                RocketMQGrpcSource.<String>builder()
+                        .setEndpoints("127.0.0.1:8080")
+                        .setConsumerGroup("group")
+                        .setMode(ConsumerMode.SIMPLE)
+                        .setTopic("normal-topic")
+                        .setFilterExpression("tagA||tagB")
+                        .setValueOnlyDeserializer(new SimpleStringSchema())
+                        .build();
+        assertThat(source).isNotNull();
+    }
+
+    @Test
+    void buildFailsWithSimpleModeWithoutTopicTest() {
+        assertThatThrownBy(
+                        () ->
+                                RocketMQGrpcSource.<String>builder()
+                                        .setEndpoints("127.0.0.1:8080")
+                                        .setConsumerGroup("group")
+                                        .setMode(ConsumerMode.SIMPLE)
+                                        .setValueOnlyDeserializer(new SimpleStringSchema())
+                                        .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("topic");
+    }
+
+    @Test
+    void buildFailsWithLiteModeWhenOnlySimpleTopicIsSetTest() {
+        assertThatThrownBy(
+                        () ->
+                                RocketMQGrpcSource.<String>builder()
+                                        .setEndpoints("127.0.0.1:8080")
+                                        .setConsumerGroup("group")
+                                        .setMode(ConsumerMode.LITE)
+                                        .setTopic("normal-topic")
+                                        .setValueOnlyDeserializer(new SimpleStringSchema())
+                                        .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("main topic");
+    }
+
+    @Test
+    void buildDefaultsToSimpleModeTest() {
+        // Without setMode() the builder must run in SIMPLE mode: a LITE-mode build would reject
+        // the missing main topic.
+        final RocketMQGrpcSource<String> source =
+                RocketMQGrpcSource.<String>builder()
+                        .setEndpoints("127.0.0.1:8080")
+                        .setConsumerGroup("group")
+                        .setTopic("normal-topic")
+                        .setValueOnlyDeserializer(new SimpleStringSchema())
+                        .build();
+        assertThat(source).isNotNull();
+        assertThat(RocketMQGrpcSourceOptions.MODE.defaultValue()).isEqualTo(ConsumerMode.SIMPLE);
     }
 }

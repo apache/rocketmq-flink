@@ -10,8 +10,7 @@ github:
     issues: true
     # Enable wiki
     wiki: true
-  protected_branches:
-  
+
 notifications:
   commits:      commits@rocketmq.apache.org
   issues:       commits@rocketmq.apache.org

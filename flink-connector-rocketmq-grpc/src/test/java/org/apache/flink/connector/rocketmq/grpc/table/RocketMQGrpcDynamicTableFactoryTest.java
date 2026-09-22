@@ -53,8 +53,19 @@ class RocketMQGrpcDynamicTableFactoryTest {
 
     @Test
     void createTableSourceTest() {
+        // No 'source.mode' is configured, so the source runs in the default 'simple' mode.
         final Map<String, String> options = baseOptions();
         options.put("source.consumer-group", "test-group");
+
+        final DynamicTableSource source = FactoryMocks.createTableSource(SCHEMA, options);
+        assertThat(source).isInstanceOf(RocketMQGrpcDynamicTableSource.class);
+    }
+
+    @Test
+    void createLiteModeTableSourceTest() {
+        final Map<String, String> options = baseOptions();
+        options.put("source.consumer-group", "test-group");
+        options.put("source.mode", "lite");
 
         final DynamicTableSource source = FactoryMocks.createTableSource(SCHEMA, options);
         assertThat(source).isInstanceOf(RocketMQGrpcDynamicTableSource.class);
@@ -79,5 +90,26 @@ class RocketMQGrpcDynamicTableFactoryTest {
         options.remove("sink.lite-topic");
         assertThatThrownBy(() -> FactoryMocks.createTableSink(SCHEMA, options))
                 .hasStackTraceContaining("lite-topic");
+    }
+
+    @Test
+    void createSimpleModeTableSourceTest() {
+        final Map<String, String> options = baseOptions();
+        options.put("source.consumer-group", "test-group");
+        options.put("source.mode", "simple");
+        options.put("source.filter-expression", "tagA||tagB");
+
+        final DynamicTableSource source = FactoryMocks.createTableSource(SCHEMA, options);
+        assertThat(source).isInstanceOf(RocketMQGrpcDynamicTableSource.class);
+    }
+
+    @Test
+    void createTableSourceFailsWithInvalidModeTest() {
+        final Map<String, String> options = baseOptions();
+        options.put("source.consumer-group", "test-group");
+        options.put("source.mode", "bogus");
+
+        assertThatThrownBy(() -> FactoryMocks.createTableSource(SCHEMA, options))
+                .hasStackTraceContaining("bogus");
     }
 }

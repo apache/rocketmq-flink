@@ -28,7 +28,10 @@ import org.apache.flink.connector.rocketmq.grpc.source.deserialization.RocketMQG
 import org.apache.flink.connector.rocketmq.grpc.source.split.RocketMQGrpcSourceSplitState;
 import org.apache.flink.util.Collector;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
+import java.util.function.Consumer;
 
 /**
  * The {@link RecordEmitter} implementation for the RocketMQ gRPC source. It deserializes the
@@ -43,15 +46,25 @@ public class RocketMQGrpcSourceRecordEmitter<T>
     private final RocketMQGrpcDeserializationSchema<T> deserializationSchema;
     private final String namespace;
     private final String consumerGroup;
+    @Nullable private final Consumer<RocketMQReceiptHandle> emittedHandleListener;
     private final AckableCollector<T> collector = new AckableCollector<>();
 
     public RocketMQGrpcSourceRecordEmitter(
             RocketMQGrpcDeserializationSchema<T> deserializationSchema,
             String namespace,
             String consumerGroup) {
+        this(deserializationSchema, namespace, consumerGroup, null);
+    }
+
+    public RocketMQGrpcSourceRecordEmitter(
+            RocketMQGrpcDeserializationSchema<T> deserializationSchema,
+            String namespace,
+            String consumerGroup,
+            @Nullable Consumer<RocketMQReceiptHandle> emittedHandleListener) {
         this.deserializationSchema = deserializationSchema;
         this.namespace = namespace;
         this.consumerGroup = consumerGroup;
+        this.emittedHandleListener = emittedHandleListener;
     }
 
     @Override
@@ -66,6 +79,9 @@ public class RocketMQGrpcSourceRecordEmitter<T>
                             element.getMessageView(), namespace, consumerGroup);
             collector.reset(output, element.getEventTime(), handle);
             deserializationSchema.deserialize(element, collector);
+            if (emittedHandleListener != null) {
+                emittedHandleListener.accept(handle);
+            }
             splitState.incrementProcessedRecords();
         } catch (Exception e) {
             throw new IOException("Failed to deserialize message due to", e);
