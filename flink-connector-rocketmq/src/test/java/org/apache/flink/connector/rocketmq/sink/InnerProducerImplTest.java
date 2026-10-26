@@ -30,6 +30,12 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -140,6 +146,54 @@ class InnerProducerImplTest {
                             Mockito.eq("10.0.26.60:8080"),
                             Mockito.any(RemotingCommand.class),
                             Mockito.anyLong());
+        }
+    }
+
+    /**
+     * A checkpoint can carry thousands of committables; committing them must not depend on a
+     * bounded executor queue that rejects the surplus (a rejected commit is a lost commit once the
+     * server-side transaction context expires).
+     */
+    @Test
+    void commitBurstShouldNotRejectTest() throws Exception {
+        MQClientInstance clientInstance = Mockito.mock(MQClientInstance.class);
+        NettyRemotingClient remotingClient = stubRemoting(clientInstance);
+
+        try (InnerProducerImpl impl = new InnerProducerImpl(configuration())) {
+            setClientInstance(impl, clientInstance);
+
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            for (int i = 0; i < 3000; i++) {
+                futures.add(impl.commit(committable("10.0.26.60:8080")));
+            }
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get(30, TimeUnit.SECONDS);
+            Mockito.verify(remotingClient, Mockito.times(3000))
+                    .invokeSync(
+                            Mockito.eq("10.0.26.60:8080"),
+                            Mockito.any(RemotingCommand.class),
+                            Mockito.anyLong());
+        }
+    }
+
+    @Test
+    void commitFailureShouldCompleteTheFutureExceptionallyTest() throws Exception {
+        MQClientInstance clientInstance = Mockito.mock(MQClientInstance.class);
+        MQClientAPIImpl api = Mockito.mock(MQClientAPIImpl.class);
+        NettyRemotingClient remotingClient = Mockito.mock(NettyRemotingClient.class);
+        Mockito.when(clientInstance.getMQClientAPIImpl()).thenReturn(api);
+        Mockito.when(api.getRemotingClient()).thenReturn(remotingClient);
+        Mockito.when(
+                        remotingClient.invokeSync(
+                                Mockito.anyString(),
+                                Mockito.any(RemotingCommand.class),
+                                Mockito.anyLong()))
+                .thenThrow(new RemotingSendRequestException("10.0.26.60:8080"));
+
+        try (InnerProducerImpl impl = new InnerProducerImpl(configuration())) {
+            setClientInstance(impl, clientInstance);
+
+            CompletableFuture<Void> future = impl.commit(committable("10.0.26.60:8080"));
+            assertThat(future).isCompletedExceptionally();
         }
     }
 
