@@ -62,7 +62,7 @@ public class RocketMQWriter<IN>
     private final MessageQueueSelector messageQueueSelector;
     private final RocketMQSinkContext rocketmqSinkContext;
     private final RocketMQSerializationSchema<IN> serializationSchema;
-    private final Map<String, SendResult> sendResultMap;
+    private final Map<String, SendCommittable> committableMap;
     private final int sendRetryTimes;
     private final long sendSleepTimeMs;
     private final AtomicLong pendingRecords = new AtomicLong(0);
@@ -91,7 +91,7 @@ public class RocketMQWriter<IN>
         this.messageQueueSelector = messageQueueSelector;
         this.serializationSchema = serializationSchema;
         this.rocketmqSinkContext = new RocketMQSinkContextImpl(initContext, configuration);
-        this.sendResultMap = new ConcurrentHashMap<>();
+        this.committableMap = new ConcurrentHashMap<>();
         this.sendRetryTimes = configuration.getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES);
         this.sendSleepTimeMs =
                 configuration.getLong(RocketMQSinkOptions.OPTIONAL_WRITE_SLEEP_TIME_MS);
@@ -143,7 +143,12 @@ public class RocketMQWriter<IN>
         while (attempt <= sendRetryTimes) {
             try {
                 SendResult sendResult = producer.sendMessageInTransaction(message).get();
-                sendResultMap.put(sendResult.getTransactionId(), sendResult);
+                SendCommittable committable = new SendCommittable(sendResult);
+                // Record the address the half message was actually accepted by. Only that node
+                // holds the transaction context needed to end it, and the committer owns a
+                // producer of its own whose route table may well resolve to a different node.
+                committable.setBrokerAddress(producer.resolvePublishAddress(sendResult));
+                committableMap.put(sendResult.getTransactionId(), committable);
                 return; // success
             } catch (Exception e) {
                 lastException = e;
@@ -192,12 +197,9 @@ public class RocketMQWriter<IN>
     public Collection<SendCommittable> prepareCommit() throws IOException, InterruptedException {
         LOG.info("Prepare commit");
         if (deliveryGuarantee == DeliveryGuarantee.EXACTLY_ONCE) {
-            final List<SendCommittable> committables = new ArrayList<>();
-            for (SendResult sendResult : sendResultMap.values()) {
-                committables.add(new SendCommittable(sendResult));
-            }
+            final List<SendCommittable> committables = new ArrayList<>(committableMap.values());
             LOG.info("Committable size={}.", committables.size());
-            sendResultMap.clear();
+            committableMap.clear();
             return committables;
         }
         return Collections.emptyList();

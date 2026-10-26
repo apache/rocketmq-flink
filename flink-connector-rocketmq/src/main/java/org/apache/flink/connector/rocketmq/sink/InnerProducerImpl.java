@@ -295,6 +295,31 @@ public class InnerProducerImpl implements InnerProducer {
                 Runnable::run);
     }
 
+    @Override
+    public String resolvePublishAddress(final SendResult sendResult) {
+        return this.mqClientInstance.findBrokerAddressInPublish(
+                this.mqClientInstance.getBrokerNameFromMessageQueue(
+                        producer.queueWithNamespace(sendResult.getMessageQueue())));
+    }
+
+    private String resolvePublishAddress(final String brokerName, final String topic) {
+        String brokerAddress = this.mqClientInstance.findBrokerAddressInPublish(brokerName);
+        if (brokerAddress == null) {
+            // The Committer owns a producer that never sends anything, so its publish route table
+            // stays empty and findBrokerAddressInPublish() returns null. invokeSync() then falls
+            // back to a name server channel, which cannot commit the half message, and the reply is
+            // not a SUCCESS the caller would notice -- every record of the checkpoint is lost
+            // without a single error. Refresh the route for the topic the half message belongs to
+            // before resolving again.
+            LOG.warn(
+                    "Publish route for {} is not loaded yet, refreshing before ending transaction",
+                    brokerName);
+            this.mqClientInstance.updateTopicRouteInfoFromNameServer(topic);
+            brokerAddress = this.mqClientInstance.findBrokerAddressInPublish(brokerName);
+        }
+        return brokerAddress;
+    }
+
     public void endTransaction(
             final SendCommittable sendCommittable, final TransactionResult transactionResult) {
 
@@ -302,20 +327,14 @@ public class InnerProducerImpl implements InnerProducer {
             final String brokerName =
                     this.mqClientInstance.getBrokerNameFromMessageQueue(
                             producer.queueWithNamespace(sendCommittable.getMessageQueue()));
-            String brokerAddress = this.mqClientInstance.findBrokerAddressInPublish(brokerName);
-            if (brokerAddress == null) {
-                // The Committer owns a producer that never sends anything, so its publish route
-                // table stays empty and findBrokerAddressInPublish() returns null. invokeSync()
-                // then falls back to a name server channel, which cannot commit the half message,
-                // and the reply is not a SUCCESS the caller would notice -- every record of the
-                // checkpoint is lost without a single error. Refresh the route for the topic the
-                // half message belongs to before resolving again.
-                LOG.warn(
-                        "Publish route for {} is not loaded yet, refreshing before ending transaction",
-                        brokerName);
-                this.mqClientInstance.updateTopicRouteInfoFromNameServer(
-                        sendCommittable.getTopic());
-                brokerAddress = this.mqClientInstance.findBrokerAddressInPublish(brokerName);
+            // The node that accepted the half message is the only one holding its transaction
+            // context, so prefer the address the writer recorded at send time. Resolving it here
+            // from the committer's own route table can pick a different node, and a commit sent to
+            // a node without the context is discarded while still being answered with a success
+            // code -- the record is lost with nothing to show for it.
+            String brokerAddress = sendCommittable.getBrokerAddress();
+            if (StringUtils.isNullOrWhitespaceOnly(brokerAddress)) {
+                brokerAddress = resolvePublishAddress(brokerName, sendCommittable.getTopic());
             }
             if (brokerAddress == null) {
                 throw new IllegalStateException(

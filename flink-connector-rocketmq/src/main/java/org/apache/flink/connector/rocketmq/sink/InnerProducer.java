@@ -74,6 +74,20 @@ public interface InnerProducer extends AutoCloseable {
     CompletableFuture<SendResult> sendMessageInTransaction(Message message);
 
     /**
+     * Resolves the address this producer uses to reach the broker that accepted the given send
+     * result, or null when the publish route does not know that broker.
+     *
+     * <p>The writer must call this right after a transactional send and hand the address to the
+     * committer along with the {@link SendCommittable}: the node that accepted the half message is
+     * the only one that can end the transaction, and a committer resolving the address from its own
+     * route table may well pick a different node.
+     *
+     * @param sendResult the result of a send performed by this producer
+     * @return the address the send went to, or null if it cannot be resolved
+     */
+    String resolvePublishAddress(SendResult sendResult);
+
+    /**
      * Commits the send operation identified by the specified SendCommittable object.
      *
      * @param sendCommittable the SendCommittable object identifying the send operation
