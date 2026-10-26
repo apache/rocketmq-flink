@@ -258,6 +258,11 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
     @Override
     public void snapshotState(FunctionSnapshotContext context) throws Exception {
         flushSync();
+        // A checkpoint must not complete over records whose async send already failed.
+        // invoke() only surfaces a parked failure when the next record arrives, so a burst of
+        // failures followed by an idle stream would otherwise be checkpointed as delivered:
+        // the job keeps running, every checkpoint succeeds, and the records are gone.
+        checkAsyncSendException();
     }
 
     @Override
