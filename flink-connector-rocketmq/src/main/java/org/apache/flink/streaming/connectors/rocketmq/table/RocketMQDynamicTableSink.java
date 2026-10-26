@@ -59,7 +59,6 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
     private final String accessKey;
     private final String secretKey;
 
-    private final long retryTimes;
     private final long sleepTime;
 
     private final boolean isDynamicTag;
@@ -86,7 +85,6 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
             String dynamicColumn,
             String fieldDelimiter,
             String encoding,
-            long retryTimes,
             long sleepTime,
             boolean isDynamicTag,
             boolean isDynamicTagIncluded,
@@ -110,7 +108,6 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
                 dynamicColumn,
                 fieldDelimiter,
                 encoding,
-                retryTimes,
                 sleepTime,
                 isDynamicTag,
                 isDynamicTagIncluded,
@@ -135,7 +132,6 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
             String dynamicColumn,
             String fieldDelimiter,
             String encoding,
-            long retryTimes,
             long sleepTime,
             boolean isDynamicTag,
             boolean isDynamicTagIncluded,
@@ -157,7 +153,6 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
         this.dynamicColumn = dynamicColumn;
         this.fieldDelimiter = fieldDelimiter;
         this.encoding = encoding;
-        this.retryTimes = retryTimes;
         this.sleepTime = sleepTime;
         this.isDynamicTag = isDynamicTag;
         this.isDynamicTagIncluded = isDynamicTagIncluded;
@@ -208,8 +203,6 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
         sinkConfig.setLong(RocketMQSinkOptions.SEND_TIMEOUT, sendTimeout);
         sinkConfig.setInteger(RocketMQSinkOptions.SEND_PENDING_MAX, sendPendingMax);
         sinkConfig.setInteger(RocketMQSinkOptions.EXECUTOR_NUM, executorNum);
-        // Pass legacy retry config that was previously stored but never forwarded (P1 fix)
-        sinkConfig.setInteger(RocketMQSinkOptions.OPTIONAL_WRITE_RETRY_TIMES, (int) retryTimes);
         sinkConfig.setLong(RocketMQSinkOptions.OPTIONAL_WRITE_SLEEP_TIME_MS, sleepTime);
         sinkBuilder.setConfig(sinkConfig);
 
@@ -244,7 +237,6 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
                         dynamicColumn,
                         fieldDelimiter,
                         encoding,
-                        retryTimes,
                         sleepTime,
                         isDynamicTag,
                         isDynamicTagIncluded,

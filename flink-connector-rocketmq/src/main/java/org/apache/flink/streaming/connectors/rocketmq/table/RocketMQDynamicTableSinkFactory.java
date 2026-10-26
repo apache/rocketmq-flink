@@ -111,7 +111,6 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
         String dynamicColumn = properties.getString(OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN);
         String encoding = properties.getString(OPTIONAL_ENCODING);
         String fieldDelimiter = properties.getString(OPTIONAL_FIELD_DELIMITER);
-        int retryTimes = properties.getInteger(OPTIONAL_WRITE_RETRY_TIMES);
         long sleepTimeMs = properties.getLong(OPTIONAL_WRITE_SLEEP_TIME_MS);
         boolean isDynamicTag = properties.getBoolean(OPTIONAL_WRITE_IS_DYNAMIC_TAG);
         boolean isDynamicTagIncluded =
@@ -123,7 +122,18 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
             keyColumns = keyColumnsConfig.split(",");
         }
         String deliveryGuarantee = properties.getString(RocketMQSinkOptions.DELIVERY_GUARANTEE);
-        int sendRetryTimes = properties.getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES);
+        // `retry.times` is the legacy DDL name of the send retry count. The writer only reads
+        // SEND_RETRY_TIMES, so honour the legacy key when the new one is absent instead of
+        // silently dropping it; with neither set the documented default (3) applies.
+        int sendRetryTimes =
+                properties.getOptional(RocketMQSinkOptions.SEND_RETRY_TIMES)
+                        .orElseGet(
+                                () ->
+                                        properties.getOptional(OPTIONAL_WRITE_RETRY_TIMES)
+                                                .orElseGet(
+                                                        () ->
+                                                                RocketMQSinkOptions.SEND_RETRY_TIMES
+                                                                        .defaultValue()));
         long sendTimeout = properties.getLong(RocketMQSinkOptions.SEND_TIMEOUT);
         int sendPendingMax = properties.getInteger(RocketMQSinkOptions.SEND_PENDING_MAX);
         int executorNum = properties.getInteger(RocketMQSinkOptions.EXECUTOR_NUM);
@@ -144,7 +154,6 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
                 dynamicColumn,
                 fieldDelimiter,
                 encoding,
-                retryTimes,
                 sleepTimeMs,
                 isDynamicTag,
                 isDynamicTagIncluded,

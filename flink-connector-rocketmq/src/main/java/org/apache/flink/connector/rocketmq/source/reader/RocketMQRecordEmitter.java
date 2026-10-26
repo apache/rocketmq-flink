@@ -24,11 +24,16 @@ import org.apache.flink.connector.rocketmq.source.reader.deserializer.RocketMQDe
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplitState;
 import org.apache.flink.util.Collector;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 
 /** The {@link RecordEmitter} implementation for {@link RocketMQSourceReader}. */
 public class RocketMQRecordEmitter<T>
         implements RecordEmitter<MessageView, T, RocketMQSourceSplitState> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RocketMQRecordEmitter.class);
 
     private final RocketMQDeserializationSchema<T> deserializationSchema;
     private final SourceOutputWrapper<T> sourceOutputWrapper = new SourceOutputWrapper<>();
@@ -44,18 +49,34 @@ public class RocketMQRecordEmitter<T>
 
         sourceOutputWrapper.setSourceOutput(output);
         sourceOutputWrapper.setTimestamp(element.getEventTime());
+        sourceOutputWrapper.resetCollectError();
         try {
             deserializationSchema.deserialize(element, sourceOutputWrapper);
         } catch (Exception e) {
-            // Naming the record makes a poison message identifiable from the exception alone;
-            // otherwise the only way to find it is to replay the whole queue.
-            throw new IOException(
-                    String.format(
-                            "Failed to deserialize message %s from topic %s, queue %d, offset %d",
-                            element.getMessageId(),
-                            element.getTopic(),
-                            element.getQueueId(),
-                            element.getQueueOffset()),
+            RuntimeException collectError = sourceOutputWrapper.getCollectError();
+            if (collectError != null) {
+                // The record deserialized fine; the failure came from the downstream sink while the
+                // already-deserialized record was being emitted (collect runs the writer inline).
+                // Dropping it here would hide a real write failure behind a "deserialization" warn.
+                throw new IOException(
+                        String.format(
+                                "Failed to emit message %s from topic %s, queue %d, offset %d",
+                                element.getMessageId(),
+                                element.getTopic(),
+                                element.getQueueId(),
+                                element.getQueueOffset()),
+                        collectError);
+            }
+            // A record that cannot be deserialized is dropped instead of failing the task: with a
+            // throwing schema the job would otherwise loop "fail, restore, re-read the same record"
+            // forever and rewrite everything it had already emitted. Naming the record keeps the
+            // poison message identifiable from the log line alone.
+            LOG.warn(
+                    "Dropped message {} from topic {}, queue {}, offset {} because deserialization failed",
+                    element.getMessageId(),
+                    element.getTopic(),
+                    element.getQueueId(),
+                    element.getQueueOffset(),
                     e);
         }
         splitState.setCurrentOffset(element.getQueueOffset() + 1);
@@ -67,9 +88,16 @@ public class RocketMQRecordEmitter<T>
 
         private long timestamp;
 
+        private RuntimeException collectError;
+
         @Override
         public void collect(T record) {
-            sourceOutput.collect(record, timestamp);
+            try {
+                sourceOutput.collect(record, timestamp);
+            } catch (RuntimeException e) {
+                collectError = e;
+                throw e;
+            }
         }
 
         @Override
@@ -81,6 +109,14 @@ public class RocketMQRecordEmitter<T>
 
         private void setTimestamp(long timestamp) {
             this.timestamp = timestamp;
+        }
+
+        private void resetCollectError() {
+            collectError = null;
+        }
+
+        private RuntimeException getCollectError() {
+            return collectError;
         }
     }
 }

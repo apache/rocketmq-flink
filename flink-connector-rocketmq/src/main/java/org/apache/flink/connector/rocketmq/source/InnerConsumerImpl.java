@@ -463,7 +463,16 @@ public class InnerConsumerImpl implements InnerConsumer {
     @Override
     public CompletableFuture<Void> commitOffset(MessageQueue messageQueue, long offset) {
         return CompletableFuture.runAsync(
-                () -> consumer.getOffsetStore().updateOffset(messageQueue, offset, true),
+                () -> {
+                    // The broker copy of the offset is display-only: positioning always comes from
+                    // Flink state. Publishing the checkpointed offset -- rollbacks included, hence
+                    // increaseOnly=false -- keeps consumer progress and lag monitoring truthful
+                    // instead of leaving a stale high-water mark; the previous code updated only the
+                    // local offset store with increaseOnly=true and never persisted, so it had no
+                    // effect at all.
+                    consumer.getOffsetStore().updateOffset(messageQueue, offset, false);
+                    consumer.getOffsetStore().persist(messageQueue);
+                },
                 commonExecutorService);
     }
 

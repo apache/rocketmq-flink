@@ -47,6 +47,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -66,6 +67,11 @@ public class RocketMQWriter<IN>
     private final int sendRetryTimes;
     private final long sendSleepTimeMs;
     private final AtomicLong pendingRecords = new AtomicLong(0);
+    /**
+     * Bounds the in-flight async sends. {@code send.pending.max} was declared with exactly this
+     * description but never read, so the send buffer grew without limit under a slow broker.
+     */
+    private final Semaphore sendPermits;
     private final AtomicReference<Throwable> asyncSendException = new AtomicReference<>();
 
     public RocketMQWriter(
@@ -95,6 +101,8 @@ public class RocketMQWriter<IN>
         this.sendRetryTimes = configuration.getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES);
         this.sendSleepTimeMs =
                 configuration.getLong(RocketMQSinkOptions.OPTIONAL_WRITE_SLEEP_TIME_MS);
+        this.sendPermits =
+                new Semaphore(configuration.getInteger(RocketMQSinkOptions.SEND_PENDING_MAX));
         try {
             serializationSchema.open(
                     initContext.asSerializationSchemaInitializationContext(), rocketmqSinkContext);
@@ -121,6 +129,12 @@ public class RocketMQWriter<IN>
             return;
         }
 
+        try {
+            sendPermits.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while waiting for send capacity", e);
+        }
         pendingRecords.incrementAndGet();
         // The element is handed to the selector as its sharding argument, which is what lets a
         // HashMessageQueueSelector route records that share a key to the same queue.
@@ -134,6 +148,7 @@ public class RocketMQWriter<IN>
                         asyncSendException.compareAndSet(null, throwable);
                     }
                     pendingRecords.decrementAndGet();
+                    sendPermits.release();
                 });
     }
 
