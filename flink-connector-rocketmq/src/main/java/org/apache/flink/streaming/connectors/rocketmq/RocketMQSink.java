@@ -38,10 +38,12 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The RocketMQSink provides at-least-once reliability guarantees when checkpoints are enabled and
@@ -106,8 +108,17 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
         latencyGauge = MetricUtils.registerOutLatency(getRuntimeContext());
     }
 
+    /**
+     * The first asynchronous send failure that has not been reported yet. An async callback runs on
+     * a client thread, so it cannot fail the task directly; the failure is parked here and rethrown
+     * from the next {@link #invoke} or from {@link #finish}. Without this the job keeps running and
+     * checkpointing while every record is being dropped.
+     */
+    private final AtomicReference<Throwable> asyncSendException = new AtomicReference<>();
+
     @Override
     public void invoke(Message input, Context context) throws Exception {
+        checkAsyncSendException();
         sinkInTps.markEvent();
 
         if (batchFlushOnCheckpoint) {
@@ -138,6 +149,7 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
                             public void onException(Throwable throwable) {
                                 if (throwable != null) {
                                     LOG.error("Async send message failure!", throwable);
+                                    asyncSendException.compareAndSet(null, throwable);
                                 }
                             }
                         };
@@ -152,6 +164,7 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
                 }
             } catch (Exception e) {
                 LOG.error("Async send message failure!", e);
+                asyncSendException.compareAndSet(null, e);
             }
         } else {
             try {
@@ -177,6 +190,19 @@ public class RocketMQSink extends RichSinkFunction<Message> implements Checkpoin
                 LOG.error("Sync send message exception: ", e);
                 throw e;
             }
+        }
+    }
+
+    @Override
+    public void finish() throws Exception {
+        checkAsyncSendException();
+    }
+
+    /** Rethrows the first asynchronous send failure recorded since the last call. */
+    private void checkAsyncSendException() throws IOException {
+        Throwable throwable = asyncSendException.getAndSet(null);
+        if (throwable != null) {
+            throw new IOException("Async send message failed", throwable);
         }
     }
 

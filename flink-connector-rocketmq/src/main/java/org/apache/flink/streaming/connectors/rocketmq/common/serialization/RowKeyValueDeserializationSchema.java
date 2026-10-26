@@ -17,9 +17,9 @@
 package org.apache.flink.streaming.connectors.rocketmq.common.serialization;
 
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.configuration.ConfigOption;
-import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
+import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
 import org.apache.flink.connector.rocketmq.source.reader.deserializer.DirtyDataStrategy;
 import org.apache.flink.connector.rocketmq.source.util.ByteSerializer;
 import org.apache.flink.connector.rocketmq.source.util.StringSerializer;
@@ -337,45 +337,53 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
                 return this;
             }
             Configuration configuration = new Configuration();
-            for (String key : properties.keySet()) {
-                configuration.setString(key, properties.get(key));
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                configuration.setString(entry.getKey(), entry.getValue());
             }
-            String lengthCheck = configuration.get(CollectorOption.LENGTH_CHECK);
+            applyLengthCheck(configuration.get(RocketMQOptions.OPTIONAL_LENGTH_CHECK));
+            this.setEncoding(configuration.get(RocketMQOptions.OPTIONAL_ENCODING));
+            this.setFieldDelimiter(configuration.get(RocketMQOptions.OPTIONAL_FIELD_DELIMITER));
+            this.setColumnErrorDebug(
+                    configuration.get(RocketMQSourceOptions.OPTIONAL_COLUMN_ERROR_DEBUG));
+            return this;
+        }
+
+        /**
+         * Maps {@code rocketmq.client.message.length.check} onto the dirty data strategies. An
+         * unknown value is rejected rather than ignored: silently keeping the defaults is what
+         * turns a misspelled option into a stream of dropped records.
+         */
+        private void applyLengthCheck(String lengthCheck) {
             switch (lengthCheck.toUpperCase()) {
+                case "NONE":
+                    break;
                 case "SKIP":
-                    {
-                        this.setFormatErrorStrategy(DirtyDataStrategy.SKIP);
-                        this.setFieldMissingStrategy(DirtyDataStrategy.SKIP);
-                        this.setFieldIncrementStrategy(DirtyDataStrategy.SKIP);
-                    }
+                    this.setFormatErrorStrategy(DirtyDataStrategy.SKIP);
+                    this.setFieldMissingStrategy(DirtyDataStrategy.SKIP);
+                    this.setFieldIncrementStrategy(DirtyDataStrategy.SKIP);
                     break;
                 case "PAD":
-                    {
-                        this.setFormatErrorStrategy(DirtyDataStrategy.SKIP);
-                        this.setFieldMissingStrategy(DirtyDataStrategy.PAD);
-                        this.setFieldIncrementStrategy(DirtyDataStrategy.CUT);
-                    }
-                    break;
-                case "EXCEPTION":
-                    {
-                        this.setFormatErrorStrategy(DirtyDataStrategy.EXCEPTION);
-                        this.setFieldMissingStrategy(DirtyDataStrategy.EXCEPTION);
-                        this.setFieldIncrementStrategy(DirtyDataStrategy.EXCEPTION);
-                    }
+                    this.setFormatErrorStrategy(DirtyDataStrategy.SKIP);
+                    this.setFieldMissingStrategy(DirtyDataStrategy.PAD);
+                    this.setFieldIncrementStrategy(DirtyDataStrategy.CUT);
                     break;
                 case "SKIP_SILENT":
-                    {
-                        this.setFormatErrorStrategy(DirtyDataStrategy.SKIP_SILENT);
-                        this.setFieldMissingStrategy(DirtyDataStrategy.SKIP_SILENT);
-                        this.setFieldIncrementStrategy(DirtyDataStrategy.SKIP_SILENT);
-                    }
+                    this.setFormatErrorStrategy(DirtyDataStrategy.SKIP_SILENT);
+                    this.setFieldMissingStrategy(DirtyDataStrategy.SKIP_SILENT);
+                    this.setFieldIncrementStrategy(DirtyDataStrategy.SKIP_SILENT);
+                    break;
+                case "EXCEPTION":
+                    this.setFormatErrorStrategy(DirtyDataStrategy.EXCEPTION);
+                    this.setFieldMissingStrategy(DirtyDataStrategy.EXCEPTION);
+                    this.setFieldIncrementStrategy(DirtyDataStrategy.EXCEPTION);
                     break;
                 default:
+                    throw new IllegalArgumentException(
+                            String.format(
+                                    "Unsupported value '%s' for %s. Expected one of NONE, SKIP, "
+                                            + "SKIP_SILENT, PAD, EXCEPTION.",
+                                    lengthCheck, RocketMQOptions.OPTIONAL_LENGTH_CHECK.key()));
             }
-            this.setEncoding(configuration.getString(CollectorOption.ENCODING));
-            this.setFieldDelimiter(configuration.getString(CollectorOption.FIELD_DELIMITER));
-            this.setColumnErrorDebug(configuration.getBoolean(CollectorOption.COLUMN_ERROR_DEBUG));
-            return this;
         }
 
         public RowKeyValueDeserializationSchema build() {
@@ -389,17 +397,5 @@ public class RowKeyValueDeserializationSchema implements KeyValueDeserialization
                     columnErrorDebug,
                     properties);
         }
-    }
-
-    /** Options for {@link RowKeyValueDeserializationSchema}. */
-    public static class CollectorOption {
-        public static final ConfigOption<String> ENCODING =
-                ConfigOptions.key("encoding".toLowerCase()).defaultValue("UTF-8");
-        public static final ConfigOption<String> FIELD_DELIMITER =
-                ConfigOptions.key("fieldDelimiter".toLowerCase()).defaultValue("\u0001");
-        public static final ConfigOption<Boolean> COLUMN_ERROR_DEBUG =
-                ConfigOptions.key("columnErrorDebug".toLowerCase()).defaultValue(true);
-        public static final ConfigOption<String> LENGTH_CHECK =
-                ConfigOptions.key("lengthCheck".toLowerCase()).defaultValue("NONE");
     }
 }

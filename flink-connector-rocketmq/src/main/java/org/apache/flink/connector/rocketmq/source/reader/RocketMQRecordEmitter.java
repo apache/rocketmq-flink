@@ -42,14 +42,23 @@ public class RocketMQRecordEmitter<T>
             MessageView element, SourceOutput<T> output, RocketMQSourceSplitState splitState)
             throws IOException {
 
+        sourceOutputWrapper.setSourceOutput(output);
+        sourceOutputWrapper.setTimestamp(element.getEventTime());
         try {
-            sourceOutputWrapper.setSourceOutput(output);
-            sourceOutputWrapper.setTimestamp(element.getEventTime());
             deserializationSchema.deserialize(element, sourceOutputWrapper);
-            splitState.setCurrentOffset(element.getQueueOffset() + 1);
         } catch (Exception e) {
-            throw new IOException("Failed to deserialize message due to", e);
+            // Naming the record makes a poison message identifiable from the exception alone;
+            // otherwise the only way to find it is to replay the whole queue.
+            throw new IOException(
+                    String.format(
+                            "Failed to deserialize message %s from topic %s, queue %d, offset %d",
+                            element.getMessageId(),
+                            element.getTopic(),
+                            element.getQueueId(),
+                            element.getQueueOffset()),
+                    e);
         }
+        splitState.setCurrentOffset(element.getQueueOffset() + 1);
     }
 
     private static class SourceOutputWrapper<T> implements Collector<T> {

@@ -28,6 +28,7 @@ import org.apache.flink.connector.base.source.reader.splitreader.SplitsAddition;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsChange;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
 import org.apache.flink.connector.rocketmq.common.event.SourceInitAssignEvent;
+import org.apache.flink.connector.rocketmq.common.filter.Sql92MessageFilter;
 import org.apache.flink.connector.rocketmq.common.lock.SpinLock;
 import org.apache.flink.connector.rocketmq.source.InnerConsumer;
 import org.apache.flink.connector.rocketmq.source.InnerConsumerImpl;
@@ -48,7 +49,9 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -59,6 +62,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 
 /**
  * A {@link SplitReader} implementation that reads records from RocketMQ partitions.
@@ -69,6 +73,10 @@ import java.util.concurrent.ConcurrentMap;
 public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQSourceSplit> {
 
     private static final Logger LOG = LoggerFactory.getLogger(RocketMQSplitReader.class);
+
+    // The maximum offset of a queue is only known to the broker, so the lag is refreshed on a
+    // coarse interval instead of on every fetch.
+    private static final long LAG_REFRESH_INTERVAL_MS = 10_000L;
 
     private volatile boolean wakeup = false;
 
@@ -87,12 +95,15 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
 
     // Init status : true-finish init; false-not finish init
     private boolean initFinish;
+    private long lastLagRefreshTime;
     private final RocketMQRecordsWithSplitIds<MessageView> recordsWithSplitIds;
     private final SpinLock lock;
 
-    // Client-side filter configuration (P0 fix — tag/sql were dead in new API path)
-    private final String filterTag;
-    private final String filterSql;
+    // Tag and SQL92 filters are evaluated here rather than on the broker: the lite-pull consumer
+    // can only carry a tag sub-expression while queues are assigned explicitly, and explicit
+    // assignment is what lets the enumerator own split allocation. See Sql92MessageFilter.
+    private final Set<String> filterTags;
+    private final Sql92MessageFilter sqlFilter;
 
     public RocketMQSplitReader(
             Configuration configuration,
@@ -116,14 +127,18 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
         this.commitOffsetsOnCheckpoint =
                 configuration.getBoolean(RocketMQSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT);
 
-        // Read filter configuration for client-side filtering (P0 fix)
-        this.filterTag = configuration.getString(RocketMQSourceOptions.OPTIONAL_TAG);
-        this.filterSql = configuration.get(RocketMQSourceOptions.OPTIONAL_SQL);
-        if (filterSql != null) {
-            LOG.warn(
-                    "SQL filter expression '{}' is set but client-side SQL evaluation "
-                            + "is not supported with assign() mode. Only tag-based filtering will be applied.",
-                    filterSql);
+        this.filterTags =
+                parseFilterTags(configuration.getString(RocketMQSourceOptions.OPTIONAL_TAG));
+        String sqlExpression = configuration.get(RocketMQSourceOptions.OPTIONAL_SQL);
+        this.sqlFilter =
+                sqlExpression == null || sqlExpression.trim().isEmpty()
+                        ? null
+                        : new Sql92MessageFilter(sqlExpression);
+        if (sqlFilter != null) {
+            LOG.info(
+                    "Evaluating SQL92 filter '{}' on the client side; assign mode cannot push it "
+                            + "down to the broker",
+                    sqlFilter.getExpressionString());
         }
     }
 
@@ -145,16 +160,20 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
                     Duration.ofMillis(this.configuration.getLong(RocketMQOptions.POLL_TIMEOUT));
             List<MessageView> messageExtList = consumer.poll(duration);
             for (MessageView messageView : messageExtList) {
-                // Client-side tag filtering (P0 fix)
+                MessageQueue messageQueue =
+                        new MessageQueue(
+                                messageView.getTopic(),
+                                messageView.getBrokerName(),
+                                messageView.getQueueId());
+                // Records dropped by a filter still advance the queue, so they are counted here
+                // rather than after the filter.
+                rocketmqSourceReaderMetrics.setCurrentOffset(
+                        messageQueue, messageView.getQueueOffset() + 1);
+                rocketmqSourceReaderMetrics.recordBytesConsumed(messageView.getStoreSize());
                 if (!matchesFilter(messageView)) {
                     continue;
                 }
-                String splitId =
-                        UtilAll.getSplitId(
-                                new MessageQueue(
-                                        messageView.getTopic(),
-                                        messageView.getBrokerName(),
-                                        messageView.getQueueId()));
+                String splitId = UtilAll.getSplitId(messageQueue);
                 recordsWithSplitIds.recordsForSplit(splitId).add(messageView);
                 if (this.configuration.getBoolean(RocketMQSourceOptions.GLOBAL_DEBUG_MODE)) {
                     LOG.info(
@@ -164,6 +183,7 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
                 }
             }
             recordsWithSplitIds.prepareForRead();
+            refreshLagIfDue();
         } catch (Exception e) {
             if (wakeup) {
                 LOG.debug("Reader fetch interrupted by wakeup", e);
@@ -257,37 +277,83 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
         }
     }
 
-    /**
-     * Client-side message filtering. Applies tag-based filtering for consumers using assign() mode
-     * where server-side MessageSelector is not available.
-     */
+    /** Returns whether the message satisfies the configured tag and SQL92 filters. */
     private boolean matchesFilter(MessageView messageView) {
-        if (filterTag != null && !"*".equals(filterTag) && !filterTag.isEmpty()) {
-            String messageTag = messageView.getTag();
-            if (messageTag == null) {
-                return false;
-            }
-            // Support "||" separated multi-tag filter expression
-            String[] filterTags = filterTag.split("\\|\\|");
-            boolean matched = false;
-            for (String ft : filterTags) {
-                if (ft.trim().equals(messageTag)) {
-                    matched = true;
-                    break;
-                }
-            }
-            if (!matched) {
-                return false;
-            }
+        if (!filterTags.isEmpty() && !filterTags.contains(messageView.getTag())) {
+            return false;
         }
-        return true;
+        return sqlFilter == null || sqlFilter.matches(messageView.getProperties());
+    }
+
+    /**
+     * Splits a {@code "tagA||tagB"} sub-expression into the set of accepted tags. An absent or
+     * {@code "*"} expression accepts every tag and yields an empty set.
+     */
+    private static Set<String> parseFilterTags(@Nullable String tagExpression) {
+        if (tagExpression == null) {
+            return Collections.emptySet();
+        }
+        String trimmed = tagExpression.trim();
+        if (trimmed.isEmpty() || "*".equals(trimmed)) {
+            return Collections.emptySet();
+        }
+        return Arrays.stream(trimmed.split("\\|\\|"))
+                .map(String::trim)
+                .filter(tag -> !tag.isEmpty())
+                .collect(Collectors.toSet());
     }
 
     public void notifyCheckpointComplete(Map<MessageQueue, Long> offsetsToCommit) {
-        if (offsetsToCommit != null) {
-            for (Map.Entry<MessageQueue, Long> entry : offsetsToCommit.entrySet()) {
-                consumer.commitOffset(entry.getKey(), entry.getValue());
-            }
+        if (offsetsToCommit == null) {
+            return;
+        }
+        for (Map.Entry<MessageQueue, Long> entry : offsetsToCommit.entrySet()) {
+            MessageQueue messageQueue = entry.getKey();
+            long offset = entry.getValue();
+            consumer.commitOffset(messageQueue, offset)
+                    .whenComplete(
+                            (ignored, error) -> {
+                                if (error == null) {
+                                    rocketmqSourceReaderMetrics.recordCommitSucceeded();
+                                    rocketmqSourceReaderMetrics.setCommittedOffset(
+                                            messageQueue, offset);
+                                } else {
+                                    rocketmqSourceReaderMetrics.recordCommitFailed();
+                                    LOG.error(
+                                            "Failed to commit offset {} for mq {}",
+                                            offset,
+                                            UtilAll.getQueueDescription(messageQueue),
+                                            error);
+                                }
+                            });
+        }
+    }
+
+    /**
+     * Asks the broker for the maximum offset of every assigned queue, at most once per {@link
+     * #LAG_REFRESH_INTERVAL_MS}. The lookup is asynchronous so the fetch loop never blocks on a
+     * remote call; a queue whose lookup fails simply keeps its previous lag.
+     */
+    private void refreshLagIfDue() {
+        long now = System.currentTimeMillis();
+        if (now - lastLagRefreshTime < LAG_REFRESH_INTERVAL_MS) {
+            return;
+        }
+        lastLagRefreshTime = now;
+        for (MessageQueue messageQueue : currentOffsetTable.keySet()) {
+            consumer.seekMaxOffset(messageQueue)
+                    .whenComplete(
+                            (maxOffset, error) -> {
+                                if (error != null) {
+                                    LOG.debug(
+                                            "Failed to fetch the max offset of mq {} for the lag metric",
+                                            UtilAll.getQueueDescription(messageQueue),
+                                            error);
+                                } else if (maxOffset != null) {
+                                    rocketmqSourceReaderMetrics.updateMaxOffset(
+                                            messageQueue, maxOffset);
+                                }
+                            });
         }
     }
 

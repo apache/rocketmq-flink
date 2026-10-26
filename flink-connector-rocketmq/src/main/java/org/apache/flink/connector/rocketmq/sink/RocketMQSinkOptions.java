@@ -40,11 +40,6 @@ public class RocketMQSinkOptions extends RocketMQOptions {
                     .noDefaultValue()
                     .withDescription("The name of the persist topic");
 
-    public static final ConfigOption<String> SERIALIZE_FORMAT =
-            ConfigOptions.key(PRODUCER_PREFIX + "serialize.format")
-                    .stringType()
-                    .defaultValue("json");
-
     public static final ConfigOption<String> DELIVERY_GUARANTEE =
             ConfigOptions.key(PRODUCER_PREFIX + "delivery.guarantee")
                     .stringType()

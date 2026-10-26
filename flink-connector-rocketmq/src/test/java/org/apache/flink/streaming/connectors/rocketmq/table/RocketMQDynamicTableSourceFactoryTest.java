@@ -28,6 +28,7 @@ import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.ResolvedCatalogTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.source.DynamicTableSource;
+import org.apache.flink.table.factories.DynamicTableFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 
 import org.junit.Test;
@@ -39,7 +40,9 @@ import java.util.Map;
 
 import static org.apache.flink.table.api.DataTypes.STRING;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /** Tests for {@link RocketMQDynamicTableSourceFactory}. */
 public class RocketMQDynamicTableSourceFactoryTest {
@@ -54,6 +57,68 @@ public class RocketMQDynamicTableSourceFactoryTest {
     private static final String TOPIC = "test_source";
     private static final String CONSUMER_GROUP = "test_consumer";
     private static final String NAME_SERVER_ADDRESS = "127.0.0.1:9876";
+
+    /**
+     * A missing required option must be reported by key only. Note that this drives the factory
+     * directly: going through {@link FactoryUtil#createTableSource} lets Flink run its own required
+     * option check first, and that message repeats every table option, including the access key in
+     * plaintext.
+     */
+    @Test
+    public void testMissingRequiredOptionDoesNotEchoOptionValues() {
+        final Map<String, String> options = new HashMap<>();
+        options.put("connector", IDENTIFIER);
+        options.put(RocketMQSourceOptions.TOPIC.key(), TOPIC);
+        options.put(RocketMQSourceOptions.CONSUMER_GROUP.key(), CONSUMER_GROUP);
+        options.put(RocketMQSourceOptions.OPTIONAL_ACCESS_KEY.key(), "ak-value-must-not-leak");
+        options.put(RocketMQSourceOptions.OPTIONAL_SECRET_KEY.key(), "sk-value-must-not-leak");
+
+        final ResolvedCatalogTable table =
+                new ResolvedCatalogTable(
+                        CatalogTable.of(
+                                Schema.newBuilder().fromResolvedSchema(SCHEMA).build(),
+                                "mock source",
+                                Collections.emptyList(),
+                                options),
+                        SCHEMA);
+        final DynamicTableFactory.Context context =
+                new DynamicTableFactory.Context() {
+                    @Override
+                    public ObjectIdentifier getObjectIdentifier() {
+                        return ObjectIdentifier.of("default", "default", IDENTIFIER);
+                    }
+
+                    @Override
+                    public ResolvedCatalogTable getCatalogTable() {
+                        return table;
+                    }
+
+                    @Override
+                    public Configuration getConfiguration() {
+                        return new Configuration();
+                    }
+
+                    @Override
+                    public ClassLoader getClassLoader() {
+                        return RocketMQDynamicTableSourceFactoryTest.class.getClassLoader();
+                    }
+
+                    @Override
+                    public boolean isTemporary() {
+                        return false;
+                    }
+                };
+
+        try {
+            new RocketMQDynamicTableSourceFactory().createDynamicTableSource(context);
+            fail("expected the missing endpoints option to be reported");
+        } catch (ValidationException e) {
+            final String message = e.getMessage();
+            assertTrue(message, message.contains(RocketMQSourceOptions.ENDPOINTS.key()));
+            assertFalse(message, message.contains("ak-value-must-not-leak"));
+            assertFalse(message, message.contains("sk-value-must-not-leak"));
+        }
+    }
 
     @Test
     public void testRocketMQDynamicTableSourceWithLegalOption() {
