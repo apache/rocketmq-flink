@@ -49,6 +49,7 @@ import org.apache.commons.collections.map.LinkedMap;
 import org.apache.commons.lang.Validate;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
+import org.apache.rocketmq.client.consumer.store.ReadOffsetType;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -296,28 +297,58 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
 
     private void pollAndEmit(MessageQueue mq, SourceContext<OUT> context, int pullBatchSize)
             throws Exception {
-        Long offset = offsetTable.get(mq);
         consumer.setPullBatchSize(pullBatchSize);
-        consumer.seek(mq, offset);
-
-        List<MessageExt> messages =
-                consumer.poll(
-                        RocketMQUtils.getInteger(
-                                props,
-                                RocketMQConfig.CONSUMER_TIMEOUT,
-                                RocketMQConfig.DEFAULT_CONSUMER_TIMEOUT));
-
-        boolean found = CollectionUtils.isNotEmpty(messages);
-        if (found) {
-            emitMessages(messages, context);
-        }
-
+        List<MessageExt> messages;
+        // seek, poll and position booking have to be atomic across the per-queue threads:
+        // poll drains every assigned queue, so a seek issued from one thread after another
+        // thread's poll rewinds that queue and re-emits messages it already drained.
         synchronized (checkPointLock) {
-            updateMessageQueueOffset(mq, consumer.committed(mq));
+            Long offset = offsetTable.get(mq);
+            if (offset != null && offset >= 0) {
+                consumer.seek(mq, offset);
+            }
+            messages =
+                    consumer.poll(
+                            RocketMQUtils.getInteger(
+                                    props,
+                                    RocketMQConfig.CONSUMER_TIMEOUT,
+                                    RocketMQConfig.DEFAULT_CONSUMER_TIMEOUT));
+            if (CollectionUtils.isNotEmpty(messages)) {
+                advanceConsumedOffsets(messages, mq);
+            }
         }
 
-        if (!found) {
+        if (CollectionUtils.isNotEmpty(messages)) {
+            emitMessages(messages, context);
+        } else {
             RetryUtil.waitForMs(RocketMQConfig.DEFAULT_CONSUMER_DELAY_WHEN_MESSAGE_NOT_FOUND);
+        }
+    }
+
+    /**
+     * Books the next offset to read for every queue this poll drained. {@code poll} serves all
+     * assigned queues, so each message is booked under its own queue rather than under the queue
+     * this thread was handed.
+     *
+     * <p>The position must come from the messages themselves. Reading it back from {@code
+     * DefaultLitePullConsumer#committed} rewinds the source whenever the broker-side commit does
+     * not advance — auto-commit is off by default — which makes every poll round re-seek to the
+     * same position and re-emit the whole topic, multiplying the output by the number of rounds
+     * while every health signal stays green.
+     */
+    private void advanceConsumedOffsets(List<MessageExt> messages, MessageQueue assigned)
+            throws MQClientException {
+        for (MessageExt message : messages) {
+            MessageQueue queue =
+                    new MessageQueue(
+                            assigned.getTopic(), message.getBrokerName(), message.getQueueId());
+            long nextOffset = message.getQueueOffset() + 1;
+            Long current = offsetTable.get(queue);
+            // Only move forward: a seek in flight on another thread can let a poll hand
+            // back a message some thread already booked.
+            if (current == null || nextOffset > current) {
+                updateMessageQueueOffset(queue, nextOffset);
+            }
         }
     }
 
@@ -360,17 +391,32 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
      * @param messageQueues
      * @throws MQClientException
      */
+    /**
+     * The position a preceding {@code seekToBegin}/{@code seekToEnd} established. {@code committed}
+     * answers -1 for a group that has never committed, and storing that -1 makes the first {@code
+     * seek} in the poll loop fail with "Seek offset illegal", after which the source gives up on
+     * the queue and the job finishes having read nothing.
+     */
+    private long positionAfterSeek(MessageQueue mq) throws MQClientException {
+        long offset =
+                consumer.getOffsetStore().readOffset(mq, ReadOffsetType.MEMORY_FIRST_THEN_STORE);
+        if (offset < 0) {
+            offset = Math.max(consumer.committed(mq), 0L);
+        }
+        return offset;
+    }
+
     private void initOffsets(List<MessageQueue> messageQueues) throws MQClientException {
         for (MessageQueue mq : messageQueues) {
             long offset;
             switch (startMode) {
                 case LATEST:
                     consumer.seekToEnd(mq);
-                    offset = consumer.committed(mq);
+                    offset = positionAfterSeek(mq);
                     break;
                 case EARLIEST:
                     consumer.seekToBegin(mq);
-                    offset = consumer.committed(mq);
+                    offset = positionAfterSeek(mq);
                     break;
                 case GROUP_OFFSETS:
                     offset = consumer.committed(mq);
@@ -382,7 +428,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                         switch (offsetResetStrategy) {
                             case LATEST:
                                 consumer.seekToEnd(mq);
-                                offset = consumer.committed(mq);
+                                offset = positionAfterSeek(mq);
                                 log.info(
                                         "current consumer thread:{} has no committed offset,use Strategy:{} instead",
                                         mq,
@@ -394,7 +440,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                                         mq,
                                         offsetResetStrategy);
                                 consumer.seekToBegin(mq);
-                                offset = consumer.committed(mq);
+                                offset = positionAfterSeek(mq);
                                 break;
                             default:
                                 break;
@@ -413,7 +459,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                     if (specificOffset != null) {
                         offset = specificOffset;
                     } else {
-                        offset = consumer.committed(mq);
+                        offset = Math.max(consumer.committed(mq), 0L);
                     }
                     break;
                 default:
