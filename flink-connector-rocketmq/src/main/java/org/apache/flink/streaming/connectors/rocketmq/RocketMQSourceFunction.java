@@ -25,6 +25,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.rocketmq.common.filter.Sql92MessageFilter;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Meter;
 import org.apache.flink.metrics.MeterView;
@@ -48,7 +49,6 @@ import org.apache.commons.collections.map.LinkedMap;
 import org.apache.commons.lang.Validate;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
-import org.apache.rocketmq.client.consumer.MessageSelector;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -88,6 +88,7 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
     private RunningChecker runningChecker;
 
     private transient DefaultLitePullConsumer consumer;
+    private transient Sql92MessageFilter sqlFilter;
 
     private KeyValueDeserializationSchema<OUT> schema;
     private transient ListState<Tuple2<MessageQueue, Long>> unionOffsetStates;
@@ -227,6 +228,11 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
         Collection<MessageQueue> totalQueues = consumer.fetchMessageQueues(topic);
         messageQueues =
                 RocketMQUtils.allocate(totalQueues, taskNumber, ctx.getIndexOfThisSubtask());
+        // Assign the queues this subtask was allocated instead of subscribing. subscribe() leaves
+        // allocation to the client's own rebalance, which runs asynchronously, so the assigned list
+        // is still empty when initOffsets() seeks below and every seek fails with "The message
+        // queue is not in assigned list".
+        consumer.assign(messageQueues);
         // If the job recovers from the state, the state has already contained the offsets of last
         // commit.
         if (restored) {
@@ -249,12 +255,13 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
                         RocketMQConfig.DEFAULT_CONSUMER_BATCH_SIZE);
         // Watermark emission removed: legacy watermark assigners are no longer available.
         // Use WatermarkStrategy with the new Source API instead.
-        if (StringUtils.isEmpty(sql)) {
-            consumer.subscribe(topic, tag);
-        } else {
-            // pull with sql do not support block pull.
-            consumer.subscribe(topic, MessageSelector.bySql(sql));
+        // The queues are assigned in open(); only the filter is set up here. A tag sub-expression
+        // is honoured by the broker in assign mode, while SQL92 cannot be pushed down and is
+        // evaluated against the message properties on the way out.
+        if (!StringUtils.isEmpty(tag) && !RocketMQConfig.DEFAULT_CONSUMER_TAG.equals(tag)) {
+            consumer.setSubExpressionForAssign(topic, tag);
         }
+        this.sqlFilter = StringUtils.isEmpty(sql) ? null : new Sql92MessageFilter(sql);
         for (MessageQueue mq : messageQueues) {
             this.executor.execute(() -> consumeMessages(mq, context, pullBatchSize));
         }
@@ -317,6 +324,9 @@ public class RocketMQSourceFunction<OUT> extends RichParallelSourceFunction<OUT>
     private void emitMessages(List<MessageExt> messages, SourceContext<OUT> context) {
         long fetchTime = System.currentTimeMillis();
         for (MessageExt msg : messages) {
+            if (sqlFilter != null && !sqlFilter.matches(msg.getProperties())) {
+                continue;
+            }
             byte[] key =
                     msg.getKeys() != null ? msg.getKeys().getBytes(StandardCharsets.UTF_8) : null;
             byte[] value = msg.getBody();

@@ -17,6 +17,7 @@
 
 package org.apache.flink.connector.rocketmq.sink.writer;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.eventtime.Watermark;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
@@ -37,12 +38,15 @@ import org.apache.rocketmq.common.message.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -69,6 +73,17 @@ public class RocketMQWriter<IN>
             MessageQueueSelector messageQueueSelector,
             RocketMQSerializationSchema<IN> serializationSchema,
             Sink.InitContext initContext) {
+        this(configuration, messageQueueSelector, serializationSchema, initContext, null);
+    }
+
+    /** @param producer the producer to send with, or null to create and start a real one */
+    @VisibleForTesting
+    RocketMQWriter(
+            Configuration configuration,
+            MessageQueueSelector messageQueueSelector,
+            RocketMQSerializationSchema<IN> serializationSchema,
+            Sink.InitContext initContext,
+            @Nullable InnerProducer producer) {
 
         this.deliveryGuarantee =
                 DeliveryGuarantee.valueOf(
@@ -86,8 +101,12 @@ public class RocketMQWriter<IN>
         } catch (Exception e) {
             throw new FlinkRuntimeException("Failed to open serialization schema", e);
         }
-        this.producer = new InnerProducerImpl(configuration);
-        this.producer.start();
+        if (producer == null) {
+            this.producer = new InnerProducerImpl(configuration);
+            this.producer.start();
+        } else {
+            this.producer = producer;
+        }
     }
 
     @Override
@@ -99,17 +118,23 @@ public class RocketMQWriter<IN>
 
         if (deliveryGuarantee == DeliveryGuarantee.EXACTLY_ONCE) {
             writeInTransaction(message);
-        } else {
-            pendingRecords.incrementAndGet();
-            producer.send(message)
-                    .whenComplete(
-                            (sendResult, throwable) -> {
-                                if (throwable != null) {
-                                    asyncSendException.compareAndSet(null, throwable);
-                                }
-                                pendingRecords.decrementAndGet();
-                            });
+            return;
         }
+
+        pendingRecords.incrementAndGet();
+        // The element is handed to the selector as its sharding argument, which is what lets a
+        // HashMessageQueueSelector route records that share a key to the same queue.
+        CompletableFuture<SendResult> sendFuture =
+                messageQueueSelector == null
+                        ? producer.send(message)
+                        : producer.send(message, messageQueueSelector, element);
+        sendFuture.whenComplete(
+                (sendResult, throwable) -> {
+                    if (throwable != null) {
+                        asyncSendException.compareAndSet(null, throwable);
+                    }
+                    pendingRecords.decrementAndGet();
+                });
     }
 
     private void writeInTransaction(Message message) throws IOException {

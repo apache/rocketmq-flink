@@ -64,7 +64,6 @@ public class RocketMQOptions {
                     .noDefaultValue()
                     .withDescription("RocketMQ instance namespace");
 
-    /** 这里不知道对轨迹功能有没有影响, 待验证 */
     public static final ConfigOption<AccessChannel> OPTIONAL_ACCESS_CHANNEL =
             ConfigOptions.key(CLIENT_CONFIG_PREFIX + "channel")
                     .enumType(AccessChannel.class)

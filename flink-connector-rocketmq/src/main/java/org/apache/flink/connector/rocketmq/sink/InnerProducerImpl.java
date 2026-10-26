@@ -20,6 +20,8 @@ package org.apache.flink.connector.rocketmq.sink;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
 import org.apache.flink.connector.rocketmq.sink.committer.SendCommittable;
+import org.apache.flink.streaming.connectors.rocketmq.common.selector.MessageQueueSelector;
+import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.StringUtils;
 
 import org.apache.rocketmq.acl.common.AclClientRPCHook;
@@ -40,6 +42,7 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.apache.rocketmq.remoting.protocol.NamespaceUtil;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.RequestCode;
+import org.apache.rocketmq.remoting.protocol.ResponseCode;
 import org.apache.rocketmq.remoting.protocol.header.EndTransactionRequestHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -209,10 +212,31 @@ public class InnerProducerImpl implements InnerProducer {
                 () -> {
                     try {
                         SendResult sendResult = producer.send(message);
-                        LOG.info(
+                        LOG.debug(
                                 "Send message successfully, topic={}, messageId={}",
                                 message.getTopic(),
                                 sendResult.getMsgId());
+                        return sendResult;
+                    } catch (Exception e) {
+                        LOG.error("Failed to send message, topic={}", message.getTopic(), e);
+                        throw new RuntimeException(e);
+                    }
+                },
+                Runnable::run);
+    }
+
+    @Override
+    public CompletableFuture<SendResult> send(
+            Message message, MessageQueueSelector selector, Object arg) {
+        return CompletableFuture.supplyAsync(
+                () -> {
+                    try {
+                        SendResult sendResult = producer.send(message, selector, arg);
+                        LOG.debug(
+                                "Send message successfully, topic={}, messageId={}, queue={}",
+                                message.getTopic(),
+                                sendResult.getMsgId(),
+                                sendResult.getMessageQueue());
                         return sendResult;
                     } catch (Exception e) {
                         LOG.error("Failed to send message, topic={}", message.getTopic(), e);
@@ -278,8 +302,28 @@ public class InnerProducerImpl implements InnerProducer {
             final String brokerName =
                     this.mqClientInstance.getBrokerNameFromMessageQueue(
                             producer.queueWithNamespace(sendCommittable.getMessageQueue()));
-            final String brokerAddress =
-                    this.mqClientInstance.findBrokerAddressInPublish(brokerName);
+            String brokerAddress = this.mqClientInstance.findBrokerAddressInPublish(brokerName);
+            if (brokerAddress == null) {
+                // The Committer owns a producer that never sends anything, so its publish route
+                // table stays empty and findBrokerAddressInPublish() returns null. invokeSync()
+                // then falls back to a name server channel, which cannot commit the half message,
+                // and the reply is not a SUCCESS the caller would notice -- every record of the
+                // checkpoint is lost without a single error. Refresh the route for the topic the
+                // half message belongs to before resolving again.
+                LOG.warn(
+                        "Publish route for {} is not loaded yet, refreshing before ending transaction",
+                        brokerName);
+                this.mqClientInstance.updateTopicRouteInfoFromNameServer(
+                        sendCommittable.getTopic());
+                brokerAddress = this.mqClientInstance.findBrokerAddressInPublish(brokerName);
+            }
+            if (brokerAddress == null) {
+                throw new IllegalStateException(
+                        "Cannot resolve the address of broker "
+                                + brokerName
+                                + " for topic "
+                                + sendCommittable.getTopic());
+            }
 
             EndTransactionRequestHeader requestHeader = new EndTransactionRequestHeader();
             requestHeader.setTransactionId(sendCommittable.getTransactionId());
@@ -304,16 +348,38 @@ public class InnerProducerImpl implements InnerProducer {
                     break;
             }
 
-            if (sendCommittable.getMessageOffset() != -1L) {
-                this.endTransaction(
-                        brokerAddress, requestHeader, "", this.producer.getSendMsgTimeout());
-            } else {
-                LOG.error(
-                        "Convert message physical offset error, msgId={}",
-                        sendCommittable.getMsgId());
+            if (sendCommittable.getMessageOffset() == -1L) {
+                throw new IllegalStateException(
+                        "Convert message physical offset error, msgId="
+                                + sendCommittable.getMsgId()
+                                + ", offsetMsgId="
+                                + sendCommittable.getOffsetMsgId());
             }
+            LOG.debug(
+                    "End transaction, state={}, brokerName={}, brokerAddress={}, transId={}, "
+                            + "commitLogOffset={}, tranStateTableOffset={}",
+                    transactionResult,
+                    brokerName,
+                    brokerAddress,
+                    sendCommittable.getTransactionId(),
+                    sendCommittable.getMessageOffset(),
+                    sendCommittable.getQueueOffset());
+            this.endTransaction(
+                    brokerAddress, requestHeader, "", this.producer.getSendMsgTimeout());
         } catch (Exception e) {
-            LOG.error("Try end transaction error", e);
+            // Swallowing the failure here lets the CompletableFuture complete normally, so the
+            // Committer reports success and Flink drops the committable: the half message is
+            // then never committed and the record is lost without any error anywhere.
+            throw new FlinkRuntimeException(
+                    "End transaction failed, state="
+                            + transactionResult
+                            + ", topic="
+                            + sendCommittable.getTopic()
+                            + ", msgId="
+                            + sendCommittable.getMsgId()
+                            + ", transId="
+                            + sendCommittable.getTransactionId(),
+                    e);
         }
     }
 
@@ -326,10 +392,23 @@ public class InnerProducerImpl implements InnerProducer {
         RemotingCommand request =
                 RemotingCommand.createRequestCommand(RequestCode.END_TRANSACTION, requestHeader);
         request.setRemark(remark);
-        this.mqClientInstance
-                .getMQClientAPIImpl()
-                .getRemotingClient()
-                .invokeSync(address, request, timeoutMillis);
+        RemotingCommand response =
+                this.mqClientInstance
+                        .getMQClientAPIImpl()
+                        .getRemotingClient()
+                        .invokeSync(address, request, timeoutMillis);
+        if (response == null) {
+            throw new RemotingException("END_TRANSACTION got a null response from " + address);
+        }
+        if (response.getCode() != ResponseCode.SUCCESS) {
+            throw new RemotingException(
+                    "END_TRANSACTION rejected by "
+                            + address
+                            + ", code="
+                            + response.getCode()
+                            + ", remark="
+                            + response.getRemark());
+        }
     }
 
     @Override

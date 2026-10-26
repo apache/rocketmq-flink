@@ -89,7 +89,6 @@ public class InnerConsumerImpl implements InnerConsumer {
             this.consumer = new DefaultLitePullConsumer();
         }
 
-        // Enable message trace if configured (P1 fix — previously a ghost parameter)
         this.consumer.setEnableMsgTrace(enableTrace);
         if (traceTopic != null) {
             this.consumer.setCustomizedTraceTopic(traceTopic);
@@ -100,7 +99,6 @@ public class InnerConsumerImpl implements InnerConsumer {
 
         this.consumer.setNamesrvAddr(endPoints);
         this.consumer.setConsumerGroup(groupId);
-        this.consumer.setAutoCommit(false);
         this.consumer.setVipChannelEnabled(false);
         this.consumer.setInstanceName(
                 String.join(
@@ -109,29 +107,33 @@ public class InnerConsumerImpl implements InnerConsumer {
                         groupId,
                         UUID.randomUUID().toString()));
 
-        // Apply pull batch size from config (P1 fix — previously a ghost parameter)
         long pullBatchSize = configuration.getLong(RocketMQSourceOptions.PULL_BATCH_SIZE);
         if (pullBatchSize > 0) {
             this.consumer.setPullBatchSize((int) pullBatchSize);
         }
+        long pullTimeoutMillis = configuration.getLong(RocketMQSourceOptions.PULL_TIMEOUT_MILLIS);
+        if (pullTimeoutMillis > 0) {
+            this.consumer.setConsumerPullTimeoutMillis(pullTimeoutMillis);
+        }
 
-        // Apply namespace from config (P2 fix)
         String namespace = configuration.getString(RocketMQOptions.NAMESPACE);
         if (namespace != null && !namespace.isEmpty()) {
             this.consumer.setNamespace(namespace);
         }
 
-        // Log auto-commit configuration for observability (P1 fix)
+        // Offsets are driven by Flink checkpoints; the client side auto-commit below only affects
+        // what broker side consumer progress reports.
         boolean autoCommit = configuration.getBoolean(RocketMQSourceOptions.AUTO_COMMIT_OFFSET);
         long commitInterval =
                 configuration.getLong(RocketMQSourceOptions.AUTO_COMMIT_OFFSET_INTERVAL);
+        this.consumer.setAutoCommit(autoCommit);
+        this.consumer.setAutoCommitIntervalMillis(commitInterval);
         LOG.info(
                 "Consumer offset commit config: autoCommit={}, commitInterval={}ms, checkpointCommit={}",
                 autoCommit,
                 commitInterval,
                 configuration.getBoolean(RocketMQSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT));
 
-        // Apply common client parameters (P2 fix)
         if (configuration.contains(RocketMQOptions.OPTIONAL_ACCESS_CHANNEL)) {
             this.consumer.setAccessChannel(
                     configuration.get(RocketMQOptions.OPTIONAL_ACCESS_CHANNEL));
@@ -285,16 +287,14 @@ public class InnerConsumerImpl implements InnerConsumer {
 
     @Override
     public void wakeup() {
-        // wakeup long polling
-        try {
-            Set<MessageQueue> assignment = this.consumer.assignment();
-            if (assignment != null) {
-                this.consumer.pause(assignment);
-            }
-        } catch (MQClientException e) {
-            LOG.warn("Consume wakeup long polling failed", e);
-            throw new RuntimeException(e);
-        }
+        // Deliberately does not pause the assigned queues. DefaultLitePullConsumer offers no
+        // interruptible poll, but poll(Duration) is already bounded by a short timeout, so the
+        // fetch loop never blocks long enough to need forcing. Pausing here without a matching
+        // resume() would permanently stop delivering records while the client keeps pulling and
+        // advancing offsets in the background -- silent message loss with nothing logged.
+        // Use pause(Collection)/resume(Collection) as a pair if queue pausing is ever needed.
+        LOG.debug(
+                "Wakeup requested; relying on the bounded poll timeout instead of pausing queues");
     }
 
     @Override

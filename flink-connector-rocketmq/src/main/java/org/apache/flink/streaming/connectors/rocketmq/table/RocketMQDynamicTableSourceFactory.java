@@ -83,7 +83,6 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         optionalOptions.add(RocketMQSourceOptions.OPTIONAL_SECRET_KEY);
         optionalOptions.add(RocketMQSourceOptions.OPTIONAL_STARTUP_SCAN_MODE);
         optionalOptions.add(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_DATE);
-        optionalOptions.add(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_STRATEGY);
         optionalOptions.add(RocketMQSourceOptions.OPTIONAL_USE_NEW_API);
         optionalOptions.add(RocketMQSourceOptions.PULL_BATCH_SIZE);
         optionalOptions.add(RocketMQSourceOptions.ALLOCATE_MESSAGE_QUEUE_STRATEGY);
@@ -99,6 +98,7 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
     @Override
     public DynamicTableSource createDynamicTableSource(Context context) {
         FactoryUtil.TableFactoryHelper helper = createTableFactoryHelper(this, context);
+        RequiredOptionValidator.validate(requiredOptions(), context.getCatalogTable().getOptions());
         helper.validate();
         Map<String, String> rawProperties = context.getCatalogTable().getOptions();
         Configuration configuration = Configuration.fromMap(rawProperties);

@@ -18,6 +18,7 @@
 package org.apache.flink.connector.rocketmq.sink;
 
 import org.apache.flink.connector.rocketmq.sink.committer.SendCommittable;
+import org.apache.flink.streaming.connectors.rocketmq.common.selector.MessageQueueSelector;
 
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.common.message.Message;
@@ -51,6 +52,16 @@ public interface InnerProducer extends AutoCloseable {
      * @see SendResult
      */
     CompletableFuture<SendResult> send(Message message);
+
+    /**
+     * Sends the message to a queue chosen by the given selector.
+     *
+     * @param message the message to be sent
+     * @param selector picks the queue among the queues of the topic
+     * @param arg the sharding argument handed to the selector, usually the record being written
+     * @return a Future for the send operation that returns a SendResult object
+     */
+    CompletableFuture<SendResult> send(Message message, MessageQueueSelector selector, Object arg);
 
     /**
      * Sends the message to the messaging system and returns a Future for the send operation.

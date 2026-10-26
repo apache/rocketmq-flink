@@ -17,6 +17,7 @@
 
 package org.apache.flink.connector.rocketmq.source.reader;
 
+import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.common.message.MessageExt;
 
 import java.util.ArrayList;
@@ -26,7 +27,11 @@ import java.util.Map;
 
 public class MessageViewExt implements MessageView {
 
-    private static final String KEY_SEPARATE = "";
+    // Message.getKeys() returns the keys joined by MessageConst.KEY_SEPARATOR (a single space) --
+    // that is what Message.setKeys(Collection) produces via String.join. Splitting on anything
+    // else is wrong: splitting on "" yields one element per character, so a message whose key is
+    // "smoke-11" would report eight keys ("s","m","o","k","e","-","1","1") instead of one.
+    private static final String KEY_SEPARATE = MessageConst.KEY_SEPARATOR;
 
     private final String messageId;
 

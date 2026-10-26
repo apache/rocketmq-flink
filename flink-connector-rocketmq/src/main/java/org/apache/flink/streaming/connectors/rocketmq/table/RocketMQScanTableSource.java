@@ -238,8 +238,16 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             case "committed":
                 return OffsetsSelector.committedOffsets();
             case "latest":
-            default:
                 return OffsetsSelector.latest();
+            default:
+                // Silently falling back to a default is what let a misspelled scan mode look like
+                // a healthy job that started reading from the wrong position.
+                throw new IllegalArgumentException(
+                        String.format(
+                                "Unsupported value '%s' for %s. Expected one of earliest, latest, "
+                                        + "timestamp, committed.",
+                                consumerOffsetMode,
+                                RocketMQSourceOptions.OPTIONAL_STARTUP_SCAN_MODE.key()));
         }
     }
 

@@ -63,7 +63,8 @@ public class RocketMQCommitter implements Committer<SendCommittable>, Cloneable 
                                             throwable -> {
                                                 LOG.error(
                                                         "Commit message error, committable={}",
-                                                        committable);
+                                                        committable,
+                                                        throwable);
                                                 request.signalFailedWithKnownReason(throwable);
                                                 return null;
                                             });

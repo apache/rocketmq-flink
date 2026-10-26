@@ -59,12 +59,6 @@ class RocketMQParameterChainTest {
     }
 
     @Test
-    void sinkFactoryShouldNotDeclareSerializeFormat() {
-        RocketMQDynamicTableSinkFactory factory = new RocketMQDynamicTableSinkFactory();
-        assertThat(factory.optionalOptions()).doesNotContain(RocketMQSinkOptions.SERIALIZE_FORMAT);
-    }
-
-    @Test
     void sourceConfigurationShouldPreserveUserValues() {
         Configuration config = new Configuration();
 

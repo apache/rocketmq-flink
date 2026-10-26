@@ -98,6 +98,7 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
     @Override
     public DynamicTableSink createDynamicTableSink(Context context) {
         FactoryUtil.TableFactoryHelper helper = createTableFactoryHelper(this, context);
+        RequiredOptionValidator.validate(requiredOptions(), context.getCatalogTable().getOptions());
         helper.validate();
         Map<String, String> rawProperties = context.getCatalogTable().getOptions();
         Configuration properties = Configuration.fromMap(rawProperties);

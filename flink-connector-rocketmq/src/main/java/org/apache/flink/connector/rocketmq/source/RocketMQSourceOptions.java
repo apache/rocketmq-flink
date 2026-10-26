@@ -73,11 +73,6 @@ public class RocketMQSourceOptions extends RocketMQOptions {
                     .longType()
                     .defaultValue(RocketMQConfig.DEFAULT_START_MESSAGE_OFFSET);
 
-    public static final ConfigOption<String> OPTIONAL_STARTUP_OFFSET_STRATEGY =
-            ConfigOptions.key(CONSUMER_PREFIX + "startup.offset.strategy")
-                    .stringType()
-                    .noDefaultValue();
-
     public static final ConfigOption<String> OPTIONAL_STARTUP_OFFSET_DATE =
             ConfigOptions.key(CONSUMER_PREFIX + "startup.offset.date")
                     .stringType()
@@ -152,11 +147,16 @@ public class RocketMQSourceOptions extends RocketMQOptions {
                             "The maximum wait time for a response from the broker "
                                     + "in long polling by the client");
 
-    /** for auto commit offset to rocketmq server */
+    /**
+     * Lets the RocketMQ client commit the offset of everything it has polled on its own timer. Off
+     * by default: Flink commits the offsets of checkpointed state instead, see {@link
+     * #COMMIT_OFFSETS_ON_CHECKPOINT}. Broker side offsets never decide where a restored job starts
+     * reading, so enabling this only changes what consumer progress monitoring reports.
+     */
     public static final ConfigOption<Boolean> AUTO_COMMIT_OFFSET =
             ConfigOptions.key(CONSUMER_PREFIX + "offset.commit.auto")
                     .booleanType()
-                    .defaultValue(true)
+                    .defaultValue(false)
                     .withDescription("The setting for automatic commit of offset");
 
     public static final ConfigOption<Long> AUTO_COMMIT_OFFSET_INTERVAL =
