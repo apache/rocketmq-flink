@@ -86,7 +86,12 @@ under the License.
 
         <dependency>
             <groupId>org.apache.rocketmq</groupId>
-            <artifactId>rocketmq-acl</artifactId>
+            <artifactId>rocketmq-filter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.alibaba.fastjson2</groupId>
+            <artifactId>fastjson2</artifactId>
         </dependency>
 
         <dependency>
