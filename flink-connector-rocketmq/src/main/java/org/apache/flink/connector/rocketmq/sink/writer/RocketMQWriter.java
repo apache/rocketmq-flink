@@ -138,10 +138,19 @@ public class RocketMQWriter<IN>
         pendingRecords.incrementAndGet();
         // The element is handed to the selector as its sharding argument, which is what lets a
         // HashMessageQueueSelector route records that share a key to the same queue.
-        CompletableFuture<SendResult> sendFuture =
-                messageQueueSelector == null
-                        ? producer.send(message)
-                        : producer.send(message, messageQueueSelector, element);
+        CompletableFuture<SendResult> sendFuture;
+        try {
+            sendFuture =
+                    messageQueueSelector == null
+                            ? producer.send(message)
+                            : producer.send(message, messageQueueSelector, element);
+        } catch (RuntimeException | Error e) {
+            // A synchronously throwing send never reaches whenComplete, so the capacity and the
+            // pending count have to be given back here or the writer would wedge at the limit.
+            pendingRecords.decrementAndGet();
+            sendPermits.release();
+            throw e;
+        }
         sendFuture.whenComplete(
                 (sendResult, throwable) -> {
                     if (throwable != null) {
