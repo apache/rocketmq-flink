@@ -4,7 +4,7 @@ The gRPC connector (`flink-connector-rocketmq-grpc`) targets RocketMQ 5.x using
 `rocketmq-client-java` 5.2.1+ and offers two consumption modes. In **SIMPLE** mode — the default —
 the source subscribes to a normal topic (with an optional tag / SQL92 filter) and acknowledges the
 messages itself once the enclosing checkpoint completes. In **LITE** mode, which must be selected
-explicitly, the source binds one main lite topic with a wildcard subscription, never acks by itself,
+explicitly, the source binds one main lite topic and subscribes the sub lite topics you list, never acks by itself,
 and hands the ack / throttle decision to downstream operators. Section 2 details both modes.
 
 This document covers both the design (architecture, semantics, decisions and trade-offs) and the
@@ -54,10 +54,14 @@ acknowledges:
   batches the receipt handles and acks them through that very consumer once the enclosing
   checkpoint completes (at-least-once).
 - **LITE** (opt-in, requires `rocketmq.source.mode` = `LITE`) — the source binds one main lite topic
-  via a `LiteSimpleConsumer` with a wildcard (generalized) subscription, so the broker funnels the
-  messages of all sub topics through one receive stream. The source never acks: every emitted record
-  carries a self-contained receipt handle, and the downstream operator takes the ack / throttle
-  decision — which is what enables fair per-sub-topic throttling.
+  via a `LiteSimpleConsumer` and subscribes every sub lite topic named in
+  `rocketmq.source.sub-lite-topics`, so the broker funnels the messages of those sub topics through
+  one receive stream. Binding the main topic on its own subscribes nothing: the SDK's lite topic set
+  stays empty and the broker delivers no message, which is why `build()` rejects LITE mode without
+  that option. The source never acks: every emitted record carries a self-contained receipt handle,
+  and the downstream operator takes the ack / throttle decision — which is what enables fair
+  per-sub-topic throttling. The list is also an isolation boundary: a sub topic you do not list is
+  not delivered to you, its backlog included.
 
 RocketMQ 5.x offers a push client (`PushConsumer`) and pull/Pop clients
 (`SimpleConsumer` / `LiteSimpleConsumer`). Both connector modes build on the Pop clients
@@ -239,6 +243,8 @@ acks and *when*.
 
 ### LITE mode
 
+- `rocketmq.source.sub-lite-topics` is required and is the whole subscription: the broker delivers
+  only the sub topics listed there.
 - The source never acks; the ack decision is deferred to downstream operators, which gives
   at-least-once with user-controlled granularity.
 - `invisible-duration` must cover the full downstream processing time of a message (including
@@ -413,6 +419,7 @@ RocketMQGrpcSink<String> sink = RocketMQGrpcSink.<String>builder()
 | --- | --- | --- | --- |
 | `rocketmq.source.mode` | ConsumerMode | `SIMPLE` | Consumption mode: `SIMPLE` (default; normal topic, checkpoint-aligned source ack) or `LITE` (main lite topic, downstream ack) |
 | `rocketmq.source.main-topic` | String | (none) | Main lite topic to bind, required in LITE mode |
+| `rocketmq.source.sub-lite-topics` | List<String> | (none) | Sub lite topics to subscribe, required in LITE mode. A main topic bound without them subscribes nothing and receives no message |
 | `rocketmq.source.topic` | String | (none) | Normal topic to subscribe, required in SIMPLE mode |
 | `rocketmq.source.filter-expression` | String | (none) | SIMPLE-mode tag / SQL92 filter expression (absent = receive all messages) |
 | `rocketmq.source.filter-type` | String | `TAG` | Type of `filter-expression`: `TAG` or `SQL92` |

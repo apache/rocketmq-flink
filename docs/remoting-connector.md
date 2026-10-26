@@ -74,9 +74,9 @@ Shared by source and sink.
 | --- | --- | --- | --- |
 | `rocketmq.source.topic` | String | (none) | Topic, required |
 | `rocketmq.source.group` | String | (none) | Consumer group, required |
-| `rocketmq.source.filter.tag` | String | `*` | Tag filter (client-side in assign mode) |
-| `rocketmq.source.filter.sql` | String | (none) | SQL92 filter (client-side in assign mode) |
-| `rocketmq.source.startup.scan.mode` | String | `latest` | `earliest` / `latest` / `group` / `timestamp` / `specific` |
+| `rocketmq.source.filter.tag` | String | `*` | Tag filter, `tagA\|\|tagB` for several. Evaluated on the client |
+| `rocketmq.source.filter.sql` | String | (none) | SQL92 filter over message properties. Evaluated on the client with the same `rocketmq-filter` implementation the broker uses, so predicate semantics match server side filtering. An expression that does not compile fails when the reader is built |
+| `rocketmq.source.startup.scan.mode` | String | `latest` | `earliest` / `latest` / `timestamp` / `committed`. Any other value is rejected |
 | `rocketmq.source.startup.offset.timestamp` | Long | (none) | Startup timestamp; auto-infers `scan.mode=timestamp` |
 | `rocketmq.source.allocate.strategy` | String | `consistent-hash` | Queue-to-subtask allocation strategy |
 | `rocketmq.source.pull.threads.num` | Integer | 20 | Pull thread pool size |
@@ -85,11 +85,33 @@ Shared by source and sink.
 | `rocketmq.source.pull.threshold.all` | Long | 10000 | Total flow control threshold |
 | `rocketmq.source.pull.rpc.timeout` | Long | 20000 | Pull RPC timeout (ms) |
 | `rocketmq.source.pull.rpc.exception.delay` | Long | 3000 | Pull retry delay on exception (ms) |
-| `rocketmq.source.offset.commit.auto` | Boolean | true | Auto offset commit |
-| `rocketmq.source.offset.commit.interval` | Long | 5000 | Auto commit interval (ms) |
+| `rocketmq.source.offset.commit.auto` | Boolean | false | Let the client commit the offset of everything it polled on its own timer. Off by default: Flink commits the offsets of checkpointed state instead, and broker side offsets never decide where a restored job starts reading, so this only changes what consumer progress monitoring reports |
+| `rocketmq.source.offset.commit.interval` | Long | 5000 | Interval of the client side auto commit (ms) |
 | `rocketmq.source.offset.commit.checkpoint` | Boolean | true | Commit offsets on checkpoint |
 | `rocketmq.source.trace.enable` | Boolean | true | Message trace |
 | `rocketmq.source.trace.topic` | String | (none) | Customized trace topic |
+
+## Source metrics
+
+Reported per message queue under `RocketmqSourceReader`, keyed by `topic` and
+`queue`:
+
+| Metric | Type | Description |
+| --- | --- | --- |
+| `currentOffset` | Gauge | Offset the reader has consumed up to |
+| `committedOffset` | Gauge | Offset last committed to the broker |
+| `records-lag` | Gauge | Records the broker still holds beyond `currentOffset` |
+| `commitsSucceeded` / `commitsFailed` | Counter | Offset commit results, under the reader group |
+| `bytes-consumed-total` | Counter | Under `RocketMQConsumer.consumer-fetch-manager-metrics` |
+
+The lag of every assigned queue is also summed into Flink's standard
+`pendingRecords`. Lag needs the broker's maximum offset, so the reader refreshes
+it asynchronously at most once every ten seconds; reading a metric never
+triggers a remote call.
+
+A queue with a positive `records-lag` and no records being emitted means the
+broker is not delivering to this consumer group, which is how an unregistered
+group or a missing subscription relationship shows up.
 
 ## Sink options (`rocketmq.sink.*`)
 

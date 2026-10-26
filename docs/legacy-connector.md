@@ -40,11 +40,20 @@ public interface KeyValueDeserializationSchema<T> extends ResultTypeQueryable<T>
 These policies only take effect when the job starts without state. When recovering from a
 checkpoint, offsets are restored from the checkpointed state.
 
+Queues are allocated by Flink, not by the client: `open()` fetches the queues of the topic, keeps
+the share of this subtask and assigns exactly those to the consumer. A tag sub-expression is still
+applied by the broker; a SQL92 expression cannot be pushed down in assign mode and is evaluated
+against the message properties on the client, with the same semantics as server side filtering.
+
 ## RocketMQSink (SinkFunction)
 
 Construct it with a `Properties`; provides at-least-once when checkpointing is enabled and
 `withBatchFlushOnCheckpoint(true)` is set. Otherwise reliability depends on the producer retry
 policy (sync by default; `withAsync(true)` switches to async).
+
+With `withAsync(true)` and batch flush off, a send failure cannot fail the call that triggered it,
+so the first failure is kept and rethrown from the next `invoke` or from `finish`. The task then
+fails instead of continuing to checkpoint records that were never written.
 
 ```java
 stream.addSink(new RocketMQSink(producerProps).withBatchFlushOnCheckpoint(true));
