@@ -110,6 +110,21 @@ under the License.
                                 <relocation>
                                     <pattern>org.apache.rocketmq</pattern>
                                     <shadedPattern>org.apache.flink.rocketmq.grpc.shaded.org.apache.rocketmq</shadedPattern>
+                                    <!-- rocketmq-client-java is already shaded upstream: its
+                                         logback lives under org.apache.rocketmq.shaded.ch.qos.logback
+                                         and its own appenders under
+                                         org.apache.rocketmq.client.java.logging. The bundled
+                                         rocketmq.logback.xml references both by name in plain text
+                                         and shade never rewrites class names inside resources, so
+                                         relocating them makes every appender fail to load and the
+                                         gRPC client produces no log output at all. Keep those names,
+                                         exactly like the remoting fat-jar keeps
+                                         org.apache.rocketmq.logging. -->
+                                    <excludes>
+                                        <exclude>org.apache.rocketmq.logging.**</exclude>
+                                        <exclude>org.apache.rocketmq.shaded.ch.qos.logback.**</exclude>
+                                        <exclude>org.apache.rocketmq.client.java.logging.**</exclude>
+                                    </excludes>
                                 </relocation>
                             </relocations>
                             <transformers>

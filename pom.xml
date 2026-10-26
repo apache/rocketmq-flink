@@ -83,9 +83,10 @@ under the License.
 
         <!-- Main Dependencies -->
         <flink.version>1.20.3</flink.version>
-        <rocketmq.version>5.1.1</rocketmq.version>
-        <rocketmq.client.java.version>5.2.1</rocketmq.client.java.version>
+        <rocketmq.version>5.5.1</rocketmq.version>
+        <rocketmq.client.java.version>5.2.2</rocketmq.client.java.version>
         <rocketmq.schema.registry.version>0.1.0</rocketmq.schema.registry.version>
+        <fastjson2.version>2.0.63</fastjson2.version>
         <commons-lang.version>2.6</commons-lang.version>
 
         <!-- Other Dependencies -->
@@ -187,11 +188,25 @@ under the License.
                 </exclusions>
             </dependency>
 
+            <!-- rocketmq-acl was retired in 5.5.x: AclClientRPCHook and SessionCredentials now
+                 ship inside rocketmq-client under the same org.apache.rocketmq.acl.common package. -->
+
+            <!-- SQL92 expression evaluation. The lite-pull consumer can only carry a tag
+                 sub-expression in assign mode, so a SQL92 filter has to be evaluated against the
+                 message properties on the client side. -->
             <dependency>
                 <groupId>org.apache.rocketmq</groupId>
-                <artifactId>rocketmq-acl</artifactId>
+                <artifactId>rocketmq-filter</artifactId>
                 <version>${rocketmq.version}</version>
                 <exclusions>
+                    <exclusion>
+                        <groupId>com.google.guava</groupId>
+                        <artifactId>guava</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.rocketmq</groupId>
+                        <artifactId>rocketmq-srvutil</artifactId>
+                    </exclusion>
                     <exclusion>
                         <groupId>io.github.aliyunmq</groupId>
                         <artifactId>rocketmq-logback-classic</artifactId>
@@ -248,6 +263,14 @@ under the License.
                 <groupId>org.apache.rocketmq</groupId>
                 <artifactId>rocketmq-client-java</artifactId>
                 <version>${rocketmq.client.java.version}</version>
+            </dependency>
+
+            <!-- RocketMQ 5.5.x moved from fastjson to fastjson2. Declared explicitly because the
+                 connector imports it directly rather than relying on the transitive path. -->
+            <dependency>
+                <groupId>com.alibaba.fastjson2</groupId>
+                <artifactId>fastjson2</artifactId>
+                <version>${fastjson2.version}</version>
             </dependency>
 
             <!-- Flink dependencies -->

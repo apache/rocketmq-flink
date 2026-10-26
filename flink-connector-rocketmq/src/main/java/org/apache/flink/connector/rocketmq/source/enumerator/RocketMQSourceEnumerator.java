@@ -42,7 +42,7 @@ import org.apache.flink.connector.rocketmq.source.enumerator.offset.OffsetsSelec
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
 import org.apache.flink.util.FlinkRuntimeException;
 
-import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson2.JSON;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -572,7 +572,7 @@ public class RocketMQSourceEnumerator
         if (!incrementalSplit.isEmpty()) {
             log.info(
                     "Enumerator assigning split(s) to readers {}",
-                    JSON.toJSONString(incrementalSplit, false));
+                    JSON.toJSONString(incrementalSplit));
             context.assignSplits(new SplitsAssignment<>(incrementalSplit));
         }
 

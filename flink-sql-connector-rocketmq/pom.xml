@@ -87,10 +87,48 @@ under the License.
                                 <includes>
                                     <include>org.apache.flink:flink-connector-rocketmq</include>
                                     <include>org.apache.rocketmq:*</include>
-                                    <include>org.apache.rocketmq:schema-registry-client</include>
-                                    <include>commons-lang:commons-lang</include>
+                                    <!-- RocketMQ 5.x ships its logging implementation under the
+                                         io.github.aliyunmq group (package is still
+                                         org.apache.rocketmq.logging.*), so the org.apache.rocketmq:*
+                                         entry above does not cover it. Without it the client fails at
+                                         logger initialization with ClassNotFoundException. -->
+                                    <include>io.github.aliyunmq:*</include>
+                                    <!-- The groups below are all rewritten by <relocations>, so they
+                                         must be bundled as well: a relocation only rewrites references,
+                                         it does not move classes into the jar. Rewriting a reference to
+                                         a shaded name without shipping the class is a guaranteed
+                                         ClassNotFoundException at runtime. -->
+                                    <include>io.netty:*</include>
+                                    <include>io.grpc:*</include>
+                                    <include>io.perfmark:perfmark-api</include>
+                                    <include>com.google.protobuf:*</include>
+                                    <include>com.google.code.gson:gson</include>
                                     <include>com.google.guava:guava</include>
                                     <include>com.google.guava:failureaccess</include>
+                                    <!-- Imported directly by the connector's own code. These are not
+                                         relocated, so they are bundled under their original names. -->
+                                    <include>com.alibaba.fastjson2:fastjson2</include>
+                                    <include>org.apache.commons:commons-lang3</include>
+                                    <include>commons-lang:commons-lang</include>
+                                    <include>commons-collections:commons-collections</include>
+                                    <!-- Runtime dependencies of rocketmq-client / rocketmq-tools -->
+                                    <include>commons-codec:commons-codec</include>
+                                    <include>commons-validator:commons-validator</include>
+                                    <include>commons-beanutils:commons-beanutils</include>
+                                    <include>commons-digester:commons-digester</include>
+                                    <include>commons-logging:commons-logging</include>
+                                    <include>commons-cli:commons-cli</include>
+                                    <include>commons-io:commons-io</include>
+                                    <include>com.googlecode.concurrentlinkedhashmap:concurrentlinkedhashmap-lru</include>
+                                    <!-- Deliberately not bundled: the heavy transitive tail of
+                                         schema-registry-client (avro / jackson / okhttp /
+                                         opentelemetry / kotlin / dozer / snakeyaml / zstd / lz4 /
+                                         commons-compress), none of which the connector imports
+                                         directly; plus test libraries that leak in as compile-scope
+                                         transitive deps (hamcrest / awaitility / aspectjweaver) and
+                                         annotation-only jars. Bundling them would only grow the jar
+                                         and widen the conflict surface. Note that RocketMQCatalog may
+                                         still need some of them when it talks to a schema registry. -->
                                 </includes>
                             </artifactSet>
                             <filters>
@@ -114,6 +152,17 @@ under the License.
                                 <relocation>
                                     <pattern>org.apache.rocketmq</pattern>
                                     <shadedPattern>org.apache.flink.rocketmq.shaded.org.apache.rocketmq</shadedPattern>
+                                    <!-- rmq.client.logback.xml in rocketmq-client references the
+                                         org.apache.rocketmq.logging.ch.qos.logback.* appenders by
+                                         name in plain text. Shade rewrites class files but not class
+                                         names inside XML resources, so relocating the logging
+                                         packages leaves those strings pointing at classes that no
+                                         longer exist: the job dies at startup with
+                                         ClassNotFoundException / IncompatibleClassException.
+                                         The logging packages must keep their original names. -->
+                                    <excludes>
+                                        <exclude>org.apache.rocketmq.logging.**</exclude>
+                                    </excludes>
                                 </relocation>
                                 <relocation>
                                     <pattern>io.grpc</pattern>
