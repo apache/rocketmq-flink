@@ -35,6 +35,7 @@ import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -61,6 +62,9 @@ public class RocketMQGrpcLiteE2EVerify {
             System.getProperty("rocketmq.endpoints", "47.98.110.140:8081");
     private static final String MAIN_TOPIC = "LiteTest";
     private static final String CONSUMER_GROUP = "LiteSimpleConsumerGroup";
+    private static final String E2E_LITE_TOPIC = "flink-e2e-lite";
+    private static final String RENEW_LITE_TOPIC_PREFIX = "flink-renew-lite-";
+    private static final int RENEW_LITE_TOPIC_COUNT = 20;
 
     private static final String RUN_ID = UUID.randomUUID().toString().substring(0, 8);
 
@@ -104,7 +108,7 @@ public class RocketMQGrpcLiteE2EVerify {
         for (int i = 0; i < 5; i++) {
             messages.add(throttlePrefix + i);
         }
-        runSinkJob(messages, "flink-e2e-lite");
+        runSinkJob(messages, E2E_LITE_TOPIC);
         System.out.println("[phase1] sink wrote " + messages.size() + " lite messages");
 
         final StreamExecutionEnvironment env = localEnv();
@@ -114,6 +118,7 @@ public class RocketMQGrpcLiteE2EVerify {
                         .setConsumerGroup(CONSUMER_GROUP)
                         .setMode(ConsumerMode.LITE)
                         .setMainTopic(MAIN_TOPIC)
+                        .setSubLiteTopics(Collections.singletonList(E2E_LITE_TOPIC))
                         .setValueOnlyDeserializer(new SimpleStringSchema())
                         .build();
 
@@ -175,16 +180,18 @@ public class RocketMQGrpcLiteE2EVerify {
         // Spread across lite topics: the broker paces event dispatch per lite topic when un-acked
         // messages accumulate, which would starve the backpressure scenario otherwise.
         final StreamExecutionEnvironment sinkEnv = localEnv();
-        for (int t = 0; t < 20; t++) {
+        final List<String> renewLiteTopics = new ArrayList<>(RENEW_LITE_TOPIC_COUNT);
+        for (int t = 0; t < RENEW_LITE_TOPIC_COUNT; t++) {
+            renewLiteTopics.add(RENEW_LITE_TOPIC_PREFIX + t);
             final List<String> messages = new ArrayList<>();
-            for (int i = t; i < total; i += 20) {
+            for (int i = t; i < total; i += RENEW_LITE_TOPIC_COUNT) {
                 messages.add(prefix + i);
             }
             final RocketMQGrpcSink<String> sink =
                     RocketMQGrpcSink.<String>builder()
                             .setEndpoints(ENDPOINTS)
                             .setTopic(MAIN_TOPIC)
-                            .setLiteTopic("flink-renew-lite-" + t)
+                            .setLiteTopic(RENEW_LITE_TOPIC_PREFIX + t)
                             .setValueOnlySerializer(new SimpleStringSchema())
                             .build();
             sinkEnv.fromData(messages).sinkTo(sink);
@@ -199,6 +206,7 @@ public class RocketMQGrpcLiteE2EVerify {
                         .setConsumerGroup(CONSUMER_GROUP)
                         .setMode(ConsumerMode.LITE)
                         .setMainTopic(MAIN_TOPIC)
+                        .setSubLiteTopics(renewLiteTopics)
                         .setConfig(
                                 RocketMQGrpcSourceOptions.INVISIBLE_DURATION,
                                 Duration.ofSeconds(20))

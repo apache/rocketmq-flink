@@ -33,9 +33,13 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 /** Tests for {@link RocketMQGrpcDynamicTableFactory}. */
 class RocketMQGrpcDynamicTableFactoryTest {
+
+    private static final String ACCESS_KEY_VALUE = "AK-TEST-VALUE";
+    private static final String SECRET_KEY_VALUE = "SK-TEST-VALUE";
 
     private static final ResolvedSchema SCHEMA =
             ResolvedSchema.of(Column.physical("f0", DataTypes.STRING()));
@@ -62,13 +66,15 @@ class RocketMQGrpcDynamicTableFactoryTest {
     }
 
     @Test
-    void createLiteModeTableSourceTest() {
+    void createLiteModeTableSourceFailsTest() {
         final Map<String, String> options = baseOptions();
         options.put("source.consumer-group", "test-group");
         options.put("source.mode", "lite");
 
-        final DynamicTableSource source = FactoryMocks.createTableSource(SCHEMA, options);
-        assertThat(source).isInstanceOf(RocketMQGrpcDynamicTableSource.class);
+        assertThatThrownBy(() -> FactoryMocks.createTableSource(SCHEMA, options))
+                .isInstanceOf(ValidationException.class)
+                .hasStackTraceContaining(
+                        "lite' is not supported by the RocketMQ gRPC table source");
     }
 
     @Test
@@ -111,5 +117,53 @@ class RocketMQGrpcDynamicTableFactoryTest {
 
         assertThatThrownBy(() -> FactoryMocks.createTableSource(SCHEMA, options))
                 .hasStackTraceContaining("bogus");
+    }
+
+    /**
+     * A missing required option must be reported by its key only. Credentials set in the WITH
+     * clause end up in the JobManager log and in the REST exception history, so the message the
+     * connector produces must not repeat any option value.
+     */
+    @Test
+    void missingSourceOptionIsReportedWithoutOptionValuesTest() {
+        final Map<String, String> options = baseOptions();
+        options.remove("endpoints");
+        options.put("source.consumer-group", "test-group");
+        options.put("access-key", ACCESS_KEY_VALUE);
+        options.put("secret-key", SECRET_KEY_VALUE);
+
+        final Throwable thrown =
+                catchThrowable(() -> FactoryMocks.createTableSource(SCHEMA, options));
+
+        assertThat(thrown).isInstanceOf(ValidationException.class);
+        // Flink wraps every factory failure and lists the table options itself; assert on the
+        // message the connector produced.
+        final Throwable cause = thrown.getCause();
+        assertThat(cause).isInstanceOf(ValidationException.class);
+        assertThat(cause.getMessage())
+                .startsWith("Missing required option")
+                .contains("endpoints")
+                .doesNotContain(ACCESS_KEY_VALUE)
+                .doesNotContain(SECRET_KEY_VALUE);
+    }
+
+    @Test
+    void missingSinkOptionIsReportedWithoutOptionValuesTest() {
+        final Map<String, String> options = baseOptions();
+        options.remove("topic");
+        options.put("access-key", ACCESS_KEY_VALUE);
+        options.put("secret-key", SECRET_KEY_VALUE);
+
+        final Throwable thrown =
+                catchThrowable(() -> FactoryMocks.createTableSink(SCHEMA, options));
+
+        assertThat(thrown).isInstanceOf(ValidationException.class);
+        final Throwable cause = thrown.getCause();
+        assertThat(cause).isInstanceOf(ValidationException.class);
+        assertThat(cause.getMessage())
+                .startsWith("Missing required option")
+                .contains("topic")
+                .doesNotContain(ACCESS_KEY_VALUE)
+                .doesNotContain(SECRET_KEY_VALUE);
     }
 }

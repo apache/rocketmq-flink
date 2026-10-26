@@ -132,9 +132,11 @@ public class RocketMQGrpcConnectorOptions {
                                     + "the source acknowledges messages when their checkpoint "
                                     + "completes (checkpointing must be enabled and "
                                     + "'source.invisible-duration' must exceed the checkpoint "
-                                    + "interval plus timeout); 'lite' binds the configured topic "
-                                    + "as a main lite topic via a LiteSimpleConsumer and defers "
-                                    + "acknowledgement to a downstream operator.");
+                                    + "interval plus timeout). 'lite' is only available through the "
+                                    + "DataStream API: it defers acknowledgement to a downstream "
+                                    + "operator holding the receipt handle, which a SQL/Table "
+                                    + "pipeline has no way to express, so the table source rejects "
+                                    + "it.");
 
     public static final ConfigOption<String> FILTER_EXPRESSION =
             ConfigOptions.key("source.filter-expression")

@@ -35,6 +35,10 @@ import org.apache.flink.connector.rocketmq.grpc.source.split.RocketMQGrpcSourceS
 import org.apache.flink.util.FlinkRuntimeException;
 
 import org.apache.rocketmq.client.apis.ClientException;
+import org.apache.rocketmq.client.java.exception.BadRequestException;
+import org.apache.rocketmq.client.java.exception.NotFoundException;
+import org.apache.rocketmq.client.java.exception.UnauthorizedException;
+import org.apache.rocketmq.client.java.exception.UnsupportedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +53,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 
@@ -74,6 +79,12 @@ import static org.apache.flink.util.Preconditions.checkArgument;
  * in the internal queue shortly before they would become visible again are offered to the policy,
  * which may extend their invisible duration. Messages already handed to the record emitter are
  * never renewed because renewing refreshes the receipt handle carried downstream.
+ *
+ * <p>A failure that retrying cannot fix fails the Flink task instead of being retried. The server
+ * rejects a misconfigured consumer on every request -- a consumer group registered as LITE and used
+ * by a {@link ConsumerMode#SIMPLE} source, for instance, is answered with {@code
+ * ILLEGAL_CONSUMER_GROUP} -- and looping on such a rejection would keep the job RUNNING while it
+ * reads no record at all.
  */
 @Internal
 public class RocketMQGrpcSourceSplitReader
@@ -94,6 +105,13 @@ public class RocketMQGrpcSourceSplitReader
     private final BlockingQueue<MessageViewImpl> elementQueue;
     private final AtomicBoolean wakeup = new AtomicBoolean(false);
     private final AtomicBoolean started = new AtomicBoolean(false);
+
+    /**
+     * A failure that makes further consumption impossible. Set by a receive worker and surfaced by
+     * the fetcher thread in {@link #fetch()}, because the fetcher is the only thread whose
+     * exception reaches the Flink task.
+     */
+    private final AtomicReference<Throwable> fatalFailure = new AtomicReference<>();
 
     private volatile boolean closed = false;
     private ReceiveWorker[] workers;
@@ -129,6 +147,14 @@ public class RocketMQGrpcSourceSplitReader
 
     @Override
     public RecordsWithSplitIds<MessageViewImpl> fetch() {
+        // A worker that hit a failure no retry can fix must fail the task instead of letting this
+        // reader hand back empty batches forever, which would keep the job RUNNING while it reads
+        // nothing.
+        final Throwable failure = fatalFailure.get();
+        if (failure != null) {
+            throw new FlinkRuntimeException(
+                    "The RocketMQ gRPC consumer failed and the source stopped consuming", failure);
+        }
         if (wakeup.compareAndSet(true, false) || closed) {
             return new RecordsBySplits.Builder<MessageViewImpl>().build();
         }
@@ -172,9 +198,19 @@ public class RocketMQGrpcSourceSplitReader
         }
         try {
             consumer = PopConsumerProvider.create(configuration);
-        } catch (ClientException e) {
+        } catch (Throwable t) {
+            // Catch everything, not only ClientException: the SDK reports a consumer the server
+            // rejected as an unchecked exception (its Guava service wraps the startup failure in an
+            // IllegalStateException), and letting that escape would leave this reader marked as
+            // started with no consumer, so a later split assignment would silently do nothing.
             started.set(false);
-            throw new FlinkRuntimeException("Failed to create the RocketMQ gRPC consumer", e);
+            recordFatalFailure(t);
+            throw new FlinkRuntimeException(
+                    String.format(
+                            "Failed to create the RocketMQ gRPC consumer for group '%s' in %s mode",
+                            configuration.get(RocketMQGrpcSourceOptions.CONSUMER_GROUP),
+                            configuration.get(RocketMQGrpcSourceOptions.MODE)),
+                    t);
         }
         if (renewalPolicy != null) {
             renewalExecutor =
@@ -195,14 +231,36 @@ public class RocketMQGrpcSourceSplitReader
         }
         final boolean simple =
                 configuration.get(RocketMQGrpcSourceOptions.MODE) == ConsumerMode.SIMPLE;
-        LOG.info(
-                "Started {} receive worker(s) sharing one {} consumer bound to topic {}",
-                fetchConcurrency,
-                simple ? "simple" : "lite",
-                configuration.get(
-                        simple
-                                ? RocketMQGrpcSourceOptions.TOPIC
-                                : RocketMQGrpcSourceOptions.MAIN_TOPIC));
+        if (simple) {
+            LOG.info(
+                    "Started {} receive worker(s) sharing one simple consumer subscribed to topic {}",
+                    fetchConcurrency,
+                    configuration.get(RocketMQGrpcSourceOptions.TOPIC));
+        } else {
+            LOG.info(
+                    "Started {} receive worker(s) sharing one lite consumer bound to topic {} with sub lite topics {}",
+                    fetchConcurrency,
+                    configuration.get(RocketMQGrpcSourceOptions.MAIN_TOPIC),
+                    configuration.get(RocketMQGrpcSourceOptions.SUB_LITE_TOPICS));
+        }
+    }
+
+    /**
+     * Start the receive workers against an injected consumer, so that failure handling can be
+     * tested without a live cluster.
+     */
+    @VisibleForTesting
+    void startWorkersWith(PopConsumer consumer) {
+        if (!started.compareAndSet(false, true)) {
+            return;
+        }
+        this.consumer = consumer;
+        workers = new ReceiveWorker[fetchConcurrency];
+        for (int i = 0; i < fetchConcurrency; i++) {
+            final ReceiveWorker worker = new ReceiveWorker(i);
+            workers[i] = worker;
+            worker.start();
+        }
     }
 
     /**
@@ -236,6 +294,43 @@ public class RocketMQGrpcSourceSplitReader
     @VisibleForTesting
     void setConsumer(PopConsumer consumer) {
         this.consumer = consumer;
+    }
+
+    /**
+     * Records a failure that no retry can recover from and stops every receive worker. The failure
+     * is rethrown by {@link #fetch()} on the fetcher thread, which is the only thread whose
+     * exception the Flink task observes.
+     */
+    private void recordFatalFailure(Throwable cause) {
+        if (fatalFailure.compareAndSet(null, cause)) {
+            LOG.error(
+                    "The RocketMQ gRPC consumer failed permanently; stopping the source instead of"
+                            + " reading no record while the job stays running",
+                    cause);
+        }
+    }
+
+    /**
+     * Whether a {@link ClientException} reports a condition that retrying cannot fix.
+     *
+     * <p>The SDK maps every non-OK proxy status onto a dedicated exception type. A rejected request
+     * identity -- an illegal consumer group or topic, an unknown topic or group, wrong credentials,
+     * an unsupported operation -- is a deployment error: for example a consumer group the server
+     * registered as LITE cannot be used by a SIMPLE mode source, and the proxy answers every
+     * request with {@code ILLEGAL_CONSUMER_GROUP}. Retrying that forever keeps the job RUNNING
+     * while it reads nothing, so it fails the task instead.
+     *
+     * <p>Everything else keeps the existing backoff. {@code ForbiddenException} in particular is
+     * treated as transient on purpose: the proxy also answers {@code FORBIDDEN} while a lite
+     * consumer holds too many unacknowledged messages, which is backpressure rather than a
+     * misconfiguration.
+     */
+    @VisibleForTesting
+    static boolean isPermanentFailure(ClientException e) {
+        return e instanceof BadRequestException
+                || e instanceof UnauthorizedException
+                || e instanceof NotFoundException
+                || e instanceof UnsupportedException;
     }
 
     @Override
@@ -338,7 +433,7 @@ public class RocketMQGrpcSourceSplitReader
         @Override
         public void run() {
             long backoffMs = RECEIVE_BACKOFF_INITIAL_MS;
-            while (running && !closed) {
+            while (running && !closed && fatalFailure.get() == null) {
                 try {
                     final List<org.apache.rocketmq.client.apis.message.MessageView> messages =
                             consumer.receive(maxMessageNum, invisibleDuration);
@@ -356,20 +451,30 @@ public class RocketMQGrpcSourceSplitReader
                     Thread.currentThread().interrupt();
                     break;
                 } catch (ClientException e) {
-                    if (running && !closed) {
-                        LOG.warn(
-                                "Receive worker {} failed to receive messages, retrying in {} ms",
-                                index,
-                                backoffMs,
-                                e);
-                        try {
-                            Thread.sleep(backoffMs);
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            break;
-                        }
-                        backoffMs = Math.min(backoffMs * 2, RECEIVE_BACKOFF_MAX_MS);
+                    if (!running || closed) {
+                        break;
                     }
+                    if (isPermanentFailure(e)) {
+                        recordFatalFailure(e);
+                        break;
+                    }
+                    LOG.warn(
+                            "Receive worker {} failed to receive messages, retrying in {} ms",
+                            index,
+                            backoffMs,
+                            e);
+                    try {
+                        Thread.sleep(backoffMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                    backoffMs = Math.min(backoffMs * 2, RECEIVE_BACKOFF_MAX_MS);
+                } catch (Throwable t) {
+                    // An unchecked failure from the SDK would otherwise kill this worker thread and
+                    // leave the source polling an empty queue forever.
+                    recordFatalFailure(t);
+                    break;
                 }
             }
         }

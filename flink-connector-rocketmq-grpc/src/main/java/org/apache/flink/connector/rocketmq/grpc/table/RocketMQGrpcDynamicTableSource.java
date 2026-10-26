@@ -25,10 +25,7 @@ import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.connector.source.Boundedness;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.grpc.ack.AckableMessage;
-import org.apache.flink.connector.rocketmq.grpc.source.ConsumerMode;
 import org.apache.flink.connector.rocketmq.grpc.source.RocketMQGrpcSource;
-import org.apache.flink.connector.rocketmq.grpc.source.RocketMQGrpcSourceBuilder;
-import org.apache.flink.connector.rocketmq.grpc.source.RocketMQGrpcSourceOptions;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
@@ -122,17 +119,15 @@ public class RocketMQGrpcDynamicTableSource implements ScanTableSource, Supports
                 RocketMQGrpcRowDataConverter.forSource(
                         valueDeserialization, metadataConverters, producedType);
 
-        final RocketMQGrpcSourceBuilder<RowData> sourceBuilder =
+        // The table factory rejects ConsumerMode.LITE (the SQL path cannot acknowledge), so this is
+        // always a SIMPLE mode subscription to a normal topic.
+        final RocketMQGrpcSource<RowData> source =
                 RocketMQGrpcSource.<RowData>builder()
                         .setConfig(configuration)
                         .setBoundedness(boundedness)
-                        .setDeserializer(converter);
-        if (configuration.get(RocketMQGrpcSourceOptions.MODE) == ConsumerMode.SIMPLE) {
-            sourceBuilder.setTopic(topic);
-        } else {
-            sourceBuilder.setMainTopic(topic);
-        }
-        final RocketMQGrpcSource<RowData> source = sourceBuilder.build();
+                        .setDeserializer(converter)
+                        .setTopic(topic)
+                        .build();
 
         // The source produces AckableMessage<RowData>; the SQL/Table path does not perform
         // downstream acknowledgement, so the receipt handle is stripped here and only the RowData

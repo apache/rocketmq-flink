@@ -32,6 +32,8 @@ import org.apache.rocketmq.client.apis.consumer.FilterExpression;
 import org.apache.rocketmq.client.apis.consumer.LiteSimpleConsumer;
 import org.apache.rocketmq.client.apis.consumer.SimpleConsumer;
 import org.apache.rocketmq.client.apis.message.MessageView;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -40,17 +42,25 @@ import java.util.List;
 
 /**
  * A factory that builds a gRPC Pop consumer from a Flink configuration: a {@code
- * LiteSimpleConsumer} bound to the main lite topic in {@link ConsumerMode#LITE}, or a {@code
- * SimpleConsumer} subscribed to a normal topic with a filter expression in {@link
- * ConsumerMode#SIMPLE}.
+ * LiteSimpleConsumer} bound to the main lite topic and subscribed to the configured sub lite topics
+ * in {@link ConsumerMode#LITE}, or a {@code SimpleConsumer} subscribed to a normal topic with a
+ * filter expression in {@link ConsumerMode#SIMPLE}.
  */
 @Internal
 public class PopConsumerProvider {
+
+    private static final Logger LOG = LoggerFactory.getLogger(PopConsumerProvider.class);
 
     private PopConsumerProvider() {}
 
     /**
      * Build and start the {@link PopConsumer} selected by {@link RocketMQGrpcSourceOptions#MODE}.
+     *
+     * <p>Every failure to build or subscribe the consumer is propagated to the caller: the SDK
+     * reports a rejected client as an unchecked exception (its Guava service wraps the startup
+     * failure in an {@code IllegalStateException}), so callers must not narrow the failure to
+     * {@link ClientException}. Swallowing it would leave the source running against a consumer the
+     * server never accepted, which reads no record at all while the job stays healthy.
      */
     public static PopConsumer create(Configuration configuration) throws ClientException {
         final ClientServiceProvider provider = ClientServiceProvider.loadService();
@@ -85,7 +95,53 @@ public class PopConsumerProvider {
                                 configuration.get(RocketMQGrpcSourceOptions.AWAIT_DURATION))
                         .bindTopic(configuration.get(RocketMQGrpcSourceOptions.MAIN_TOPIC))
                         .build();
+        subscribeOrClose(consumer, configuration.get(RocketMQGrpcSourceOptions.SUB_LITE_TOPICS));
         return new LitePopConsumer(consumer);
+    }
+
+    /**
+     * Register the sub lite topics on an already started consumer, closing it again when the
+     * subscription is rejected so that its channels and threads are not leaked.
+     */
+    @VisibleForTesting
+    static void subscribeOrClose(LiteSimpleConsumer consumer, List<String> subLiteTopics)
+            throws ClientException {
+        try {
+            subscribeLiteTopics(consumer, subLiteTopics);
+        } catch (RuntimeException | ClientException e) {
+            closeQuietly(consumer);
+            throw e;
+        }
+    }
+
+    private static void closeQuietly(LiteSimpleConsumer consumer) {
+        try {
+            consumer.close();
+        } catch (Exception e) {
+            LOG.warn("Failed to close a LiteSimpleConsumer whose subscription was rejected", e);
+        }
+    }
+
+    /**
+     * Register the configured sub lite topics on a freshly built {@code LiteSimpleConsumer}.
+     *
+     * <p>{@code bindTopic} only tells the SDK which parent topic the consumer belongs to. The
+     * broker delivers a message once its lite topic is part of the consumer's lite subscription
+     * set, so without this step the source runs idle and emits nothing.
+     */
+    @VisibleForTesting
+    static void subscribeLiteTopics(LiteSimpleConsumer consumer, List<String> subLiteTopics)
+            throws ClientException {
+        if (subLiteTopics == null || subLiteTopics.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "LITE mode requires at least one sub lite topic via '"
+                            + RocketMQGrpcSourceOptions.SUB_LITE_TOPICS.key()
+                            + "'; binding the main topic alone subscribes to nothing, so the source"
+                            + " would receive no message at all");
+        }
+        for (String subLiteTopic : subLiteTopics) {
+            consumer.subscribeLite(subLiteTopic);
+        }
     }
 
     /** Wrap an SDK {@code LiteSimpleConsumer} into the connector's {@link PopConsumer} surface. */

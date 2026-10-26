@@ -23,6 +23,7 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 
 import java.time.Duration;
+import java.util.List;
 
 /**
  * Configuration options for the RocketMQ gRPC {@code SimpleConsumer} based source. These options
@@ -92,7 +93,23 @@ public class RocketMQGrpcSourceOptions {
                             "The main lite topic bound by the LiteSimpleConsumer. Required in "
                                     + "LITE mode; ignored in SIMPLE mode. Every subtask binds this "
                                     + "topic; the broker performs message-level load balancing "
-                                    + "across the consumer group.");
+                                    + "across the consumer group. Binding alone does not select any "
+                                    + "message: the sub lite topics to consume must be listed in "
+                                    + "'rocketmq.source.sub-lite-topics'.");
+
+    public static final ConfigOption<List<String>> SUB_LITE_TOPICS =
+            ConfigOptions.key(CONSUMER_CONFIG_PREFIX + "sub-lite-topics")
+                    .stringType()
+                    .asList()
+                    .noDefaultValue()
+                    .withDescription(
+                            "The sub lite topics subscribed under the main lite topic, e.g. "
+                                    + "'subA;subB'. Required and non-empty in LITE mode; ignored in "
+                                    + "SIMPLE mode. Each entry is registered through "
+                                    + "LiteSimpleConsumer#subscribeLite, and only messages carrying "
+                                    + "one of these lite topics are delivered. Leaving this empty "
+                                    + "subscribes to nothing, so the source would run idle and "
+                                    + "emit no record at all.");
 
     public static final ConfigOption<Integer> FETCH_CONCURRENCY =
             ConfigOptions.key(CONSUMER_CONFIG_PREFIX + "fetch-concurrency")
