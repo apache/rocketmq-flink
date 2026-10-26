@@ -22,6 +22,9 @@ import org.apache.flink.api.common.serialization.SimpleStringSchema;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -36,6 +39,7 @@ class RocketMQGrpcSourceBuilderTest {
                         .setConsumerGroup("group")
                         .setMode(ConsumerMode.LITE)
                         .setMainTopic("topic")
+                        .setSubLiteTopics(Arrays.asList("subA", "subB"))
                         .setValueOnlyDeserializer(new SimpleStringSchema())
                         .build();
         assertThat(source).isNotNull();
@@ -84,6 +88,31 @@ class RocketMQGrpcSourceBuilderTest {
     }
 
     @Test
+    void buildFailsWithLiteModeWithoutSubLiteTopicsTest() {
+        assertThatThrownBy(
+                        () ->
+                                RocketMQGrpcSource.<String>builder()
+                                        .setEndpoints("127.0.0.1:8080")
+                                        .setConsumerGroup("group")
+                                        .setMode(ConsumerMode.LITE)
+                                        .setMainTopic("topic")
+                                        .setValueOnlyDeserializer(new SimpleStringSchema())
+                                        .build())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sub lite topic");
+    }
+
+    @Test
+    void buildFailsWithBlankSubLiteTopicTest() {
+        assertThatThrownBy(
+                        () ->
+                                RocketMQGrpcSource.<String>builder()
+                                        .setSubLiteTopics(Collections.singletonList(" ")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sub lite topic must not be null or blank");
+    }
+
+    @Test
     void buildFailsWithoutDeserializerTest() {
         assertThatThrownBy(
                         () ->
@@ -92,6 +121,7 @@ class RocketMQGrpcSourceBuilderTest {
                                         .setConsumerGroup("group")
                                         .setMode(ConsumerMode.LITE)
                                         .setMainTopic("topic")
+                                        .setSubLiteTopics(Collections.singletonList("subA"))
                                         .build())
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("deserializer");

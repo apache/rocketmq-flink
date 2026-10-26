@@ -25,9 +25,12 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests that the {@link PopConsumer} adapters of {@link PopConsumerProvider} delegate to the
@@ -62,6 +65,65 @@ class PopConsumerProviderTest {
         assertThat(invocations).hasSize(1);
         assertThat(invocations.get(0).method).isEqualTo("ack");
         assertThat(invocations.get(0).argument).isSameAs(messageView);
+    }
+
+    @Test
+    void subscribeLiteTopicsRegistersEverySubTopicTest() throws Exception {
+        final List<Invocation> invocations = new ArrayList<>();
+        final LiteSimpleConsumer consumer = recordingProxy(LiteSimpleConsumer.class, invocations);
+
+        PopConsumerProvider.subscribeLiteTopics(consumer, Arrays.asList("subA", "subB"));
+
+        assertThat(invocations).hasSize(2);
+        assertThat(invocations.get(0).method).isEqualTo("subscribeLite");
+        assertThat(invocations.get(0).argument).isEqualTo("subA");
+        assertThat(invocations.get(1).method).isEqualTo("subscribeLite");
+        assertThat(invocations.get(1).argument).isEqualTo("subB");
+    }
+
+    @Test
+    void subscribeLiteTopicsRejectsEmptySubscriptionTest() {
+        final LiteSimpleConsumer consumer =
+                recordingProxy(LiteSimpleConsumer.class, new ArrayList<>());
+
+        assertThatThrownBy(
+                        () ->
+                                PopConsumerProvider.subscribeLiteTopics(
+                                        consumer, Collections.emptyList()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sub lite topic");
+    }
+
+    /**
+     * A rejected lite subscription must not leak the already started consumer, otherwise its
+     * channels and threads outlive the failed task.
+     */
+    @Test
+    void subscribeOrCloseClosesConsumerWhenSubscriptionFailsTest() {
+        final List<Invocation> invocations = new ArrayList<>();
+        final LiteSimpleConsumer consumer = recordingProxy(LiteSimpleConsumer.class, invocations);
+
+        assertThatThrownBy(
+                        () ->
+                                PopConsumerProvider.subscribeOrClose(
+                                        consumer, Collections.emptyList()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sub lite topic");
+
+        assertThat(invocations).hasSize(1);
+        assertThat(invocations.get(0).method).isEqualTo("close");
+    }
+
+    @Test
+    void subscribeOrCloseKeepsConsumerWhenSubscriptionSucceedsTest() throws Exception {
+        final List<Invocation> invocations = new ArrayList<>();
+        final LiteSimpleConsumer consumer = recordingProxy(LiteSimpleConsumer.class, invocations);
+
+        PopConsumerProvider.subscribeOrClose(consumer, Arrays.asList("subA", "subB"));
+
+        assertThat(invocations).hasSize(2);
+        assertThat(invocations.get(0).method).isEqualTo("subscribeLite");
+        assertThat(invocations.get(1).method).isEqualTo("subscribeLite");
     }
 
     private static <T> T recordingProxy(Class<T> type, List<Invocation> invocations) {

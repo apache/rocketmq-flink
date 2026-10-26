@@ -25,9 +25,11 @@ import org.apache.flink.annotation.PublicEvolving;
 public enum ConsumerMode {
 
     /**
-     * Bind a main lite topic via a {@code LiteSimpleConsumer}; the broker delivers messages of all
-     * sub topics over one receive stream. Messages are acknowledged by a downstream operator using
-     * the receipt handle carried by each emitted record.
+     * Bind a main lite topic via a {@code LiteSimpleConsumer} and subscribe the configured sub lite
+     * topics, whose messages the broker delivers over one receive stream. Binding the main topic
+     * without subscribing any sub lite topic leaves the subscription empty and receives nothing.
+     * Messages are acknowledged by a downstream operator using the receipt handle carried by each
+     * emitted record.
      */
     LITE,
 

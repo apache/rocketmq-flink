@@ -43,7 +43,10 @@ import org.apache.flink.table.factories.SerializationFormatFactory;
 import org.apache.flink.table.types.DataType;
 
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -102,6 +105,7 @@ public class RocketMQGrpcDynamicTableFactory
         final DecodingFormat<DeserializationSchema<RowData>> decodingFormat =
                 helper.discoverDecodingFormat(
                         DeserializationFormatFactory.class, FactoryUtil.FORMAT);
+        validateRequiredOptions(requiredOptions(), context.getCatalogTable().getOptions());
         helper.validate();
 
         final ReadableConfig options = helper.getOptions();
@@ -111,8 +115,20 @@ public class RocketMQGrpcDynamicTableFactory
                 RocketMQGrpcConnectorOptions.CONSUMER_GROUP.key());
 
         final DataType physicalDataType = context.getPhysicalRowDataType();
+        final Configuration configuration = buildConfiguration(options);
+        if (configuration.get(RocketMQGrpcSourceOptions.MODE) == ConsumerMode.LITE) {
+            throw new ValidationException(
+                    String.format(
+                            "'%s' = 'lite' is not supported by the RocketMQ gRPC table source."
+                                    + " LITE defers acknowledgement to a downstream operator holding"
+                                    + " the receipt handle, which the SQL/Table path strips, so"
+                                    + " every message would be redelivered once its invisible"
+                                    + " duration expires. Use the DataStream API"
+                                    + " (RocketMQGrpcSource with ConsumerMode.LITE) instead.",
+                            RocketMQGrpcConnectorOptions.MODE.key()));
+        }
         return new RocketMQGrpcDynamicTableSource(
-                buildConfiguration(options),
+                configuration,
                 options.get(RocketMQGrpcConnectorOptions.TOPIC),
                 Boundedness.CONTINUOUS_UNBOUNDED,
                 physicalDataType,
@@ -125,6 +141,7 @@ public class RocketMQGrpcDynamicTableFactory
                 FactoryUtil.createTableFactoryHelper(this, context);
         final EncodingFormat<SerializationSchema<RowData>> encodingFormat =
                 helper.discoverEncodingFormat(SerializationFormatFactory.class, FactoryUtil.FORMAT);
+        validateRequiredOptions(requiredOptions(), context.getCatalogTable().getOptions());
         helper.validate();
 
         final ReadableConfig options = helper.getOptions();
@@ -140,6 +157,31 @@ public class RocketMQGrpcDynamicTableFactory
                 liteTopic,
                 physicalDataType,
                 encodingFormat);
+    }
+
+    /**
+     * Reports the required options the DDL does not set, naming the missing keys only.
+     *
+     * <p>{@link FactoryUtil.TableFactoryHelper#validate()} still runs afterwards, so unknown
+     * options are detected exactly as before. This check runs first because a validation failure
+     * must never repeat an option value: a WITH clause may carry credentials ('access-key',
+     * 'secret-key') and the message of a validation failure is written to the JobManager log and to
+     * the REST exception history.
+     */
+    private static void validateRequiredOptions(
+            Set<ConfigOption<?>> requiredOptions, Map<String, String> tableOptions) {
+        final List<String> missing =
+                requiredOptions.stream()
+                        .map(ConfigOption::key)
+                        .filter(key -> !tableOptions.containsKey(key))
+                        .sorted()
+                        .collect(Collectors.toList());
+        if (!missing.isEmpty()) {
+            throw new ValidationException(
+                    String.format(
+                            "Missing required option%s for the RocketMQ gRPC connector: %s",
+                            missing.size() == 1 ? "" : "s", missing));
+        }
     }
 
     /**

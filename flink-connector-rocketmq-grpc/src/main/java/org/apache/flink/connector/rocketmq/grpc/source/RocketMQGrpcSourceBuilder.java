@@ -27,6 +27,8 @@ import org.apache.flink.connector.rocketmq.grpc.RocketMQGrpcOptions;
 import org.apache.flink.connector.rocketmq.grpc.source.deserialization.RocketMQGrpcDeserializationSchema;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.apache.flink.util.Preconditions.checkArgument;
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -37,6 +39,7 @@ public class RocketMQGrpcSourceBuilder<OUT> {
 
     private final Configuration configuration;
     private String mainTopic;
+    private List<String> subLiteTopics;
     private ConsumerMode mode = ConsumerMode.SIMPLE;
     private String topic;
     private Boundedness boundedness;
@@ -60,13 +63,33 @@ public class RocketMQGrpcSourceBuilder<OUT> {
     /**
      * Set the main lite topic bound by the LiteSimpleConsumer. Every subtask binds this topic.
      * Required in {@link ConsumerMode#LITE}, which must be selected explicitly via {@link
-     * #setMode(ConsumerMode)}; ignored in {@link ConsumerMode#SIMPLE}.
+     * #setMode(ConsumerMode)}; ignored in {@link ConsumerMode#SIMPLE}. The sub lite topics to
+     * consume are set separately via {@link #setSubLiteTopics(List)}.
      */
     public RocketMQGrpcSourceBuilder<OUT> setMainTopic(String mainTopic) {
         checkArgument(
                 mainTopic != null && !mainTopic.trim().isEmpty(),
                 "main topic must not be null or blank");
         this.mainTopic = mainTopic;
+        return this;
+    }
+
+    /**
+     * Set the sub lite topics subscribed under the main lite topic. Required and non-empty in
+     * {@link ConsumerMode#LITE}; ignored in {@link ConsumerMode#SIMPLE}. Only messages carrying one
+     * of these lite topics are delivered, so a source that binds the main topic without subscribing
+     * any sub lite topic receives nothing.
+     */
+    public RocketMQGrpcSourceBuilder<OUT> setSubLiteTopics(List<String> subLiteTopics) {
+        checkNotNull(subLiteTopics, "sub lite topics must not be null");
+        final List<String> normalized = new ArrayList<>(subLiteTopics.size());
+        for (String subLiteTopic : subLiteTopics) {
+            checkArgument(
+                    subLiteTopic != null && !subLiteTopic.trim().isEmpty(),
+                    "sub lite topic must not be null or blank");
+            normalized.add(subLiteTopic);
+        }
+        this.subLiteTopics = normalized;
         return this;
     }
 
@@ -169,6 +192,17 @@ public class RocketMQGrpcSourceBuilder<OUT> {
                     mainTopic != null && !mainTopic.trim().isEmpty(),
                     "the main topic must be configured");
             configuration.set(RocketMQGrpcSourceOptions.MAIN_TOPIC, mainTopic);
+            if (subLiteTopics != null) {
+                configuration.set(RocketMQGrpcSourceOptions.SUB_LITE_TOPICS, subLiteTopics);
+            }
+            final List<String> configuredSubLiteTopics =
+                    configuration.get(RocketMQGrpcSourceOptions.SUB_LITE_TOPICS);
+            checkArgument(
+                    configuredSubLiteTopics != null && !configuredSubLiteTopics.isEmpty(),
+                    "at least one sub lite topic must be configured in LITE mode via '%s';"
+                            + " binding the main topic alone subscribes to nothing, so the source"
+                            + " would receive no message",
+                    RocketMQGrpcSourceOptions.SUB_LITE_TOPICS.key());
         } else {
             checkArgument(
                     topic != null && !topic.trim().isEmpty(),
