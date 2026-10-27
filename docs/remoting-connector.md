@@ -50,6 +50,13 @@ RocketMQSink<String> sink = RocketMQSink.<String>builder()
 - `AT_LEAST_ONCE` uses async sends with a pending counter and a flush barrier on checkpoint.
 - `EXACTLY_ONCE` uses `TransactionMQProducer` two-phase commit driven by Flink checkpoints;
   set `rocketmq.sink.transaction.timeout` larger than the checkpoint interval.
+- `EXACTLY_ONCE` also requires the **checkpoint interval to stay well below the server-side
+  transaction state TTL**. A proxy keeps the transaction state of a half message in its own memory
+  and drops it after `transactionDataExpireMillis` (30 seconds by default). Flink only commits at
+  the end of a checkpoint, so the interval plus the checkpoint duration is the delay that state has
+  to survive; a commit arriving after it is discarded while still being answered with a success
+  code, so those records never appear and no error is raised. Raise the server-side TTL if the job
+  needs longer checkpoints.
 
 ## Client options (`rocketmq.client.*`)
 
@@ -65,6 +72,7 @@ Shared by source and sink.
 | `rocketmq.client.network.timeout.ms` | Long | 30000 | Client API timeout |
 | `rocketmq.client.callback.threads` | Integer | CPU cores | Client callback executor threads |
 | `rocketmq.client.partition.discovery.interval.ms` | Long | 10000 | Route/partition discovery interval |
+| `rocketmq.client.poll.timeout` | Long | 1000 | How long a source fetch blocks while no record is available. Returns as soon as records arrive, so it costs no data-path latency; it also bounds how long a fetch can outlive a close request |
 | `rocketmq.client.unitMode` / `rocketmq.client.unitName` | Boolean / String | false / (none) | Unit mode routing |
 | `rocketmq.client.debug` | Boolean | false | Verbose client logs |
 
