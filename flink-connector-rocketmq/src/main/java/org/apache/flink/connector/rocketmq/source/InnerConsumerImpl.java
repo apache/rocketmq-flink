@@ -288,11 +288,12 @@ public class InnerConsumerImpl implements InnerConsumer {
     @Override
     public void wakeup() {
         // Deliberately does not pause the assigned queues. DefaultLitePullConsumer offers no
-        // interruptible poll, but poll(Duration) is already bounded by a short timeout, so the
-        // fetch loop never blocks long enough to need forcing. Pausing here without a matching
-        // resume() would permanently stop delivering records while the client keeps pulling and
-        // advancing offsets in the background -- silent message loss with nothing logged.
-        // Use pause(Collection)/resume(Collection) as a pair if queue pausing is ever needed.
+        // interruptible poll, but poll(Duration) is bounded by rocketmq.client.poll.timeout, so the
+        // fetch loop comes back on its own within that bound instead of needing to be forced.
+        // Pausing here without a matching resume() would permanently stop delivering records while
+        // the client keeps pulling and advancing offsets in the background -- silent message loss
+        // with nothing logged. Use pause(Collection)/resume(Collection) as a pair if queue pausing
+        // is ever needed.
         LOG.debug(
                 "Wakeup requested; relying on the bounded poll timeout instead of pausing queues");
     }
