@@ -131,6 +131,11 @@ class RocketMQWriterQueueSelectorTest {
         }
 
         @Override
+        public String resolvePublishAddress(SendResult sendResult) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public CompletableFuture<Void> commit(SendCommittable sendCommittable) {
             throw new UnsupportedOperationException();
         }

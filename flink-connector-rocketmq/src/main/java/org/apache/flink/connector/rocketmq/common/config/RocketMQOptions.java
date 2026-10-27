@@ -137,6 +137,12 @@ public class RocketMQOptions {
     public static final ConfigOption<Long> POLL_TIMEOUT =
             ConfigOptions.key(CLIENT_CONFIG_PREFIX + "poll.timeout")
                     .longType()
-                    .defaultValue(10L)
-                    .withDescription("how long to wait before giving up, the unit is milliseconds");
+                    .defaultValue(1000L)
+                    .withDescription(
+                            "How long a fetch blocks while no record is available, in milliseconds."
+                                    + " The poll returns as soon as records arrive, so this only"
+                                    + " bounds the idle wait and how long the fetcher thread takes to"
+                                    + " notice a wakeup or a close request. Keep it small enough for"
+                                    + " a timely shutdown and large enough to stop an idle job from"
+                                    + " spinning the fetch loop.");
 }

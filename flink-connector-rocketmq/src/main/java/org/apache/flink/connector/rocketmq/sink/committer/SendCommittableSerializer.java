@@ -28,7 +28,9 @@ import java.io.IOException;
 /** A serializer used to serialize {@link SendCommittable}. */
 public class SendCommittableSerializer implements SimpleVersionedSerializer<SendCommittable> {
 
-    private static final int CURRENT_VERSION = 1;
+    // Version 2 adds the address of the node that accepted the half message. Committables written
+    // by version 1 are still readable: they simply carry no address and fall back to route lookup.
+    private static final int CURRENT_VERSION = 2;
 
     @Override
     public int getVersion() {
@@ -46,6 +48,7 @@ public class SendCommittableSerializer implements SimpleVersionedSerializer<Send
             out.writeUTF(obj.getMsgId());
             out.writeUTF(obj.getOffsetMsgId());
             out.writeUTF(obj.getTransactionId());
+            out.writeUTF(obj.getBrokerAddress() != null ? obj.getBrokerAddress() : "");
             out.flush();
             return stream.toByteArray();
         }
@@ -63,6 +66,9 @@ public class SendCommittableSerializer implements SimpleVersionedSerializer<Send
             sendCommittable.setMsgId(in.readUTF());
             sendCommittable.setOffsetMsgId(in.readUTF());
             sendCommittable.setTransactionId(in.readUTF());
+            if (version >= 2) {
+                sendCommittable.setBrokerAddress(in.readUTF());
+            }
             return sendCommittable;
         }
     }

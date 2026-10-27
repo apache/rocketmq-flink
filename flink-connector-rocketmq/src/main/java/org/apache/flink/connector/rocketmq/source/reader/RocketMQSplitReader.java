@@ -19,6 +19,7 @@
 package org.apache.flink.connector.rocketmq.source.reader;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.connector.source.SourceReaderContext;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
@@ -110,6 +111,21 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
             SourceReaderContext sourceReaderContext,
             RocketMQDeserializationSchema<T> deserializationSchema,
             RocketMQSourceReaderMetrics rocketmqSourceReaderMetrics) {
+        this(
+                configuration,
+                sourceReaderContext,
+                deserializationSchema,
+                rocketmqSourceReaderMetrics,
+                new InnerConsumerImpl(configuration));
+    }
+
+    @VisibleForTesting
+    RocketMQSplitReader(
+            Configuration configuration,
+            SourceReaderContext sourceReaderContext,
+            RocketMQDeserializationSchema<T> deserializationSchema,
+            RocketMQSourceReaderMetrics rocketmqSourceReaderMetrics,
+            InnerConsumer consumer) {
 
         this.configuration = configuration;
         this.sourceReaderContext = sourceReaderContext;
@@ -120,7 +136,7 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
         this.initFinish = false;
         this.lock = new SpinLock();
 
-        this.consumer = new InnerConsumerImpl(configuration);
+        this.consumer = consumer;
         this.consumer.start();
 
         this.rocketmqSourceReaderMetrics = rocketmqSourceReaderMetrics;

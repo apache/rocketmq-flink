@@ -295,6 +295,31 @@ public class InnerProducerImpl implements InnerProducer {
                 Runnable::run);
     }
 
+    @Override
+    public String resolvePublishAddress(final SendResult sendResult) {
+        return this.mqClientInstance.findBrokerAddressInPublish(
+                this.mqClientInstance.getBrokerNameFromMessageQueue(
+                        producer.queueWithNamespace(sendResult.getMessageQueue())));
+    }
+
+    private String resolvePublishAddress(final String brokerName, final String topic) {
+        String brokerAddress = this.mqClientInstance.findBrokerAddressInPublish(brokerName);
+        if (brokerAddress == null) {
+            // The Committer owns a producer that never sends anything, so its publish route table
+            // stays empty and findBrokerAddressInPublish() returns null. invokeSync() then falls
+            // back to a name server channel, which cannot commit the half message, and the reply is
+            // not a SUCCESS the caller would notice -- every record of the checkpoint is lost
+            // without a single error. Refresh the route for the topic the half message belongs to
+            // before resolving again.
+            LOG.warn(
+                    "Publish route for {} is not loaded yet, refreshing before ending transaction",
+                    brokerName);
+            this.mqClientInstance.updateTopicRouteInfoFromNameServer(topic);
+            brokerAddress = this.mqClientInstance.findBrokerAddressInPublish(brokerName);
+        }
+        return brokerAddress;
+    }
+
     public void endTransaction(
             final SendCommittable sendCommittable, final TransactionResult transactionResult) {
 
@@ -302,20 +327,14 @@ public class InnerProducerImpl implements InnerProducer {
             final String brokerName =
                     this.mqClientInstance.getBrokerNameFromMessageQueue(
                             producer.queueWithNamespace(sendCommittable.getMessageQueue()));
-            String brokerAddress = this.mqClientInstance.findBrokerAddressInPublish(brokerName);
-            if (brokerAddress == null) {
-                // The Committer owns a producer that never sends anything, so its publish route
-                // table stays empty and findBrokerAddressInPublish() returns null. invokeSync()
-                // then falls back to a name server channel, which cannot commit the half message,
-                // and the reply is not a SUCCESS the caller would notice -- every record of the
-                // checkpoint is lost without a single error. Refresh the route for the topic the
-                // half message belongs to before resolving again.
-                LOG.warn(
-                        "Publish route for {} is not loaded yet, refreshing before ending transaction",
-                        brokerName);
-                this.mqClientInstance.updateTopicRouteInfoFromNameServer(
-                        sendCommittable.getTopic());
-                brokerAddress = this.mqClientInstance.findBrokerAddressInPublish(brokerName);
+            // The node that accepted the half message is the only one holding its transaction
+            // context, so prefer the address the writer recorded at send time. Resolving it here
+            // from the committer's own route table can pick a different node, and a commit sent to
+            // a node without the context is discarded while still being answered with a success
+            // code -- the record is lost with nothing to show for it.
+            String brokerAddress = sendCommittable.getBrokerAddress();
+            if (StringUtils.isNullOrWhitespaceOnly(brokerAddress)) {
+                brokerAddress = resolvePublishAddress(brokerName, sendCommittable.getTopic());
             }
             if (brokerAddress == null) {
                 throw new IllegalStateException(
@@ -413,16 +432,33 @@ public class InnerProducerImpl implements InnerProducer {
 
     @Override
     public CompletableFuture<Void> commit(SendCommittable sendCommittable) {
-        return CompletableFuture.runAsync(
-                () -> endTransaction(sendCommittable, TransactionResult.COMMIT),
-                producer.getExecutorService());
+        return endTransactionAsync(sendCommittable, TransactionResult.COMMIT);
     }
 
     @Override
     public CompletableFuture<Void> rollback(SendCommittable sendCommittable) {
-        return CompletableFuture.runAsync(
-                () -> endTransaction(sendCommittable, TransactionResult.ROLLBACK),
-                producer.getExecutorService());
+        return endTransactionAsync(sendCommittable, TransactionResult.ROLLBACK);
+    }
+
+    /**
+     * Ends the transaction on the calling thread. Submitting to the producer's callback executor
+     * instead looked parallel but was lossy: that executor is bounded (4 threads, 2000 queued
+     * tasks, abort policy), so a checkpoint carrying more committables than the queue holds
+     * rejected the surplus, and a rejected commit retried after the server-side transaction context
+     * expired is silently dropped. The committer blocks until every request of the checkpoint is
+     * done anyway, so running here turns a burst into visible checkpoint duration instead of lost
+     * half messages.
+     */
+    private CompletableFuture<Void> endTransactionAsync(
+            final SendCommittable sendCommittable, final TransactionResult transactionResult) {
+        try {
+            endTransaction(sendCommittable, transactionResult);
+            return CompletableFuture.completedFuture(null);
+        } catch (Exception e) {
+            CompletableFuture<Void> failed = new CompletableFuture<>();
+            failed.completeExceptionally(e);
+            return failed;
+        }
     }
 
     @Override

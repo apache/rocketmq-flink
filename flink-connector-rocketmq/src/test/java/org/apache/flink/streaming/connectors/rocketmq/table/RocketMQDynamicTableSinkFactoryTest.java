@@ -19,6 +19,9 @@
 package org.apache.flink.streaming.connectors.rocketmq.table;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
+import org.apache.flink.connector.rocketmq.sink.RocketMQSink;
+import org.apache.flink.connector.rocketmq.sink.RocketMQSinkOptions;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
 import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.ValidationException;
@@ -28,17 +31,21 @@ import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.ResolvedCatalogTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
+import org.apache.flink.table.connector.sink.SinkV2Provider;
 import org.apache.flink.table.factories.FactoryUtil;
+import org.apache.flink.table.runtime.connector.sink.SinkRuntimeProviderContext;
 
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.flink.table.api.DataTypes.STRING;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -62,7 +69,7 @@ public class RocketMQDynamicTableSinkFactoryTest {
     public void testRocketMQDynamicTableSinkWithLegalOption() {
         final Map<String, String> options = new HashMap<>();
         options.put("connector", IDENTIFIER);
-        options.put(RocketMQSourceOptions.TOPIC.key(), TOPIC);
+        options.put(RocketMQSinkOptions.TOPIC.key(), TOPIC);
         options.put(
                 RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_TIMESTAMP.key(),
                 String.valueOf(System.currentTimeMillis()));
@@ -92,6 +99,57 @@ public class RocketMQDynamicTableSinkFactoryTest {
                 String.valueOf(System.currentTimeMillis()));
         options.put("unknown", "test_option");
         createDynamicTableSink(options);
+    }
+
+    /**
+     * {@code retry.times} is the legacy DDL name of the send retry count. It used to be accepted
+     * and then silently dropped, so a SQL job that configured it retried with the default instead.
+     */
+    @Test
+    public void testLegacyRetryTimesReachesTheWriter() throws Exception {
+        Map<String, String> options = sinkOptions();
+        options.put(RocketMQSinkOptions.OPTIONAL_WRITE_RETRY_TIMES.key(), "7");
+
+        assertThat(sinkConfiguration(options).getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES))
+                .isEqualTo(7);
+    }
+
+    @Test
+    public void testSendRetryTimesWinsOverTheLegacyAlias() throws Exception {
+        Map<String, String> options = sinkOptions();
+        options.put(RocketMQSinkOptions.OPTIONAL_WRITE_RETRY_TIMES.key(), "7");
+        options.put(RocketMQSinkOptions.SEND_RETRY_TIMES.key(), "5");
+
+        assertThat(sinkConfiguration(options).getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES))
+                .isEqualTo(5);
+    }
+
+    @Test
+    public void testRetryDefaultsToThreeWhenNeitherKeyIsSet() throws Exception {
+        assertThat(
+                        sinkConfiguration(sinkOptions())
+                                .getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES))
+                .isEqualTo(3);
+    }
+
+    private static Map<String, String> sinkOptions() {
+        Map<String, String> options = new HashMap<>();
+        options.put("connector", IDENTIFIER);
+        options.put(RocketMQSinkOptions.TOPIC.key(), TOPIC);
+        options.put(RocketMQSinkOptions.PRODUCER_GROUP.key(), PRODUCER_GROUP);
+        options.put(RocketMQOptions.ENDPOINTS.key(), NAME_SERVER_ADDRESS);
+        return options;
+    }
+
+    private static Configuration sinkConfiguration(Map<String, String> options) throws Exception {
+        DynamicTableSink tableSink = createDynamicTableSink(options);
+        SinkV2Provider provider =
+                (SinkV2Provider)
+                        tableSink.getSinkRuntimeProvider(new SinkRuntimeProviderContext(false));
+        RocketMQSink<?> sink = (RocketMQSink<?>) provider.createSink();
+        Field configuration = RocketMQSink.class.getDeclaredField("configuration");
+        configuration.setAccessible(true);
+        return (Configuration) configuration.get(sink);
     }
 
     private static DynamicTableSink createDynamicTableSink(Map<String, String> options) {

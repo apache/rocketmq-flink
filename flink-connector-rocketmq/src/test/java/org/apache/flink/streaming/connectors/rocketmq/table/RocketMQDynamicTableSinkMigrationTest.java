@@ -53,7 +53,6 @@ class RocketMQDynamicTableSinkMigrationTest {
                         null, // dynamicColumn
                         String.valueOf((char) 1), // fieldDelimiter (default SOH)
                         "UTF-8", // encoding
-                        10, // retryTimes
                         5000L, // sleepTime
                         false, // isDynamicTag
                         true, // isDynamicTagIncluded
@@ -91,7 +90,6 @@ class RocketMQDynamicTableSinkMigrationTest {
                         null, // dynamicColumn
                         String.valueOf((char) 1), // fieldDelimiter
                         "UTF-8", // encoding
-                        10, // retryTimes
                         5000L, // sleepTime
                         false, // isDynamicTag
                         true, // isDynamicTagIncluded
