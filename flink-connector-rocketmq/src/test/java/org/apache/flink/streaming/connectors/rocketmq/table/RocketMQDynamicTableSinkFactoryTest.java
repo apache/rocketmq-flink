@@ -33,20 +33,20 @@ import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.SinkV2Provider;
 import org.apache.flink.table.factories.FactoryUtil;
-
 import org.apache.flink.table.runtime.connector.sink.SinkRuntimeProviderContext;
+
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.lang.reflect.Field;
 import java.util.Map;
 
 import static org.apache.flink.table.api.DataTypes.STRING;
-import static org.junit.Assert.assertEquals;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /** Tests for {@link RocketMQDynamicTableSinkFactory}. */
@@ -102,8 +102,8 @@ public class RocketMQDynamicTableSinkFactoryTest {
     }
 
     /**
-     * {@code retry.times} is the legacy DDL name of the send retry count. It used to be accepted and
-     * then silently dropped, so a SQL job that configured it retried with the default instead.
+     * {@code retry.times} is the legacy DDL name of the send retry count. It used to be accepted
+     * and then silently dropped, so a SQL job that configured it retried with the default instead.
      */
     @Test
     public void testLegacyRetryTimesReachesTheWriter() throws Exception {
@@ -126,7 +126,9 @@ public class RocketMQDynamicTableSinkFactoryTest {
 
     @Test
     public void testRetryDefaultsToThreeWhenNeitherKeyIsSet() throws Exception {
-        assertThat(sinkConfiguration(sinkOptions()).getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES))
+        assertThat(
+                        sinkConfiguration(sinkOptions())
+                                .getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES))
                 .isEqualTo(3);
     }
 

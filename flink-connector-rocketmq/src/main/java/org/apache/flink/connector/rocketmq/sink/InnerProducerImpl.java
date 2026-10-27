@@ -444,10 +444,10 @@ public class InnerProducerImpl implements InnerProducer {
      * Ends the transaction on the calling thread. Submitting to the producer's callback executor
      * instead looked parallel but was lossy: that executor is bounded (4 threads, 2000 queued
      * tasks, abort policy), so a checkpoint carrying more committables than the queue holds
-     * rejected the surplus, and a rejected commit retried after the server-side transaction
-     * context expired is silently dropped. The committer blocks until every request of the
-     * checkpoint is done anyway, so running here turns a burst into visible checkpoint duration
-     * instead of lost half messages.
+     * rejected the surplus, and a rejected commit retried after the server-side transaction context
+     * expired is silently dropped. The committer blocks until every request of the checkpoint is
+     * done anyway, so running here turns a burst into visible checkpoint duration instead of lost
+     * half messages.
      */
     private CompletableFuture<Void> endTransactionAsync(
             final SendCommittable sendCommittable, final TransactionResult transactionResult) {

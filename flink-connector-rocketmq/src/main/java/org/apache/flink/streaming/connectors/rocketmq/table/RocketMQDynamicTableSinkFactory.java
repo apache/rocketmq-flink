@@ -126,10 +126,12 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
         // SEND_RETRY_TIMES, so honour the legacy key when the new one is absent instead of
         // silently dropping it; with neither set the documented default (3) applies.
         int sendRetryTimes =
-                properties.getOptional(RocketMQSinkOptions.SEND_RETRY_TIMES)
+                properties
+                        .getOptional(RocketMQSinkOptions.SEND_RETRY_TIMES)
                         .orElseGet(
                                 () ->
-                                        properties.getOptional(OPTIONAL_WRITE_RETRY_TIMES)
+                                        properties
+                                                .getOptional(OPTIONAL_WRITE_RETRY_TIMES)
                                                 .orElseGet(
                                                         () ->
                                                                 RocketMQSinkOptions.SEND_RETRY_TIMES

@@ -23,6 +23,7 @@ import org.apache.flink.connector.rocketmq.sink.committer.SendCommittable;
 import org.apache.rocketmq.client.impl.MQClientAPIImpl;
 import org.apache.rocketmq.client.impl.factory.MQClientInstance;
 import org.apache.rocketmq.client.producer.TransactionMQProducer;
+import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 import org.apache.rocketmq.remoting.netty.NettyRemotingClient;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.remoting.protocol.ResponseCode;
@@ -34,8 +35,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-
-import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -102,9 +101,10 @@ class InnerProducerImplTest {
     }
 
     /**
-     * The node that accepted the half message is the only one holding its transaction context, so the
-     * commit must go to the address the writer recorded. Resolving it from the committer's own route
-     * table can name another node, which discards the commit and still answers with a success code.
+     * The node that accepted the half message is the only one holding its transaction context, so
+     * the commit must go to the address the writer recorded. Resolving it from the committer's own
+     * route table can name another node, which discards the commit and still answers with a success
+     * code.
      */
     @Test
     void commitGoesToTheAddressRecordedByTheWriterTest() throws Exception {
@@ -166,7 +166,8 @@ class InnerProducerImplTest {
             for (int i = 0; i < 3000; i++) {
                 futures.add(impl.commit(committable("10.0.26.60:8080")));
             }
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get(30, TimeUnit.SECONDS);
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .get(30, TimeUnit.SECONDS);
             Mockito.verify(remotingClient, Mockito.times(3000))
                     .invokeSync(
                             Mockito.eq("10.0.26.60:8080"),

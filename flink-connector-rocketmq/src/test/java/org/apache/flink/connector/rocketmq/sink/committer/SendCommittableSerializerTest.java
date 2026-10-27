@@ -40,8 +40,7 @@ class SendCommittableSerializerTest {
         committable.setBrokerAddress("10.0.38.29:8080");
 
         SendCommittable restored =
-                serializer.deserialize(
-                        serializer.getVersion(), serializer.serialize(committable));
+                serializer.deserialize(serializer.getVersion(), serializer.serialize(committable));
 
         assertThat(restored.getBrokerAddress()).isEqualTo("10.0.38.29:8080");
         assertThat(restored.getTopic()).isEqualTo(committable.getTopic());

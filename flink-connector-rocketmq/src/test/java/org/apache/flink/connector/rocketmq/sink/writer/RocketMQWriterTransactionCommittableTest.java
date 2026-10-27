@@ -64,7 +64,8 @@ class RocketMQWriterTransactionCommittableTest {
         assertThat(committable.getBrokerAddress()).isEqualTo(SEND_ADDRESS);
         assertThat(committable.getTransactionId()).isEqualTo("trans-1");
         assertThat(committable.getBrokerName()).isEqualTo("broker-a");
-        // The map must be drained, otherwise the next checkpoint commits the same half message twice.
+        // The map must be drained, otherwise the next checkpoint commits the same half message
+        // twice.
         assertThat(writer.prepareCommit()).isEmpty();
     }
 

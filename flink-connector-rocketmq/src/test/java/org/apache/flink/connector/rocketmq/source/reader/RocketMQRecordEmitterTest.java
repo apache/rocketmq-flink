@@ -22,21 +22,21 @@ import org.apache.flink.api.common.eventtime.Watermark;
 import org.apache.flink.api.connector.source.ReaderOutput;
 import org.apache.flink.api.connector.source.SourceOutput;
 import org.apache.flink.connector.rocketmq.source.reader.deserializer.RocketMQSchemaWrapper;
-import org.apache.flink.util.Collector;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplitState;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.util.Collector;
 
 import org.apache.rocketmq.common.message.MessageExt;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
-import java.io.IOException;
-import java.net.InetSocketAddress;
 
 /** Test for {@link RocketMQRecordEmitter}. */
 public class RocketMQRecordEmitterTest {
@@ -72,8 +72,8 @@ public class RocketMQRecordEmitterTest {
 
     /**
      * A record whose deserialization throws must be dropped with a warning instead of failing the
-     * task: otherwise the job loops "fail, restore, re-read the same record" and rewrites everything
-     * it already emitted. The split offset still has to advance past the poison record.
+     * task: otherwise the job loops "fail, restore, re-read the same record" and rewrites
+     * everything it already emitted. The split offset still has to advance past the poison record.
      */
     @Test
     public void testUndeserializableRecordIsDroppedAndOffsetAdvances() throws IOException {
@@ -91,10 +91,10 @@ public class RocketMQRecordEmitterTest {
         message.setQueueOffset(100L);
 
         RocketMQSourceSplitState splitState =
-                new RocketMQSourceSplitState(
-                        new RocketMQSourceSplit("t", "b", 0, 100L, -1L));
+                new RocketMQSourceSplitState(new RocketMQSourceSplit("t", "b", 0, 100L, -1L));
 
-        recordEmitter.emitRecord(new MessageViewExt(message), new TestingEmitterOutput<>(), splitState);
+        recordEmitter.emitRecord(
+                new MessageViewExt(message), new TestingEmitterOutput<>(), splitState);
 
         assertEquals(101L, splitState.getCurrentOffset());
     }

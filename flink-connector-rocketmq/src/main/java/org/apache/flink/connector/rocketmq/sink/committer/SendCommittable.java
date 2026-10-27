@@ -44,9 +44,9 @@ public class SendCommittable {
 
     /**
      * Address of the node that accepted the half message, resolved from the writer's own publish
-     * route right after the send. A proxy keeps the transaction context of a half message in its own
-     * memory, so ending the transaction on any other node is discarded while still being answered
-     * with a success code.
+     * route right after the send. A proxy keeps the transaction context of a half message in its
+     * own memory, so ending the transaction on any other node is discarded while still being
+     * answered with a success code.
      */
     private String brokerAddress;
 

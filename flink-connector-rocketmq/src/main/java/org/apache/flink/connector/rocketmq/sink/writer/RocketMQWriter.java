@@ -47,8 +47,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -72,6 +72,7 @@ public class RocketMQWriter<IN>
      * description but never read, so the send buffer grew without limit under a slow broker.
      */
     private final Semaphore sendPermits;
+
     private final AtomicReference<Throwable> asyncSendException = new AtomicReference<>();
 
     public RocketMQWriter(
