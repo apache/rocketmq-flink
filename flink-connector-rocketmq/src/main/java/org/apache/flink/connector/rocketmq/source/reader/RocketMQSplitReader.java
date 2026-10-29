@@ -186,6 +186,17 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
                 rocketmqSourceReaderMetrics.setCurrentOffset(
                         messageQueue, messageView.getQueueOffset() + 1);
                 rocketmqSourceReaderMetrics.recordBytesConsumed(messageView.getStoreSize());
+                // The LitePull client starts the first pull of a freshly assigned queue at
+                // offset 0 (RebalancePullImpl.computePullFromWhereWithException is hard-coded
+                // to 0), and the seek() issued by handleSplitsChanges races with that first
+                // pull on the client's rebalance/pull threads. Dropping everything below the
+                // split's starting offset here is what makes the configured start position
+                // deterministic regardless of who wins that race.
+                Tuple2<Long, Long> splitOffsets = currentOffsetTable.get(messageQueue);
+                if (splitOffsets != null
+                        && messageView.getQueueOffset() < Math.max(splitOffsets.f0, 0L)) {
+                    continue;
+                }
                 if (!matchesFilter(messageView)) {
                     continue;
                 }
