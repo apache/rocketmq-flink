@@ -50,13 +50,24 @@ RocketMQSink<String> sink = RocketMQSink.<String>builder()
 - `AT_LEAST_ONCE` uses async sends with a pending counter and a flush barrier on checkpoint.
 - `EXACTLY_ONCE` uses `TransactionMQProducer` two-phase commit driven by Flink checkpoints;
   set `rocketmq.sink.transaction.timeout` larger than the checkpoint interval.
-- `EXACTLY_ONCE` also requires the **checkpoint interval to stay well below the server-side
-  transaction state TTL**. A proxy keeps the transaction state of a half message in its own memory
-  and drops it after `transactionDataExpireMillis` (30 seconds by default). Flink only commits at
-  the end of a checkpoint, so the interval plus the checkpoint duration is the delay that state has
-  to survive; a commit arriving after it is discarded while still being answered with a success
-  code, so those records never appear and no error is raised. Raise the server-side TTL if the job
-  needs longer checkpoints.
+
+> **`EXACTLY_ONCE` is NOT supported when the endpoints point at a proxy** (Alibaba Cloud
+> RocketMQ 5.x commercial instances, or any deployment where clients reach brokers through a
+> proxy). Use `AT_LEAST_ONCE` with idempotent downstream consumers in those deployments.
+>
+> Why: a proxy keeps the transaction state of a half message only in the memory of the proxy
+> process that received it, and drops it after `transactionDataExpireMillis` (30 seconds by
+> default). Flink commits at the end of a checkpoint, so a commit that lands on a different
+> proxy pod, or arrives after the TTL, finds no state; the proxy then maps
+> `TRANSACTION_DATA_NOT_FOUND` to a **success** response and drops it without a single log
+> line — the job sees successful commits while the records never become visible, and nothing
+> surfaces anywhere. The broker-side transaction check does not rescue these half messages
+> through the proxy path either. The failure is silent by construction, so it cannot be
+> mitigated by tuning the checkpoint interval.
+>
+> `EXACTLY_ONCE` **is supported on direct deployments** (endpoints = nameserver addresses, the
+> connector talks to brokers directly): the transaction state lives on the broker that holds
+> the half message and is persisted, so commits succeed regardless of the checkpoint interval.
 
 ## Client options (`rocketmq.client.*`)
 
@@ -128,7 +139,7 @@ group or a missing subscription relationship shows up.
 | `rocketmq.sink.topic` | String | (none) | Topic, required for SQL |
 | `rocketmq.sink.group` | String | `PID-flink-producer` | Producer group |
 | `rocketmq.sink.tag` | String | (none) | Static message tag |
-| `rocketmq.sink.delivery.guarantee` | String | `AT_LEAST_ONCE` | `NONE` / `AT_LEAST_ONCE` / `EXACTLY_ONCE` |
+| `rocketmq.sink.delivery.guarantee` | String | `AT_LEAST_ONCE` | `NONE` / `AT_LEAST_ONCE` / `EXACTLY_ONCE` (`EXACTLY_ONCE` is **not supported via a proxy endpoint**, see the delivery-semantics note above) |
 | `rocketmq.sink.transaction.timeout` | Long | 900 (s) | Transaction timeout for EXACTLY_ONCE |
 | `rocketmq.sink.send.timeout` | Long | 5000 | Send timeout (ms) |
 | `rocketmq.sink.send.retry.times` | Integer | 3 | Send retry times |

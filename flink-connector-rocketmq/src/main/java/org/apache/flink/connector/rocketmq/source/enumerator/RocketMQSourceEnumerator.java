@@ -62,7 +62,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /** The enumerator class for RocketMQ source. */
 @Internal
@@ -281,20 +280,30 @@ public class RocketMQSourceEnumerator
                                         .getString(RocketMQSourceOptions.TOPIC)
                                         .split(RocketMQSourceOptions.TOPIC_SEPARATOR)));
 
-        return topicSet.stream()
-                .flatMap(
-                        topic -> {
-                            try {
-                                return consumer.fetchMessageQueues(topic).get().stream();
-                            } catch (Exception e) {
-                                log.error(
-                                        "Request topic route for service discovery error, topic={}",
-                                        topic,
-                                        e);
-                            }
-                            return Stream.empty();
-                        })
-                .collect(Collectors.toSet());
+        Set<MessageQueue> fetchedQueues = new HashSet<>();
+        Set<String> failedTopics = new HashSet<>();
+        for (String topic : topicSet) {
+            try {
+                fetchedQueues.addAll(consumer.fetchMessageQueues(topic).get());
+            } catch (Exception e) {
+                failedTopics.add(topic);
+                log.error("Request topic route for service discovery error, topic={}", topic, e);
+            }
+        }
+        if (!failedTopics.isEmpty()) {
+            // A failed fetch says nothing about the current route: the topic may be perfectly
+            // healthy behind an unreachable nameserver. Reporting its queues as gone would
+            // revoke and later re-initialize their splits (mass rebalance plus an offset
+            // rewind once the nameserver is back), so failed topics are excluded from this
+            // round instead, and a round where every topic failed is skipped entirely.
+            log.warn(
+                    "Skipping partition decrease evaluation for topics whose route fetch failed: {}",
+                    failedTopics);
+            if (failedTopics.size() == topicSet.size()) {
+                return null;
+            }
+        }
+        return fetchedQueues;
     }
 
     // This method should only be invoked in the coordinator executor thread.
@@ -303,6 +312,17 @@ public class RocketMQSourceEnumerator
             throw new FlinkRuntimeException("Failed to handle source splits change due to ", t);
         }
         if (latestSet == null) {
+            return;
+        }
+        if (latestSet.isEmpty() && !allocatedSet.isEmpty()) {
+            // An empty discovery result while queues are allocated is indistinguishable from
+            // "every route fetch failed" and almost never a real route deletion; treating it
+            // as a decrease would revoke the whole assignment. Real deletions surface again
+            // on later rounds and are handled together with the rest of the change result.
+            log.warn(
+                    "Partition discovery returned an empty queue set while {} queues are allocated;"
+                            + " keeping the current assignment for this round.",
+                    allocatedSet.size());
             return;
         }
 
