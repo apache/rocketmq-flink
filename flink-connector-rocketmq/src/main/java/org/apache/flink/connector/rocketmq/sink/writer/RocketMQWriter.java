@@ -101,8 +101,7 @@ public class RocketMQWriter<IN> implements CommittingSinkWriter<IN, SendCommitta
         this.rocketmqSinkContext = new RocketMQSinkContextImpl(initContext, configuration);
         this.committableMap = new ConcurrentHashMap<>();
         this.sendRetryTimes = configuration.get(RocketMQSinkOptions.SEND_RETRY_TIMES);
-        this.sendSleepTimeMs =
-                configuration.get(RocketMQSinkOptions.OPTIONAL_WRITE_SLEEP_TIME_MS);
+        this.sendSleepTimeMs = configuration.get(RocketMQSinkOptions.OPTIONAL_WRITE_SLEEP_TIME_MS);
         this.sendTimeoutMs = configuration.get(RocketMQSinkOptions.SEND_TIMEOUT);
         org.apache.flink.util.Preconditions.checkArgument(
                 sendTimeoutMs > 0, "send.timeout must be positive");

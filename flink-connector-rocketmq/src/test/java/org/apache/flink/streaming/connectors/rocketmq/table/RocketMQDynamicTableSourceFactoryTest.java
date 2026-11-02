@@ -61,8 +61,8 @@ public class RocketMQDynamicTableSourceFactoryTest {
     /**
      * A missing required option must be reported by key only. Note that this drives the factory
      * directly: going through {@link FactoryUtil#createDynamicTableSource} lets Flink run its own
-     * required option check first, and that message repeats every table option, including the access
-     * key in plaintext.
+     * required option check first, and that message repeats every table option, including the
+     * access key in plaintext.
      */
     @Test
     public void testMissingRequiredOptionDoesNotEchoOptionValues() {

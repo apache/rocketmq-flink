@@ -31,8 +31,8 @@ import java.util.function.Supplier;
  * acknowledge messages from the source side (acknowledgement is deferred to a downstream operator),
  * so this manager only provides a single fetcher thread that receives messages.
  *
- * <p>Since Flink 2.x the elements queue is owned by {@code SourceReaderBase} and is no longer passed
- * to the fetcher manager.
+ * <p>Since Flink 2.x the elements queue is owned by {@code SourceReaderBase} and is no longer
+ * passed to the fetcher manager.
  */
 @Internal
 public class RocketMQGrpcSourceFetcherManager

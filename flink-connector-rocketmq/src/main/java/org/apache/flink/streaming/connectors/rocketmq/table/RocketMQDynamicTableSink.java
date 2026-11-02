@@ -279,8 +279,7 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
                 writeKeysToBody,
                 keyColumns,
                 convertToRowTypeInfo(
-                        schema.toSinkRowDataType(),
-                        schema.getColumnNames().toArray(new String[0])),
+                        schema.toSinkRowDataType(), schema.getColumnNames().toArray(new String[0])),
                 schema.getColumnDataTypes().toArray(new DataType[0]),
                 metadataKeys.size() > 0,
                 metadataPositions);

@@ -126,7 +126,8 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                 configuration.get(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_SPECIFIC);
         long startTimeMs =
                 configuration.get(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_TIMESTAMP);
-        String startDateTime = configuration.get(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_DATE);
+        String startDateTime =
+                configuration.get(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_DATE);
         String timeZone = configuration.get(RocketMQSourceOptions.OPTIONAL_TIME_ZONE);
         String accessKey = configuration.get(RocketMQSourceOptions.OPTIONAL_ACCESS_KEY);
         String secretKey = configuration.get(RocketMQSourceOptions.OPTIONAL_SECRET_KEY);
