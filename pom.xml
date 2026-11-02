@@ -81,11 +81,11 @@ under the License.
     <properties>
         <flink.parent.artifactId>flink-connector-rocketmq-parent</flink.parent.artifactId>
 
-        <!-- Flink 1.x line targets Java 11 bytecode -->
-        <target.java.version>11</target.java.version>
+        <!-- Flink 2.x requires Java 17 at compile time -->
+        <target.java.version>17</target.java.version>
 
         <!-- Main Dependencies -->
-        <flink.version>1.20.3</flink.version>
+        <flink.version>2.2.1</flink.version>
         <rocketmq.version>5.5.1</rocketmq.version>
         <rocketmq.client.java.version>5.2.2</rocketmq.client.java.version>
         <rocketmq.schema.registry.version>0.1.0</rocketmq.schema.registry.version>
@@ -547,7 +547,7 @@ under the License.
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <release>11</release>
+                    <release>17</release>
                 </configuration>
             </plugin>
 
@@ -559,8 +559,8 @@ under the License.
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <!-- Same shade version as the 2.x branch: the one inherited from
-                     flink-connector-parent bundles an ASM that cannot read Java 17 class files. -->
+                <!-- The version inherited from flink-connector-parent bundles an ASM that cannot
+                     read Java 17 class files (major version 61), which Flink 2.x requires. -->
                 <version>3.6.0</version>
             </plugin>
 
@@ -582,8 +582,11 @@ under the License.
                         <phase>verify</phase>
                         <configuration>
                             <!-- Upstream CI only runs `mvn clean package`, so this verify-phase
-                                 gate never ran there and its dependency list is stale. Keep the
-                                 report, but do not fail the build on it. -->
+                                 gate never ran there and its dependency list is stale. Flink 2.x
+                                 additionally split flink-core / flink-runtime / flink-annotations
+                                 / flink-core-api into separate artifacts, so the analyzer now
+                                 reports a long list of used-undeclared provided-scope Flink
+                                 internals. Keep the report, but do not fail the build on it. -->
                             <failOnWarning>false</failOnWarning>
                             <ignoreAllNonTestScoped>true</ignoreAllNonTestScoped>
                         </configuration>
