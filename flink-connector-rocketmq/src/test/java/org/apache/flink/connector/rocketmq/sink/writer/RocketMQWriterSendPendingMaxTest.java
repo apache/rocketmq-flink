@@ -18,7 +18,7 @@
 
 package org.apache.flink.connector.rocketmq.sink.writer;
 
-import org.apache.flink.api.connector.sink2.Sink;
+import org.apache.flink.api.connector.sink2.WriterInitContext;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.rocketmq.sink.InnerProducer;
@@ -145,12 +145,9 @@ class RocketMQWriterSendPendingMaxTest {
                 .thenThrow(new IllegalStateException("submission rejected"))
                 .thenReturn(CompletableFuture.completedFuture(new SendResult()));
         Configuration config = new Configuration();
-        config.setInteger(RocketMQSinkOptions.SEND_PENDING_MAX, 1);
-        Sink.InitContext context = Mockito.mock(Sink.InitContext.class);
-        Mockito.when(context.metricGroup())
-                .thenReturn(
-                        org.apache.flink.metrics.groups.UnregisteredMetricsGroup
-                                .createSinkWriterMetricGroup());
+        config.set(RocketMQSinkOptions.SEND_PENDING_MAX, 1);
+        WriterInitContext context =
+                Mockito.mock(WriterInitContext.class, Mockito.RETURNS_DEEP_STUBS);
         RocketMQWriter<String> writer =
                 new RocketMQWriter<>(config, null, new StringToMessageSchema(), context, producer);
         assertThatThrownBy(() -> writer.write("first", null))
@@ -171,16 +168,15 @@ class RocketMQWriterSendPendingMaxTest {
 
     private static RocketMQWriter<String> newWriter(GatedProducer producer, int pendingMax) {
         Configuration configuration = new Configuration();
-        configuration.setString(
+        configuration.set(
                 RocketMQSinkOptions.DELIVERY_GUARANTEE, DeliveryGuarantee.AT_LEAST_ONCE.name());
-        configuration.setInteger(RocketMQSinkOptions.SEND_PENDING_MAX, pendingMax);
-        Sink.InitContext initContext = Mockito.mock(Sink.InitContext.class);
-        Mockito.when(initContext.metricGroup())
-                .thenReturn(
-                        org.apache.flink.metrics.groups.UnregisteredMetricsGroup
-                                .createSinkWriterMetricGroup());
+        configuration.set(RocketMQSinkOptions.SEND_PENDING_MAX, pendingMax);
         return new RocketMQWriter<>(
-                configuration, null, new StringToMessageSchema(), initContext, producer);
+                configuration,
+                null,
+                new StringToMessageSchema(),
+                Mockito.mock(WriterInitContext.class, Mockito.RETURNS_DEEP_STUBS),
+                producer);
     }
 
     /** Wraps the record into a message body so the send call can be inspected. */

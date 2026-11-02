@@ -22,9 +22,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.connector.source.SourceReaderContext;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.SingleThreadMultiplexSourceReaderBase;
-import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.connector.rocketmq.grpc.ack.AckableMessage;
 import org.apache.flink.connector.rocketmq.grpc.ack.RocketMQReceiptHandle;
 import org.apache.flink.connector.rocketmq.grpc.source.split.RocketMQGrpcSourceSplit;
@@ -76,23 +74,21 @@ public class RocketMQGrpcSourceReader<T>
     @Nullable private final RocketMQGrpcSourceSplitReader splitReader;
 
     public RocketMQGrpcSourceReader(
-            FutureCompletingBlockingQueue<RecordsWithSplitIds<MessageViewImpl>> elementsQueue,
             RocketMQGrpcSourceFetcherManager fetcherManager,
             RocketMQGrpcSourceRecordEmitter<T> recordEmitter,
             Configuration config,
             SourceReaderContext context) {
-        this(elementsQueue, fetcherManager, recordEmitter, config, context, null, null);
+        this(fetcherManager, recordEmitter, config, context, null, null);
     }
 
     public RocketMQGrpcSourceReader(
-            FutureCompletingBlockingQueue<RecordsWithSplitIds<MessageViewImpl>> elementsQueue,
             RocketMQGrpcSourceFetcherManager fetcherManager,
             RocketMQGrpcSourceRecordEmitter<T> recordEmitter,
             Configuration config,
             SourceReaderContext context,
             @Nullable CheckpointAckTracker ackTracker,
             @Nullable RocketMQGrpcSourceSplitReader splitReader) {
-        super(elementsQueue, fetcherManager, recordEmitter, config, context);
+        super(fetcherManager, recordEmitter, config, context);
         this.ackTracker = ackTracker;
         this.splitReader = splitReader;
     }

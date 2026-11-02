@@ -51,8 +51,8 @@ class RocketMQDynamicTableSourceFactoryOffsetTest {
                     null);
 
     private DynamicTableSource createSource(Map<String, String> options) {
-        return FactoryUtil.createTableSource(
-                null,
+        return FactoryUtil.createDynamicTableSource(
+                new RocketMQDynamicTableSourceFactory(),
                 ObjectIdentifier.of("default", "default", "test_table"),
                 new ResolvedCatalogTable(
                         CatalogTable.newBuilder()
@@ -62,6 +62,7 @@ class RocketMQDynamicTableSourceFactoryOffsetTest {
                                 .options(options)
                                 .build(),
                         SCHEMA),
+                Collections.emptyMap(),
                 new org.apache.flink.configuration.Configuration(),
                 Thread.currentThread().getContextClassLoader(),
                 false);

@@ -19,7 +19,8 @@ package org.apache.flink.streaming.connectors.rocketmq.table;
 
 import org.apache.flink.connector.rocketmq.sink.RocketMQSink;
 import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.Column;
+import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.SinkV2Provider;
 import org.apache.flink.table.descriptors.DescriptorProperties;
@@ -38,7 +39,7 @@ class RocketMQDynamicTableSinkMigrationTest {
     @Test
     void sinkRuntimeProviderShouldReturnSinkV2ProviderTest() {
         DescriptorProperties properties = createBaseProperties();
-        TableSchema schema = createTableSchema();
+        ResolvedSchema schema = createResolvedSchema();
 
         RocketMQDynamicTableSink tableSink =
                 new RocketMQDynamicTableSink(
@@ -75,7 +76,7 @@ class RocketMQDynamicTableSinkMigrationTest {
     @Test
     void sinkRuntimeProviderWithCredentialsShouldSucceedTest() {
         DescriptorProperties properties = createBaseProperties();
-        TableSchema schema = createTableSchema();
+        ResolvedSchema schema = createResolvedSchema();
 
         RocketMQDynamicTableSink tableSink =
                 new RocketMQDynamicTableSink(
@@ -115,14 +116,12 @@ class RocketMQDynamicTableSinkMigrationTest {
         props.put("rocketmq.client.endpoints", "127.0.0.1:9876");
         DescriptorProperties descriptorProperties = new DescriptorProperties();
         descriptorProperties.putProperties(props);
-        descriptorProperties.putTableSchema("schema", createTableSchema());
         return descriptorProperties;
     }
 
-    private TableSchema createTableSchema() {
-        return TableSchema.builder()
-                .field("id", DataTypes.BIGINT())
-                .field("name", DataTypes.STRING())
-                .build();
+    private ResolvedSchema createResolvedSchema() {
+        return ResolvedSchema.of(
+                Column.physical("id", DataTypes.BIGINT()),
+                Column.physical("name", DataTypes.STRING()));
     }
 }

@@ -3,15 +3,15 @@ package org.apache.flink.connector.rocketmq.source;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
 import org.apache.flink.connector.rocketmq.example.ConnectorConfig;
 import org.apache.flink.connector.rocketmq.source.enumerator.offset.OffsetsSelector;
 import org.apache.flink.connector.rocketmq.source.reader.MessageView;
 import org.apache.flink.connector.rocketmq.source.reader.deserializer.RocketMQDeserializationSchema;
-import org.apache.flink.core.fs.FileSystem;
-import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -33,7 +33,6 @@ public class RocketMQSourceTest {
         String directory = "flink-connector-rocketmq";
         String userHome = System.getProperty("user.home");
         String ckptPath = Paths.get(userHome, directory, "ckpt").toString();
-        String sinkPath = Paths.get(userHome, directory, "sink").toString();
         String ckptUri = "file://" + File.separator + ckptPath;
 
         log.info("Connector checkpoint path: {}", ckptPath);
@@ -62,12 +61,16 @@ public class RocketMQSourceTest {
                         .build();
 
         Configuration configuration = new Configuration();
-        configuration.setInteger(RestOptions.BIND_PORT.key(), 8088);
+        configuration.set(RestOptions.BIND_PORT, "8088");
+        // Flink 2.x removed FsStateBackend and StreamExecutionEnvironment#setStateBackend: the
+        // state backend and the checkpoint storage are now both configured through Configuration.
+        configuration.set(StateBackendOptions.STATE_BACKEND, "hashmap");
+        configuration.set(CheckpointingOptions.CHECKPOINT_STORAGE, "filesystem");
+        configuration.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, ckptUri);
 
         StreamExecutionEnvironment env =
                 StreamExecutionEnvironment.createLocalEnvironment(configuration);
         env.enableCheckpointing(TimeUnit.SECONDS.toMillis(10));
-        env.setStateBackend(new FsStateBackend(ckptUri));
         env.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
         env.getCheckpointConfig().setCheckpointTimeout(TimeUnit.MINUTES.toMillis(1));
         env.getCheckpointConfig().setMaxConcurrentCheckpoints(1);
@@ -78,11 +81,9 @@ public class RocketMQSourceTest {
                 env.fromSource(source, WatermarkStrategy.noWatermarks(), "rocketmq-test-source")
                         .setParallelism(2);
 
-        dataStream
-                .setParallelism(1)
-                .writeAsText(sinkPath, FileSystem.WriteMode.OVERWRITE)
-                .name("rocketmq-test-sink")
-                .setParallelism(2);
+        // DataStream#writeAsText was removed in Flink 2.x; the file sink now lives in the
+        // external flink-connector-files artifact, so this local demo prints to stdout instead.
+        dataStream.setParallelism(1).print().name("rocketmq-test-sink").setParallelism(2);
 
         env.execute("rocketmq-local-test");
         log.info("Start rocketmq source for test success");

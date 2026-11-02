@@ -20,7 +20,7 @@ package org.apache.flink.connector.rocketmq.sink.writer.context;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.operators.MailboxExecutor;
 import org.apache.flink.api.common.operators.ProcessingTimeService;
-import org.apache.flink.api.connector.sink2.Sink.InitContext;
+import org.apache.flink.api.connector.sink2.WriterInitContext;
 import org.apache.flink.configuration.Configuration;
 
 @PublicEvolving
@@ -32,9 +32,10 @@ public class RocketMQSinkContextImpl implements RocketMQSinkContext {
     private final MailboxExecutor mailboxExecutor;
     private final boolean enableSchemaEvolution;
 
-    public RocketMQSinkContextImpl(InitContext initContext, Configuration configuration) {
-        this.parallelInstanceId = initContext.getSubtaskId();
-        this.numberOfParallelSubtasks = initContext.getNumberOfParallelSubtasks();
+    public RocketMQSinkContextImpl(WriterInitContext initContext, Configuration configuration) {
+        // Flink 2.x moved the subtask coordinates from WriterInitContext onto TaskInfo.
+        this.parallelInstanceId = initContext.getTaskInfo().getIndexOfThisSubtask();
+        this.numberOfParallelSubtasks = initContext.getTaskInfo().getNumberOfParallelSubtasks();
         this.processingTimeService = initContext.getProcessingTimeService();
         this.mailboxExecutor = initContext.getMailboxExecutor();
         this.enableSchemaEvolution = false;

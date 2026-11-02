@@ -19,9 +19,9 @@
 package org.apache.flink.connector.rocketmq.source.reader.deserializer;
 
 import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.Column;
+import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.descriptors.DescriptorProperties;
 import org.apache.flink.util.Collector;
 
 import org.junit.jupiter.api.Test;
@@ -98,28 +98,28 @@ class RowDeserializationSchemaOptionsTest {
         return options;
     }
 
-    /** Mirrors what the table factory hands over: the DDL options plus the physical schema. */
+    /**
+     * Mirrors what the table factory hands over: the DDL options. Since Flink 2.x the physical
+     * schema is passed to the deserializer directly instead of being encoded in these properties.
+     */
     private static Map<String, String> ddlOptions() {
-        DescriptorProperties descriptorProperties = new DescriptorProperties();
-        descriptorProperties.putTableSchema("schema", tableSchema());
-        return new HashMap<>(descriptorProperties.asMap());
+        return new HashMap<>();
     }
 
-    private static TableSchema tableSchema() {
-        return TableSchema.builder()
-                .field("f0", DataTypes.STRING())
-                .field("f1", DataTypes.STRING())
-                .field("f2", DataTypes.STRING())
-                .field("f3", DataTypes.STRING())
-                .field("f4", DataTypes.STRING())
-                .field("f5", DataTypes.STRING())
-                .build();
+    private static ResolvedSchema resolvedSchema() {
+        return ResolvedSchema.of(
+                Column.physical("f0", DataTypes.STRING()),
+                Column.physical("f1", DataTypes.STRING()),
+                Column.physical("f2", DataTypes.STRING()),
+                Column.physical("f3", DataTypes.STRING()),
+                Column.physical("f4", DataTypes.STRING()),
+                Column.physical("f5", DataTypes.STRING()));
     }
 
     private static List<RowData> deserialize(Map<String, String> options, String body) {
         RowDeserializationSchema schema =
                 new RowDeserializationSchema.Builder()
-                        .setTableSchema(tableSchema())
+                        .setSchema(resolvedSchema())
                         .setProperties(options)
                         .build();
         schema.open(null);

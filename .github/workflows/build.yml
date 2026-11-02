@@ -36,7 +36,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: [11, 17]
+        # Flink 2.x requires Java 17 at compile time.
+        java: [17]
     steps:
       - uses: actions/checkout@v4
 

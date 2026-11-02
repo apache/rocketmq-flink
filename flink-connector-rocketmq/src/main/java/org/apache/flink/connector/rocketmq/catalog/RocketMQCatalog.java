@@ -214,7 +214,11 @@ public class RocketMQCatalog extends AbstractCatalog {
         options.put(RocketMqCatalogConstant.CONNECTOR, RocketMqCatalogConstant.ROCKETMQ_CONNECTOR);
         options.put(RocketMqCatalogConstant.TOPIC, topic);
         options.put(RocketMqCatalogConstant.NAME_SERVER_ADDRESS, mqAdminExt.getNamesrvAddr());
-        return CatalogTable.of(schema, null, Collections.emptyList(), options);
+        return CatalogTable.newBuilder()
+                .schema(schema)
+                .partitionKeys(Collections.emptyList())
+                .options(options)
+                .build();
     }
 
     @Override

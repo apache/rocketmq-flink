@@ -58,13 +58,4 @@ public class RocketMQGrpcSink<IN> implements Sink<IN> {
                 serializationSchema,
                 context.asSerializationSchemaInitializationContext());
     }
-
-    @Deprecated
-    @Override
-    public SinkWriter<IN> createWriter(InitContext context) throws IOException {
-        return new RocketMQGrpcSinkWriter<>(
-                configuration,
-                serializationSchema,
-                context.asSerializationSchemaInitializationContext());
-    }
 }

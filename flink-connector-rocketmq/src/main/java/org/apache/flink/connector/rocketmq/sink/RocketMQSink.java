@@ -19,7 +19,11 @@ package org.apache.flink.connector.rocketmq.sink;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.connector.sink2.Committer;
-import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
+import org.apache.flink.api.connector.sink2.CommitterInitContext;
+import org.apache.flink.api.connector.sink2.Sink;
+import org.apache.flink.api.connector.sink2.SinkWriter;
+import org.apache.flink.api.connector.sink2.SupportsCommitter;
+import org.apache.flink.api.connector.sink2.WriterInitContext;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.sink.committer.RocketMQCommitter;
 import org.apache.flink.connector.rocketmq.sink.committer.SendCommittable;
@@ -30,7 +34,7 @@ import org.apache.flink.core.io.SimpleVersionedSerializer;
 import org.apache.flink.streaming.connectors.rocketmq.common.selector.MessageQueueSelector;
 
 @PublicEvolving
-public class RocketMQSink<IN> implements TwoPhaseCommittingSink<IN, SendCommittable> {
+public class RocketMQSink<IN> implements Sink<IN>, SupportsCommitter<SendCommittable> {
 
     private final Configuration configuration;
     private final MessageQueueSelector messageQueueSelector;
@@ -56,13 +60,13 @@ public class RocketMQSink<IN> implements TwoPhaseCommittingSink<IN, SendCommitta
     }
 
     @Override
-    public PrecommittingSinkWriter<IN, SendCommittable> createWriter(InitContext context) {
+    public SinkWriter<IN> createWriter(WriterInitContext context) {
         return new RocketMQWriter<>(
                 configuration, messageQueueSelector, serializationSchema, context);
     }
 
     @Override
-    public Committer<SendCommittable> createCommitter() {
+    public Committer<SendCommittable> createCommitter(CommitterInitContext context) {
         return new RocketMQCommitter(configuration);
     }
 
