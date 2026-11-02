@@ -28,9 +28,7 @@ import org.apache.flink.api.connector.source.SplitEnumerator;
 import org.apache.flink.api.connector.source.SplitEnumeratorContext;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
-import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.connector.rocketmq.source.enumerator.RocketMQSourceEnumState;
 import org.apache.flink.connector.rocketmq.source.enumerator.RocketMQSourceEnumStateSerializer;
 import org.apache.flink.connector.rocketmq.source.enumerator.RocketMQSourceEnumerator;
@@ -100,9 +98,7 @@ public class RocketMQSource<OUT>
     public SourceReader<OUT, RocketMQSourceSplit> createReader(SourceReaderContext readerContext)
             throws Exception {
 
-        FutureCompletingBlockingQueue<RecordsWithSplitIds<MessageView>> elementsQueue =
-                new FutureCompletingBlockingQueue<>();
-
+        // Flink 2.x: SourceReaderBase owns the elements queue, so it is no longer created here.
         deserializationSchema.open(
                 new DeserializationSchema.InitializationContext() {
                     @Override
@@ -129,14 +125,12 @@ public class RocketMQSource<OUT>
         Supplier<SplitReader<MessageView, RocketMQSourceSplit>> splitReaderSupplier = () -> reader;
 
         RocketMQSourceFetcherManager rocketmqSourceFetcherManager =
-                new RocketMQSourceFetcherManager(
-                        elementsQueue, splitReaderSupplier, (ignore) -> {});
+                new RocketMQSourceFetcherManager(splitReaderSupplier, (ignore) -> {});
 
         RocketMQRecordEmitter<OUT> recordEmitter =
                 new RocketMQRecordEmitter<>(deserializationSchema);
 
         return new RocketMQSourceReader<>(
-                elementsQueue,
                 rocketmqSourceFetcherManager,
                 recordEmitter,
                 configuration,

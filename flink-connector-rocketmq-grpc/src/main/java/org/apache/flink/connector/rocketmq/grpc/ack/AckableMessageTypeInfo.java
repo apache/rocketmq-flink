@@ -21,6 +21,7 @@ package org.apache.flink.connector.rocketmq.grpc.ack;
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.api.common.ExecutionConfig;
+import org.apache.flink.api.common.serialization.SerializerConfig;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeutils.CompositeTypeSerializerSnapshot;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
@@ -81,6 +82,13 @@ public final class AckableMessageTypeInfo<T> extends TypeInformation<AckableMess
     }
 
     @Override
+    public TypeSerializer<AckableMessage<T>> createSerializer(SerializerConfig config) {
+        return new Serializer<>(valueTypeInfo.createSerializer(config));
+    }
+
+    /** Flink 1.x still declares the deprecated {@link ExecutionConfig} overload abstract. */
+    @Override
+    @Deprecated
     public TypeSerializer<AckableMessage<T>> createSerializer(ExecutionConfig config) {
         return new Serializer<>(valueTypeInfo.createSerializer(config));
     }

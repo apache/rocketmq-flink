@@ -21,16 +21,18 @@ package org.apache.flink.streaming.connectors.rocketmq.table;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.sink.RocketMQSinkOptions;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.Column;
+import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.descriptors.DescriptorProperties;
 import org.apache.flink.table.factories.DynamicTableSinkFactory;
 import org.apache.flink.table.factories.FactoryUtil;
-import org.apache.flink.table.utils.TableSchemaUtils;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.connector.rocketmq.common.config.RocketMQOptions.ENDPOINTS;
 import static org.apache.flink.connector.rocketmq.sink.RocketMQSinkOptions.OPTIONAL_ACCESS_KEY;
@@ -102,26 +104,26 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
         helper.validate();
         Map<String, String> rawProperties = context.getCatalogTable().getOptions();
         Configuration properties = Configuration.fromMap(rawProperties);
-        String topicName = properties.getString(TOPIC);
-        String producerGroup = properties.getString(PRODUCER_GROUP);
-        String nameServerAddress = properties.getString(ENDPOINTS);
-        String tag = properties.getString(TAG);
-        String accessKey = properties.getString(OPTIONAL_ACCESS_KEY);
-        String secretKey = properties.getString(OPTIONAL_SECRET_KEY);
-        String dynamicColumn = properties.getString(OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN);
-        String encoding = properties.getString(OPTIONAL_ENCODING);
-        String fieldDelimiter = properties.getString(OPTIONAL_FIELD_DELIMITER);
-        long sleepTimeMs = properties.getLong(OPTIONAL_WRITE_SLEEP_TIME_MS);
-        boolean isDynamicTag = properties.getBoolean(OPTIONAL_WRITE_IS_DYNAMIC_TAG);
+        String topicName = properties.get(TOPIC);
+        String producerGroup = properties.get(PRODUCER_GROUP);
+        String nameServerAddress = properties.get(ENDPOINTS);
+        String tag = properties.get(TAG);
+        String accessKey = properties.get(OPTIONAL_ACCESS_KEY);
+        String secretKey = properties.get(OPTIONAL_SECRET_KEY);
+        String dynamicColumn = properties.get(OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN);
+        String encoding = properties.get(OPTIONAL_ENCODING);
+        String fieldDelimiter = properties.get(OPTIONAL_FIELD_DELIMITER);
+        long sleepTimeMs = properties.get(OPTIONAL_WRITE_SLEEP_TIME_MS);
+        boolean isDynamicTag = properties.get(OPTIONAL_WRITE_IS_DYNAMIC_TAG);
         boolean isDynamicTagIncluded =
-                properties.getBoolean(OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN_WRITE_INCLUDED);
-        boolean writeKeysToBody = properties.getBoolean(OPTIONAL_WRITE_KEYS_TO_BODY);
-        String keyColumnsConfig = properties.getString(OPTIONAL_WRITE_KEY_COLUMNS);
+                properties.get(OPTIONAL_WRITE_DYNAMIC_TAG_COLUMN_WRITE_INCLUDED);
+        boolean writeKeysToBody = properties.get(OPTIONAL_WRITE_KEYS_TO_BODY);
+        String keyColumnsConfig = properties.get(OPTIONAL_WRITE_KEY_COLUMNS);
         String[] keyColumns = new String[0];
         if (keyColumnsConfig != null && keyColumnsConfig.length() > 0) {
             keyColumns = keyColumnsConfig.split(",");
         }
-        String deliveryGuarantee = properties.getString(RocketMQSinkOptions.DELIVERY_GUARANTEE);
+        String deliveryGuarantee = properties.get(RocketMQSinkOptions.DELIVERY_GUARANTEE);
         // `retry.times` is the legacy DDL name of the send retry count. The writer only reads
         // SEND_RETRY_TIMES, so honour the legacy key when the new one is absent instead of
         // silently dropping it; with neither set the documented default (3) applies.
@@ -136,13 +138,13 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
                                                         () ->
                                                                 RocketMQSinkOptions.SEND_RETRY_TIMES
                                                                         .defaultValue()));
-        long sendTimeout = properties.getLong(RocketMQSinkOptions.SEND_TIMEOUT);
-        int sendPendingMax = properties.getInteger(RocketMQSinkOptions.SEND_PENDING_MAX);
-        int executorNum = properties.getInteger(RocketMQSinkOptions.EXECUTOR_NUM);
+        long sendTimeout = properties.get(RocketMQSinkOptions.SEND_TIMEOUT);
+        int sendPendingMax = properties.get(RocketMQSinkOptions.SEND_PENDING_MAX);
+        int executorNum = properties.get(RocketMQSinkOptions.EXECUTOR_NUM);
         DescriptorProperties descriptorProperties = new DescriptorProperties();
         descriptorProperties.putProperties(rawProperties);
-        TableSchema physicalSchema =
-                TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
+        ResolvedSchema physicalSchema =
+                getPhysicalSchema(context.getCatalogTable().getResolvedSchema());
 
         return new RocketMQDynamicTableSink(
                 descriptorProperties,
@@ -166,5 +168,17 @@ public class RocketMQDynamicTableSinkFactory implements DynamicTableSinkFactory 
                 sendTimeout,
                 sendPendingMax,
                 executorNum);
+    }
+
+    /**
+     * Keeps only the physical columns of the catalog schema. Computed and metadata columns are not
+     * written to the RocketMQ message body, so they must not reach the row converter.
+     */
+    private static ResolvedSchema getPhysicalSchema(ResolvedSchema schema) {
+        List<Column> physicalColumns =
+                schema.getColumns().stream()
+                        .filter(Column::isPhysical)
+                        .collect(Collectors.toList());
+        return ResolvedSchema.of(physicalColumns);
     }
 }

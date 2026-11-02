@@ -29,9 +29,7 @@ import org.apache.flink.api.connector.source.SplitEnumerator;
 import org.apache.flink.api.connector.source.SplitEnumeratorContext;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
-import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.connector.rocketmq.grpc.RocketMQGrpcOptions;
 import org.apache.flink.connector.rocketmq.grpc.ack.AckableMessage;
 import org.apache.flink.connector.rocketmq.grpc.ack.AckableMessageTypeInfo;
@@ -93,9 +91,7 @@ public class RocketMQGrpcSource<OUT>
     @Override
     public SourceReader<AckableMessage<OUT>, RocketMQGrpcSourceSplit> createReader(
             SourceReaderContext readerContext) throws Exception {
-        final FutureCompletingBlockingQueue<RecordsWithSplitIds<MessageViewImpl>> elementsQueue =
-                new FutureCompletingBlockingQueue<>();
-
+        // Flink 2.x: SourceReaderBase owns the elements queue, so it is no longer created here.
         deserializationSchema.open(
                 new DeserializationSchema.InitializationContext() {
                     @Override
@@ -115,7 +111,7 @@ public class RocketMQGrpcSource<OUT>
                 () -> splitReader;
 
         final RocketMQGrpcSourceFetcherManager fetcherManager =
-                new RocketMQGrpcSourceFetcherManager(elementsQueue, splitReaderSupplier);
+                new RocketMQGrpcSourceFetcherManager(splitReaderSupplier);
 
         final ConsumerMode mode = configuration.get(RocketMQGrpcSourceOptions.MODE);
         final CheckpointAckTracker ackTracker =
@@ -131,7 +127,6 @@ public class RocketMQGrpcSource<OUT>
         // The same split reader instance is handed to the fetcher manager and to the source reader:
         // in SIMPLE mode the reader acks through the very consumer that received the messages.
         return new RocketMQGrpcSourceReader<>(
-                elementsQueue,
                 fetcherManager,
                 recordEmitter,
                 configuration,

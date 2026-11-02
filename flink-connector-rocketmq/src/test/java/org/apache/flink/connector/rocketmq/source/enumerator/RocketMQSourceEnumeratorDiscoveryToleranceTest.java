@@ -132,7 +132,7 @@ public class RocketMQSourceEnumeratorDiscoveryToleranceTest {
     private static RocketMQSourceEnumerator newEnumerator(InnerConsumer consumer, String topics)
             throws Exception {
         Configuration configuration = new Configuration();
-        configuration.setString(RocketMQSourceOptions.TOPIC, topics);
+        configuration.set(RocketMQSourceOptions.TOPIC, topics);
         RocketMQSourceEnumerator enumerator =
                 new RocketMQSourceEnumerator(
                         OffsetsSelector.earliest(),

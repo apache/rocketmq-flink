@@ -19,8 +19,8 @@ package org.apache.flink.connector.rocketmq.sink.writer;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.eventtime.Watermark;
-import org.apache.flink.api.connector.sink2.Sink;
-import org.apache.flink.api.connector.sink2.TwoPhaseCommittingSink;
+import org.apache.flink.api.connector.sink2.CommittingSinkWriter;
+import org.apache.flink.api.connector.sink2.WriterInitContext;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.connector.rocketmq.sink.InnerProducer;
@@ -52,8 +52,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class RocketMQWriter<IN>
-        implements TwoPhaseCommittingSink.PrecommittingSinkWriter<IN, SendCommittable> {
+public class RocketMQWriter<IN> implements CommittingSinkWriter<IN, SendCommittable> {
 
     private static final Logger LOG = LoggerFactory.getLogger(RocketMQWriter.class);
 
@@ -81,7 +80,7 @@ public class RocketMQWriter<IN>
             Configuration configuration,
             MessageQueueSelector messageQueueSelector,
             RocketMQSerializationSchema<IN> serializationSchema,
-            Sink.InitContext initContext) {
+            WriterInitContext initContext) {
         this(configuration, messageQueueSelector, serializationSchema, initContext, null);
     }
 
@@ -91,23 +90,22 @@ public class RocketMQWriter<IN>
             Configuration configuration,
             MessageQueueSelector messageQueueSelector,
             RocketMQSerializationSchema<IN> serializationSchema,
-            Sink.InitContext initContext,
+            WriterInitContext initContext,
             @Nullable InnerProducer producer) {
 
         this.deliveryGuarantee =
                 DeliveryGuarantee.valueOf(
-                        configuration.getString(RocketMQSinkOptions.DELIVERY_GUARANTEE));
+                        configuration.get(RocketMQSinkOptions.DELIVERY_GUARANTEE));
         this.messageQueueSelector = messageQueueSelector;
         this.serializationSchema = serializationSchema;
         this.rocketmqSinkContext = new RocketMQSinkContextImpl(initContext, configuration);
         this.committableMap = new ConcurrentHashMap<>();
-        this.sendRetryTimes = configuration.getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES);
-        this.sendSleepTimeMs =
-                configuration.getLong(RocketMQSinkOptions.OPTIONAL_WRITE_SLEEP_TIME_MS);
-        this.sendTimeoutMs = configuration.getLong(RocketMQSinkOptions.SEND_TIMEOUT);
+        this.sendRetryTimes = configuration.get(RocketMQSinkOptions.SEND_RETRY_TIMES);
+        this.sendSleepTimeMs = configuration.get(RocketMQSinkOptions.OPTIONAL_WRITE_SLEEP_TIME_MS);
+        this.sendTimeoutMs = configuration.get(RocketMQSinkOptions.SEND_TIMEOUT);
         org.apache.flink.util.Preconditions.checkArgument(
                 sendTimeoutMs > 0, "send.timeout must be positive");
-        int pendingMax = configuration.getInteger(RocketMQSinkOptions.SEND_PENDING_MAX);
+        int pendingMax = configuration.get(RocketMQSinkOptions.SEND_PENDING_MAX);
         org.apache.flink.util.Preconditions.checkArgument(
                 pendingMax > 0, "send.pending.max must be positive");
         this.sendPermits = new Semaphore(pendingMax);
@@ -257,7 +255,7 @@ public class RocketMQWriter<IN>
 
     @Override
     public void writeWatermark(Watermark watermark) throws IOException, InterruptedException {
-        TwoPhaseCommittingSink.PrecommittingSinkWriter.super.writeWatermark(watermark);
+        CommittingSinkWriter.super.writeWatermark(watermark);
     }
 
     @Override

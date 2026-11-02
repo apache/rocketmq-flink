@@ -60,9 +60,9 @@ public class RocketMQDynamicTableSourceFactoryTest {
 
     /**
      * A missing required option must be reported by key only. Note that this drives the factory
-     * directly: going through {@link FactoryUtil#createTableSource} lets Flink run its own required
-     * option check first, and that message repeats every table option, including the access key in
-     * plaintext.
+     * directly: going through {@link FactoryUtil#createDynamicTableSource} lets Flink run its own
+     * required option check first, and that message repeats every table option, including the
+     * access key in plaintext.
      */
     @Test
     public void testMissingRequiredOptionDoesNotEchoOptionValues() {
@@ -75,11 +75,12 @@ public class RocketMQDynamicTableSourceFactoryTest {
 
         final ResolvedCatalogTable table =
                 new ResolvedCatalogTable(
-                        CatalogTable.of(
-                                Schema.newBuilder().fromResolvedSchema(SCHEMA).build(),
-                                "mock source",
-                                Collections.emptyList(),
-                                options),
+                        CatalogTable.newBuilder()
+                                .schema(Schema.newBuilder().fromResolvedSchema(SCHEMA).build())
+                                .comment("mock source")
+                                .partitionKeys(Collections.emptyList())
+                                .options(options)
+                                .build(),
                         SCHEMA);
         final DynamicTableFactory.Context context =
                 new DynamicTableFactory.Context() {
@@ -175,16 +176,18 @@ public class RocketMQDynamicTableSourceFactoryTest {
 
     private static DynamicTableSource createTableSource(
             Map<String, String> options, Configuration conf) {
-        return FactoryUtil.createTableSource(
-                null,
+        return FactoryUtil.createDynamicTableSource(
+                new RocketMQDynamicTableSourceFactory(),
                 ObjectIdentifier.of("default", "default", IDENTIFIER),
                 new ResolvedCatalogTable(
-                        CatalogTable.of(
-                                Schema.newBuilder().fromResolvedSchema(SCHEMA).build(),
-                                "mock source",
-                                Collections.emptyList(),
-                                options),
+                        CatalogTable.newBuilder()
+                                .schema(Schema.newBuilder().fromResolvedSchema(SCHEMA).build())
+                                .comment("mock source")
+                                .partitionKeys(Collections.emptyList())
+                                .options(options)
+                                .build(),
                         SCHEMA),
+                Collections.emptyMap(),
                 conf,
                 RocketMQDynamicTableSourceFactory.class.getClassLoader(),
                 false);

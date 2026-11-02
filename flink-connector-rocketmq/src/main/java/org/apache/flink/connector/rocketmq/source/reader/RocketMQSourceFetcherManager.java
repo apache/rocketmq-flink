@@ -19,13 +19,10 @@ package org.apache.flink.connector.rocketmq.source.reader;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
-import org.apache.flink.connector.base.source.reader.SourceReaderBase;
 import org.apache.flink.connector.base.source.reader.fetcher.SingleThreadFetcherManager;
 import org.apache.flink.connector.base.source.reader.fetcher.SplitFetcher;
 import org.apache.flink.connector.base.source.reader.fetcher.SplitFetcherTask;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
-import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.connector.rocketmq.source.split.RocketMQSourceSplit;
 
 import org.apache.rocketmq.common.message.MessageQueue;
@@ -46,19 +43,18 @@ public class RocketMQSourceFetcherManager
     /**
      * Creates a new SplitFetcherManager with a single I/O threads.
      *
-     * @param elementsQueue The queue that is used to hand over data from the I/O thread (the
-     *     fetchers) to the reader (which emits the records and book-keeps the state. This must be
-     *     the same queue instance that is also passed to the {@link SourceReaderBase}.
+     * <p>Since Flink 2.x the elements queue is owned by {@code SourceReaderBase}, so the fetcher
+     * manager only needs the split reader factory and the finished-split hook.
+     *
      * @param splitReaderSupplier The factory for the split reader that connects to the source
      *     system.
      * @param splitFinishedHook Hook for handling finished splits in split fetchers.
      */
     public RocketMQSourceFetcherManager(
-            FutureCompletingBlockingQueue<RecordsWithSplitIds<MessageView>> elementsQueue,
             Supplier<SplitReader<MessageView, RocketMQSourceSplit>> splitReaderSupplier,
             Consumer<Collection<String>> splitFinishedHook) {
 
-        super(elementsQueue, splitReaderSupplier, new Configuration());
+        super(splitReaderSupplier, new Configuration(), splitFinishedHook);
     }
 
     public void commitOffsets(Map<MessageQueue, Long> offsetsToCommit) {

@@ -141,10 +141,9 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
 
         this.rocketmqSourceReaderMetrics = rocketmqSourceReaderMetrics;
         this.commitOffsetsOnCheckpoint =
-                configuration.getBoolean(RocketMQSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT);
+                configuration.get(RocketMQSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT);
 
-        this.filterTags =
-                parseFilterTags(configuration.getString(RocketMQSourceOptions.OPTIONAL_TAG));
+        this.filterTags = parseFilterTags(configuration.get(RocketMQSourceOptions.OPTIONAL_TAG));
         String sqlExpression = configuration.get(RocketMQSourceOptions.OPTIONAL_SQL);
         this.sqlFilter =
                 sqlExpression == null || sqlExpression.trim().isEmpty()
@@ -173,7 +172,7 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
         }
         try {
             Duration duration =
-                    Duration.ofMillis(this.configuration.getLong(RocketMQOptions.POLL_TIMEOUT));
+                    Duration.ofMillis(this.configuration.get(RocketMQOptions.POLL_TIMEOUT));
             List<MessageView> messageExtList = consumer.poll(duration);
             for (MessageView messageView : messageExtList) {
                 MessageQueue messageQueue =
@@ -202,7 +201,7 @@ public class RocketMQSplitReader<T> implements SplitReader<MessageView, RocketMQ
                 }
                 String splitId = UtilAll.getSplitId(messageQueue);
                 recordsWithSplitIds.recordsForSplit(splitId).add(messageView);
-                if (this.configuration.getBoolean(RocketMQSourceOptions.GLOBAL_DEBUG_MODE)) {
+                if (this.configuration.get(RocketMQSourceOptions.GLOBAL_DEBUG_MODE)) {
                     LOG.info(
                             "Reader fetch splitId: {}, messageId: {}",
                             splitId,

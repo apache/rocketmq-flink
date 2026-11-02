@@ -147,11 +147,11 @@ public class RocketMQSourceEnumerator
                         new RocketMQSourceEnumState(currentSplitAssignment));
 
         // For rocketmq setting
-        this.groupId = configuration.getString(RocketMQSourceOptions.CONSUMER_GROUP);
+        this.groupId = configuration.get(RocketMQSourceOptions.CONSUMER_GROUP);
         this.startingOffsetsSelector = startingOffsetsSelector;
         this.stoppingOffsetsSelector = stoppingOffsetsSelector;
         this.partitionDiscoveryIntervalMs =
-                configuration.getLong(RocketMQSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS);
+                configuration.get(RocketMQSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS);
         this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
 
         // Initialize the task status
@@ -277,7 +277,7 @@ public class RocketMQSourceEnumerator
                 new HashSet<>(
                         Arrays.asList(
                                 configuration
-                                        .getString(RocketMQSourceOptions.TOPIC)
+                                        .get(RocketMQSourceOptions.TOPIC)
                                         .split(RocketMQSourceOptions.TOPIC_SEPARATOR)));
 
         Set<MessageQueue> fetchedQueues = new HashSet<>();

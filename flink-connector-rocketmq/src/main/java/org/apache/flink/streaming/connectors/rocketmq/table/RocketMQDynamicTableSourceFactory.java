@@ -23,12 +23,12 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
 import org.apache.flink.streaming.connectors.rocketmq.RocketMQConfig;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.Column;
+import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.descriptors.DescriptorProperties;
 import org.apache.flink.table.factories.DynamicTableSourceFactory;
 import org.apache.flink.table.factories.FactoryUtil;
-import org.apache.flink.table.utils.TableSchemaUtils;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.StringUtils;
 
@@ -36,9 +36,11 @@ import org.apache.commons.lang3.time.FastDateFormat;
 
 import java.text.ParseException;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.table.factories.FactoryUtil.createTableFactoryHelper;
 
@@ -83,6 +85,8 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         optionalOptions.add(RocketMQSourceOptions.OPTIONAL_SECRET_KEY);
         optionalOptions.add(RocketMQSourceOptions.OPTIONAL_STARTUP_SCAN_MODE);
         optionalOptions.add(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_DATE);
+        // Kept so existing DDL still validates. Flink 2.x removed SourceFunction, so the FLIP-27
+        // source is the only implementation and this switch is a no-op.
         optionalOptions.add(RocketMQSourceOptions.OPTIONAL_USE_NEW_API);
         optionalOptions.add(RocketMQSourceOptions.PULL_BATCH_SIZE);
         optionalOptions.add(RocketMQSourceOptions.ALLOCATE_MESSAGE_QUEUE_STRATEGY);
@@ -102,11 +106,11 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         helper.validate();
         Map<String, String> rawProperties = context.getCatalogTable().getOptions();
         Configuration configuration = Configuration.fromMap(rawProperties);
-        String topic = configuration.getString(RocketMQSourceOptions.TOPIC);
-        String consumerGroup = configuration.getString(RocketMQSourceOptions.CONSUMER_GROUP);
-        String nameServerAddress = configuration.getString(RocketMQSourceOptions.ENDPOINTS);
-        String tag = configuration.getString(RocketMQSourceOptions.OPTIONAL_TAG);
-        String sql = configuration.getString(RocketMQSourceOptions.OPTIONAL_SQL);
+        String topic = configuration.get(RocketMQSourceOptions.TOPIC);
+        String consumerGroup = configuration.get(RocketMQSourceOptions.CONSUMER_GROUP);
+        String nameServerAddress = configuration.get(RocketMQSourceOptions.ENDPOINTS);
+        String tag = configuration.get(RocketMQSourceOptions.OPTIONAL_TAG);
+        String sql = configuration.get(RocketMQSourceOptions.OPTIONAL_SQL);
         if (configuration.contains(RocketMQSourceOptions.OPTIONAL_STARTUP_SCAN_MODE)
                 && (configuration.contains(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_TIMESTAMP)
                         || configuration.contains(
@@ -119,14 +123,14 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                             RocketMQSourceOptions.OPTIONAL_STARTUP_SCAN_MODE.key()));
         }
         long startMessageOffset =
-                configuration.getLong(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_SPECIFIC);
+                configuration.get(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_SPECIFIC);
         long startTimeMs =
-                configuration.getLong(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_TIMESTAMP);
+                configuration.get(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_TIMESTAMP);
         String startDateTime =
-                configuration.getString(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_DATE);
-        String timeZone = configuration.getString(RocketMQSourceOptions.OPTIONAL_TIME_ZONE);
-        String accessKey = configuration.getString(RocketMQSourceOptions.OPTIONAL_ACCESS_KEY);
-        String secretKey = configuration.getString(RocketMQSourceOptions.OPTIONAL_SECRET_KEY);
+                configuration.get(RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_DATE);
+        String timeZone = configuration.get(RocketMQSourceOptions.OPTIONAL_TIME_ZONE);
+        String accessKey = configuration.get(RocketMQSourceOptions.OPTIONAL_ACCESS_KEY);
+        String secretKey = configuration.get(RocketMQSourceOptions.OPTIONAL_SECRET_KEY);
         long startTime = startTimeMs;
         if (startTime == -1) {
             if (!StringUtils.isNullOrWhitespaceOnly(startDateTime)) {
@@ -144,7 +148,7 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
         }
         long stopInMs = Long.MAX_VALUE;
         String endDateTime =
-                configuration.getString(RocketMQSourceOptions.OPTIONAL_STOP_OFFSET_TIMESTAMP);
+                configuration.get(RocketMQSourceOptions.OPTIONAL_STOP_OFFSET_TIMESTAMP);
         if (!StringUtils.isNullOrWhitespaceOnly(endDateTime)) {
             try {
                 stopInMs = parseDateString(endDateTime, timeZone);
@@ -160,19 +164,19 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                     stopInMs >= startTime, "Start time should be less than stop time.");
         }
         long partitionDiscoveryIntervalMs =
-                configuration.getLong(RocketMQSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS);
-        boolean useNewApi = configuration.getBoolean(RocketMQSourceOptions.OPTIONAL_USE_NEW_API);
+                configuration.get(RocketMQSourceOptions.PARTITION_DISCOVERY_INTERVAL_MS);
         DescriptorProperties descriptorProperties = new DescriptorProperties();
         descriptorProperties.putProperties(rawProperties);
-        TableSchema physicalSchema =
-                TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
-        descriptorProperties.putTableSchema("schema", physicalSchema);
+        // Flink 2.x removed TableSchema/SchemaValidator: the deserializer now takes the resolved
+        // physical schema directly instead of rebuilding it from the descriptor properties.
+        ResolvedSchema physicalSchema =
+                getPhysicalSchema(context.getCatalogTable().getResolvedSchema());
         String consumerOffsetMode =
-                configuration.getString(
+                configuration.get(
                         RocketMQSourceOptions.OPTIONAL_STARTUP_SCAN_MODE,
                         RocketMQConfig.CONSUMER_OFFSET_LATEST);
         long consumerOffsetTimestamp =
-                configuration.getLong(
+                configuration.get(
                         RocketMQSourceOptions.OPTIONAL_STARTUP_OFFSET_TIMESTAMP,
                         RocketMQConfig.DEFAULT_START_MESSAGE_OFFSET);
 
@@ -182,7 +186,7 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
             consumerOffsetMode = "timestamp";
         }
         return new RocketMQScanTableSource(
-                configuration.getLong(RocketMQSourceOptions.PULL_TIMEOUT_LONG_POLLING_SUSPEND),
+                configuration.get(RocketMQSourceOptions.PULL_TIMEOUT_LONG_POLLING_SUSPEND),
                 descriptorProperties,
                 physicalSchema,
                 topic,
@@ -197,8 +201,19 @@ public class RocketMQDynamicTableSourceFactory implements DynamicTableSourceFact
                 startMessageOffset < 0 ? startTime : -1L,
                 partitionDiscoveryIntervalMs,
                 consumerOffsetMode,
-                consumerOffsetTimestamp,
-                useNewApi);
+                consumerOffsetTimestamp);
+    }
+
+    /**
+     * Keeps only the physical columns of the catalog schema. Computed and metadata columns are not
+     * part of the payload RocketMQ delivers, so they must not reach the deserializer.
+     */
+    private static ResolvedSchema getPhysicalSchema(ResolvedSchema schema) {
+        List<Column> physicalColumns =
+                schema.getColumns().stream()
+                        .filter(Column::isPhysical)
+                        .collect(Collectors.toList());
+        return ResolvedSchema.of(physicalColumns);
     }
 
     private Long parseDateString(String dateString, String timeZone) throws ParseException {

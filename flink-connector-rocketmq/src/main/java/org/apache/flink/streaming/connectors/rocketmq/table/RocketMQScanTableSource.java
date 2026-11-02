@@ -28,16 +28,11 @@ import org.apache.flink.connector.rocketmq.source.reader.deserializer.BytesMessa
 import org.apache.flink.connector.rocketmq.source.reader.deserializer.RocketMQDeserializationSchema;
 import org.apache.flink.connector.rocketmq.source.reader.deserializer.RocketMQRowDeserializationSchema;
 import org.apache.flink.connector.rocketmq.source.reader.deserializer.RowDeserializationSchema.MetadataConverter;
-import org.apache.flink.streaming.connectors.rocketmq.RocketMQConfig;
-import org.apache.flink.streaming.connectors.rocketmq.RocketMQSourceFunction;
-import org.apache.flink.streaming.connectors.rocketmq.common.serialization.KeyValueDeserializationSchema;
-import org.apache.flink.streaming.connectors.rocketmq.common.serialization.RowKeyValueDeserializationSchema;
 import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.source.DynamicTableSource;
 import org.apache.flink.table.connector.source.ScanTableSource;
-import org.apache.flink.table.connector.source.SourceFunctionProvider;
 import org.apache.flink.table.connector.source.SourceProvider;
 import org.apache.flink.table.connector.source.abilities.SupportsReadingMetadata;
 import org.apache.flink.table.data.RowData;
@@ -49,14 +44,13 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.stream.Stream;
 
 /** Defines the scan table source of RocketMQ. */
 public class RocketMQScanTableSource implements ScanTableSource, SupportsReadingMetadata {
 
     private final DescriptorProperties properties;
-    private final TableSchema schema;
+    private final ResolvedSchema schema;
 
     private final String consumerOffsetMode;
     private final long consumerOffsetTimestamp;
@@ -74,7 +68,6 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     private final long partitionDiscoveryIntervalMs;
     private final long startMessageOffset;
     private final long startTime;
-    private final boolean useNewApi;
     private final long pollTime;
 
     private List<String> metadataKeys;
@@ -82,7 +75,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
     public RocketMQScanTableSource(
             long pollTime,
             DescriptorProperties properties,
-            TableSchema schema,
+            ResolvedSchema schema,
             String topic,
             String consumerGroup,
             String nameServerAddress,
@@ -95,8 +88,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             long startTime,
             long partitionDiscoveryIntervalMs,
             String consumerOffsetMode,
-            long consumerOffsetTimestamp,
-            boolean useNewApi) {
+            long consumerOffsetTimestamp) {
         this.pollTime = pollTime;
         this.properties = properties;
         this.schema = schema;
@@ -111,7 +103,6 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
         this.startMessageOffset = startMessageOffset;
         this.startTime = startTime;
         this.partitionDiscoveryIntervalMs = partitionDiscoveryIntervalMs;
-        this.useNewApi = useNewApi;
         this.metadataKeys = Collections.emptyList();
         this.consumerOffsetMode = consumerOffsetMode;
         this.consumerOffsetTimestamp = consumerOffsetTimestamp;
@@ -124,47 +115,41 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
 
     @Override
     public ScanRuntimeProvider getScanRuntimeProvider(ScanContext scanContext) {
-        if (useNewApi) {
-            Configuration sourceConfig = new Configuration();
-            sourceConfig.setString(RocketMQSourceOptions.ENDPOINTS, nameServerAddress);
-            sourceConfig.setString(RocketMQSourceOptions.CONSUMER_GROUP, consumerGroup);
-            sourceConfig.setString(RocketMQSourceOptions.TOPIC, topic);
-            if (accessKey != null) {
-                sourceConfig.setString(RocketMQOptions.OPTIONAL_ACCESS_KEY, accessKey);
-            }
-            if (secretKey != null) {
-                sourceConfig.setString(RocketMQOptions.OPTIONAL_SECRET_KEY, secretKey);
-            }
-            sourceConfig.setString(RocketMQSourceOptions.OPTIONAL_TAG, tag);
-            sourceConfig.setLong(
-                    RocketMQOptions.PARTITION_DISCOVERY_INTERVAL_MS, partitionDiscoveryIntervalMs);
-            // Pass SQL filter to new API path — previously only worked in old API (P0 fix)
-            if (sql != null) {
-                sourceConfig.setString(RocketMQSourceOptions.OPTIONAL_SQL, sql);
-            }
-
-            RocketMQSourceBuilder<RowData> builder =
-                    RocketMQSource.<RowData>builder()
-                            .setEndpoints(nameServerAddress)
-                            .setGroupId(consumerGroup)
-                            .setTopics(topic)
-                            .setDeserializer(createRocketMQDeserializationSchema())
-                            .setMinOffsets(createStartingOffsetsSelector())
-                            .setConfig(sourceConfig);
-
-            if (isBounded()) {
-                builder.setBounded(createStoppingOffsetsSelector());
-            } else {
-                builder.setUnbounded(createStoppingOffsetsSelector());
-            }
-
-            return SourceProvider.of(builder.build());
-        } else {
-            return SourceFunctionProvider.of(
-                    new RocketMQSourceFunction<>(
-                            createKeyValueDeserializationSchema(), getConsumerProps()),
-                    isBounded());
+        // Flink 2.x removed SourceFunction, so the FLIP-27 source is the only runtime path.
+        Configuration sourceConfig = new Configuration();
+        sourceConfig.set(RocketMQSourceOptions.ENDPOINTS, nameServerAddress);
+        sourceConfig.set(RocketMQSourceOptions.CONSUMER_GROUP, consumerGroup);
+        sourceConfig.set(RocketMQSourceOptions.TOPIC, topic);
+        if (accessKey != null) {
+            sourceConfig.set(RocketMQOptions.OPTIONAL_ACCESS_KEY, accessKey);
         }
+        if (secretKey != null) {
+            sourceConfig.set(RocketMQOptions.OPTIONAL_SECRET_KEY, secretKey);
+        }
+        sourceConfig.set(RocketMQSourceOptions.OPTIONAL_TAG, tag);
+        sourceConfig.set(
+                RocketMQOptions.PARTITION_DISCOVERY_INTERVAL_MS, partitionDiscoveryIntervalMs);
+        // Pass SQL filter to new API path — previously only worked in old API (P0 fix)
+        if (sql != null) {
+            sourceConfig.set(RocketMQSourceOptions.OPTIONAL_SQL, sql);
+        }
+
+        RocketMQSourceBuilder<RowData> builder =
+                RocketMQSource.<RowData>builder()
+                        .setEndpoints(nameServerAddress)
+                        .setGroupId(consumerGroup)
+                        .setTopics(topic)
+                        .setDeserializer(createRocketMQDeserializationSchema())
+                        .setMinOffsets(createStartingOffsetsSelector())
+                        .setConfig(sourceConfig);
+
+        if (isBounded()) {
+            builder.setBounded(createStoppingOffsetsSelector());
+        } else {
+            builder.setUnbounded(createStoppingOffsetsSelector());
+        }
+
+        return SourceProvider.of(builder.build());
     }
 
     @Override
@@ -199,8 +184,7 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
                         startTime,
                         partitionDiscoveryIntervalMs,
                         consumerOffsetMode,
-                        consumerOffsetTimestamp,
-                        useNewApi);
+                        consumerOffsetTimestamp);
         tableSource.metadataKeys = metadataKeys;
         return tableSource;
     }
@@ -256,27 +240,6 @@ public class RocketMQScanTableSource implements ScanTableSource, SupportsReading
             return OffsetsSelector.timestamp(stopInMs);
         }
         return new OffsetsSelectorNoStopping();
-    }
-
-    private KeyValueDeserializationSchema<RowData> createKeyValueDeserializationSchema() {
-        return new RowKeyValueDeserializationSchema.Builder()
-                .setProperties(properties.asMap())
-                .setTableSchema(schema)
-                .build();
-    }
-
-    private Properties getConsumerProps() {
-        Properties consumerProps = new Properties();
-        consumerProps.setProperty(RocketMQConfig.CONSUMER_TOPIC, topic);
-        consumerProps.setProperty(RocketMQConfig.CONSUMER_GROUP, consumerGroup);
-        consumerProps.setProperty(RocketMQConfig.NAME_SERVER_ADDR, nameServerAddress);
-        consumerProps.setProperty(RocketMQConfig.CONSUMER_TAG, tag);
-        consumerProps.setProperty(RocketMQConfig.CONSUMER_SQL, sql);
-        consumerProps.setProperty(
-                RocketMQConfig.CONSUMER_START_MESSAGE_OFFSET, String.valueOf(startMessageOffset));
-        consumerProps.setProperty(RocketMQConfig.ACCESS_KEY, accessKey);
-        consumerProps.setProperty(RocketMQConfig.SECRET_KEY, secretKey);
-        return consumerProps;
     }
 
     // --------------------------------------------------------------------------------------------

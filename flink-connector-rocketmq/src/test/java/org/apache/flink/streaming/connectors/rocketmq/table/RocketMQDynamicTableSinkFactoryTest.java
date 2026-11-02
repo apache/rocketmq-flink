@@ -110,7 +110,7 @@ public class RocketMQDynamicTableSinkFactoryTest {
         Map<String, String> options = sinkOptions();
         options.put(RocketMQSinkOptions.OPTIONAL_WRITE_RETRY_TIMES.key(), "7");
 
-        assertThat(sinkConfiguration(options).getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES))
+        assertThat(sinkConfiguration(options).get(RocketMQSinkOptions.SEND_RETRY_TIMES))
                 .isEqualTo(7);
     }
 
@@ -120,15 +120,13 @@ public class RocketMQDynamicTableSinkFactoryTest {
         options.put(RocketMQSinkOptions.OPTIONAL_WRITE_RETRY_TIMES.key(), "7");
         options.put(RocketMQSinkOptions.SEND_RETRY_TIMES.key(), "5");
 
-        assertThat(sinkConfiguration(options).getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES))
+        assertThat(sinkConfiguration(options).get(RocketMQSinkOptions.SEND_RETRY_TIMES))
                 .isEqualTo(5);
     }
 
     @Test
     public void testRetryDefaultsToThreeWhenNeitherKeyIsSet() throws Exception {
-        assertThat(
-                        sinkConfiguration(sinkOptions())
-                                .getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES))
+        assertThat(sinkConfiguration(sinkOptions()).get(RocketMQSinkOptions.SEND_RETRY_TIMES))
                 .isEqualTo(3);
     }
 
@@ -153,16 +151,18 @@ public class RocketMQDynamicTableSinkFactoryTest {
     }
 
     private static DynamicTableSink createDynamicTableSink(Map<String, String> options) {
-        return FactoryUtil.createTableSink(
-                null,
+        return FactoryUtil.createDynamicTableSink(
+                new RocketMQDynamicTableSinkFactory(),
                 ObjectIdentifier.of("default", "default", "mq"),
                 new ResolvedCatalogTable(
-                        CatalogTable.of(
-                                Schema.newBuilder().fromResolvedSchema(SCHEMA).build(),
-                                "mock sink",
-                                Collections.emptyList(),
-                                options),
+                        CatalogTable.newBuilder()
+                                .schema(Schema.newBuilder().fromResolvedSchema(SCHEMA).build())
+                                .comment("mock sink")
+                                .partitionKeys(Collections.emptyList())
+                                .options(options)
+                                .build(),
                         SCHEMA),
+                Collections.emptyMap(),
                 new Configuration(),
                 RocketMQDynamicTableSinkFactory.class.getClassLoader(),
                 false);

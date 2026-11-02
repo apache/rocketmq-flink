@@ -25,11 +25,10 @@ import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
 import org.apache.flink.connector.rocketmq.source.RocketMQSourceOptions;
 import org.apache.flink.connector.rocketmq.source.util.ByteSerializer;
 import org.apache.flink.connector.rocketmq.source.util.StringSerializer;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.descriptors.DescriptorProperties;
-import org.apache.flink.table.descriptors.SchemaValidator;
 import org.apache.flink.table.runtime.typeutils.InternalTypeInfo;
 import org.apache.flink.table.types.DataType;
 import org.apache.flink.table.types.logical.RowType;
@@ -54,7 +53,9 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
     private static final long serialVersionUID = -1L;
     private static final Logger LOGGER = LoggerFactory.getLogger(RowDeserializationSchema.class);
 
-    private transient TableSchema tableSchema;
+    private final String[] fieldNames;
+    private final DataType[] fieldDataTypes;
+    private final RowType rowType;
     private final DirtyDataStrategy formatErrorStrategy;
     private final DirtyDataStrategy fieldMissingStrategy;
     private final DirtyDataStrategy fieldIncrementStrategy;
@@ -66,7 +67,6 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
     private final int totalColumnSize;
     private final int dataColumnSize;
     private final ByteSerializer.ValueType[] fieldTypes;
-    private transient DataType[] fieldDataTypes;
     private final Set<String> headerFields;
     private final Map<String, String> properties;
     private final Map<String, Integer> columnIndexMapping;
@@ -77,7 +77,7 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
     private static final int DEFAULT_LOG_INTERVAL_MS = 60 * 1000;
 
     public RowDeserializationSchema(
-            TableSchema tableSchema,
+            ResolvedSchema schema,
             DirtyDataStrategy formatErrorStrategy,
             DirtyDataStrategy fieldMissingStrategy,
             DirtyDataStrategy fieldIncrementStrategy,
@@ -89,7 +89,12 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
             MetadataConverter[] metadataConverters,
             List<String> headerFields,
             Map<String, String> properties) {
-        this.tableSchema = tableSchema;
+        // ResolvedSchema itself is not serializable, so everything the deserializer needs at
+        // runtime is flattened into serializable fields once, here in the constructor. Flink 2.x
+        // removed SchemaValidator, which means the schema can no longer be rebuilt from the
+        // descriptor properties in open().
+        this.fieldNames = schema.getColumnNames().toArray(new String[0]);
+        this.fieldDataTypes = schema.getColumnDataTypes().toArray(new DataType[0]);
         this.formatErrorStrategy = formatErrorStrategy;
         this.fieldMissingStrategy = fieldMissingStrategy;
         this.fieldIncrementStrategy = fieldIncrementStrategy;
@@ -100,17 +105,19 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
         this.metadataCollector = new MetadataCollector(hasMetadata, metadataConverters);
         this.headerFields = headerFields == null ? null : new HashSet<>(headerFields);
         this.properties = properties;
-        this.totalColumnSize = tableSchema.getFieldNames().length;
+        this.totalColumnSize = fieldNames.length;
         int dataColumnSize = 0;
         this.fieldTypes = new ByteSerializer.ValueType[totalColumnSize];
         this.columnIndexMapping = new HashMap<>();
         this.dataIndexMapping = new HashMap<>();
         for (int index = 0; index < totalColumnSize; index++) {
-            this.columnIndexMapping.put(tableSchema.getFieldNames()[index], index);
+            this.columnIndexMapping.put(fieldNames[index], index);
         }
+        final DataTypes.Field[] fields = new DataTypes.Field[totalColumnSize];
         for (int index = 0; index < totalColumnSize; index++) {
+            fields[index] = DataTypes.FIELD(fieldNames[index], fieldDataTypes[index]);
             ByteSerializer.ValueType type =
-                    ByteSerializer.getTypeIndex(tableSchema.getFieldTypes()[index].getTypeClass());
+                    ByteSerializer.getTypeIndex(fieldDataTypes[index].getConversionClass());
             this.fieldTypes[index] = type;
             if (!isHeaderField(index)) {
                 dataIndexMapping.put(dataColumnSize, index);
@@ -118,14 +125,11 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
             }
         }
         this.dataColumnSize = dataColumnSize;
+        this.rowType = (RowType) DataTypes.ROW(fields).getLogicalType();
     }
 
     @Override
     public void open(InitializationContext context) {
-        DescriptorProperties descriptorProperties = new DescriptorProperties();
-        descriptorProperties.putProperties(properties);
-        this.tableSchema = SchemaValidator.deriveTableSinkSchema(descriptorProperties);
-        this.fieldDataTypes = tableSchema.getFieldDataTypes();
         this.lastLogExceptionTime = System.currentTimeMillis();
         this.lastLogHandleFieldTime = System.currentTimeMillis();
     }
@@ -186,13 +190,13 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
     private boolean isOnlyHaveVarbinaryDataField() {
         if (dataColumnSize == 1 && dataIndexMapping.size() == 1) {
             int index = dataIndexMapping.get(0);
-            return isByteArrayType(tableSchema.getFieldNames()[index]);
+            return isByteArrayType(fieldNames[index]);
         }
         return false;
     }
 
     private boolean isAllHeaderField() {
-        return null != headerFields && headerFields.size() == tableSchema.getFieldNames().length;
+        return null != headerFields && headerFields.size() == fieldNames.length;
     }
 
     private void deserializeBytesMessage(BytesMessage message, Collector<RowData> collector) {
@@ -241,11 +245,11 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
     }
 
     private boolean isHeaderField(int index) {
-        return headerFields != null && headerFields.contains(tableSchema.getFieldNames()[index]);
+        return headerFields != null && headerFields.contains(fieldNames[index]);
     }
 
     private String getHeaderValue(BytesMessage message, int index) {
-        Object object = message.getProperty(tableSchema.getFieldNames()[index]);
+        Object object = message.getProperty(fieldNames[index]);
         return object == null ? "" : (String) object;
     }
 
@@ -267,12 +271,9 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
     }
 
     private boolean isByteArrayType(String fieldName) {
-        TypeInformation<?> typeInformation =
-                tableSchema.getFieldTypes()[columnIndexMapping.get(fieldName)];
-        if (typeInformation != null) {
-            ByteSerializer.ValueType valueType =
-                    ByteSerializer.getTypeIndex(typeInformation.getTypeClass());
-            return valueType == ByteSerializer.ValueType.V_ByteArray;
+        Integer columnIndex = columnIndexMapping.get(fieldName);
+        if (columnIndex != null) {
+            return fieldTypes[columnIndex] == ByteSerializer.ValueType.V_ByteArray;
         }
         return false;
     }
@@ -394,7 +395,7 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
 
     @Override
     public TypeInformation<RowData> getProducedType() {
-        return InternalTypeInfo.of((RowType) tableSchema.toRowDataType().getLogicalType());
+        return InternalTypeInfo.of(rowType);
     }
 
     // --------------------------------------------------------------------------------------------
@@ -452,7 +453,7 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
     /** Builder of {@link RowDeserializationSchema}. */
     public static class Builder {
 
-        private TableSchema schema;
+        private ResolvedSchema schema;
         private DirtyDataStrategy formatErrorStrategy = DirtyDataStrategy.SKIP;
         private DirtyDataStrategy fieldMissingStrategy = DirtyDataStrategy.SKIP;
         private DirtyDataStrategy fieldIncrementStrategy = DirtyDataStrategy.CUT;
@@ -467,8 +468,8 @@ public class RowDeserializationSchema implements QueryableSchema<List<BytesMessa
 
         public Builder() {}
 
-        public Builder setTableSchema(TableSchema tableSchema) {
-            this.schema = tableSchema;
+        public Builder setSchema(ResolvedSchema schema) {
+            this.schema = schema;
             return this;
         }
 
