@@ -57,9 +57,9 @@ class InnerProducerImplTest {
     @Test
     void sendTimeoutShouldBeAppliedToProducer() throws Exception {
         Configuration config = new Configuration();
-        config.setString(RocketMQSinkOptions.ENDPOINTS, "127.0.0.1:9876");
-        config.setString(RocketMQSinkOptions.PRODUCER_GROUP, "test-group");
-        config.setLong(RocketMQSinkOptions.SEND_TIMEOUT, 8000L);
+        config.set(RocketMQSinkOptions.ENDPOINTS, "127.0.0.1:9876");
+        config.set(RocketMQSinkOptions.PRODUCER_GROUP, "test-group");
+        config.set(RocketMQSinkOptions.SEND_TIMEOUT, 8000L);
 
         try (InnerProducerImpl impl = new InnerProducerImpl(config)) {
             TransactionMQProducer producer = getProducerViaReflection(impl);
@@ -70,9 +70,9 @@ class InnerProducerImplTest {
     @Test
     void sendRetryTimesShouldBeAppliedToProducer() throws Exception {
         Configuration config = new Configuration();
-        config.setString(RocketMQSinkOptions.ENDPOINTS, "127.0.0.1:9876");
-        config.setString(RocketMQSinkOptions.PRODUCER_GROUP, "test-group");
-        config.setInteger(RocketMQSinkOptions.SEND_RETRY_TIMES, 5);
+        config.set(RocketMQSinkOptions.ENDPOINTS, "127.0.0.1:9876");
+        config.set(RocketMQSinkOptions.PRODUCER_GROUP, "test-group");
+        config.set(RocketMQSinkOptions.SEND_RETRY_TIMES, 5);
 
         try (InnerProducerImpl impl = new InnerProducerImpl(config)) {
             TransactionMQProducer producer = getProducerViaReflection(impl);
@@ -84,8 +84,8 @@ class InnerProducerImplTest {
     @Test
     void defaultSendTimeoutShouldBe5000ms() throws Exception {
         Configuration config = new Configuration();
-        config.setString(RocketMQSinkOptions.ENDPOINTS, "127.0.0.1:9876");
-        config.setString(RocketMQSinkOptions.PRODUCER_GROUP, "test-group");
+        config.set(RocketMQSinkOptions.ENDPOINTS, "127.0.0.1:9876");
+        config.set(RocketMQSinkOptions.PRODUCER_GROUP, "test-group");
 
         try (InnerProducerImpl impl = new InnerProducerImpl(config)) {
             TransactionMQProducer producer = getProducerViaReflection(impl);
@@ -96,8 +96,8 @@ class InnerProducerImplTest {
     @Test
     void defaultRetryTimesShouldBe3() throws Exception {
         Configuration config = new Configuration();
-        config.setString(RocketMQSinkOptions.ENDPOINTS, "127.0.0.1:9876");
-        config.setString(RocketMQSinkOptions.PRODUCER_GROUP, "test-group");
+        config.set(RocketMQSinkOptions.ENDPOINTS, "127.0.0.1:9876");
+        config.set(RocketMQSinkOptions.PRODUCER_GROUP, "test-group");
 
         try (InnerProducerImpl impl = new InnerProducerImpl(config)) {
             TransactionMQProducer producer = getProducerViaReflection(impl);
@@ -290,8 +290,8 @@ class InnerProducerImplTest {
     @Test
     void asyncSenderUsesConfiguredBoundAndClosesTest() throws Exception {
         Configuration config = configuration();
-        config.setInteger(RocketMQSinkOptions.EXECUTOR_NUM, 2);
-        config.setInteger(RocketMQSinkOptions.SEND_PENDING_MAX, 16);
+        config.set(RocketMQSinkOptions.EXECUTOR_NUM, 2);
+        config.set(RocketMQSinkOptions.SEND_PENDING_MAX, 16);
         InnerProducerImpl impl = new InnerProducerImpl(config);
         Field field = InnerProducerImpl.class.getDeclaredField("asyncSenderExecutor");
         field.setAccessible(true);
@@ -315,8 +315,8 @@ class InnerProducerImplTest {
 
     private static Configuration configuration() {
         Configuration config = new Configuration();
-        config.setString(RocketMQSinkOptions.ENDPOINTS, "127.0.0.1:9876");
-        config.setString(RocketMQSinkOptions.PRODUCER_GROUP, "test-group");
+        config.set(RocketMQSinkOptions.ENDPOINTS, "127.0.0.1:9876");
+        config.set(RocketMQSinkOptions.PRODUCER_GROUP, "test-group");
         return config;
     }
 

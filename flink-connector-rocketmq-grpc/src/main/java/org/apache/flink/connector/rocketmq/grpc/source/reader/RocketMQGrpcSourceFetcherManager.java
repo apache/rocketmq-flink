@@ -20,10 +20,8 @@ package org.apache.flink.connector.rocketmq.grpc.source.reader;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.fetcher.SingleThreadFetcherManager;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitReader;
-import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.connector.rocketmq.grpc.source.split.RocketMQGrpcSourceSplit;
 
 import java.util.function.Supplier;
@@ -32,14 +30,16 @@ import java.util.function.Supplier;
  * The {@link SingleThreadFetcherManager} for the RocketMQ gRPC source. The Pop source does not
  * acknowledge messages from the source side (acknowledgement is deferred to a downstream operator),
  * so this manager only provides a single fetcher thread that receives messages.
+ *
+ * <p>Since Flink 2.x the elements queue is owned by {@code SourceReaderBase} and is no longer passed
+ * to the fetcher manager.
  */
 @Internal
 public class RocketMQGrpcSourceFetcherManager
         extends SingleThreadFetcherManager<MessageViewImpl, RocketMQGrpcSourceSplit> {
 
     public RocketMQGrpcSourceFetcherManager(
-            FutureCompletingBlockingQueue<RecordsWithSplitIds<MessageViewImpl>> elementsQueue,
             Supplier<SplitReader<MessageViewImpl, RocketMQGrpcSourceSplit>> splitReaderSupplier) {
-        super(elementsQueue, splitReaderSupplier, new Configuration());
+        super(splitReaderSupplier, new Configuration());
     }
 }

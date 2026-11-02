@@ -69,11 +69,11 @@ public class InnerProducerImpl implements InnerProducer {
 
     public InnerProducerImpl(Configuration configuration) {
         this.configuration = configuration;
-        this.groupId = configuration.getString(RocketMQSinkOptions.PRODUCER_GROUP);
-        this.endPoints = configuration.getString(RocketMQSinkOptions.ENDPOINTS);
+        this.groupId = configuration.get(RocketMQSinkOptions.PRODUCER_GROUP);
+        this.endPoints = configuration.get(RocketMQSinkOptions.ENDPOINTS);
 
-        String accessKey = configuration.getString(RocketMQSinkOptions.OPTIONAL_ACCESS_KEY);
-        String secretKey = configuration.getString(RocketMQSinkOptions.OPTIONAL_SECRET_KEY);
+        String accessKey = configuration.get(RocketMQSinkOptions.OPTIONAL_ACCESS_KEY);
+        String secretKey = configuration.get(RocketMQSinkOptions.OPTIONAL_SECRET_KEY);
 
         if (!StringUtils.isNullOrWhitespaceOnly(accessKey)
                 && !StringUtils.isNullOrWhitespaceOnly(secretKey)) {
@@ -93,8 +93,8 @@ public class InnerProducerImpl implements InnerProducer {
                         groupId,
                         UUID.randomUUID().toString()));
 
-        int corePoolSize = configuration.getInteger(RocketMQSinkOptions.EXECUTOR_NUM);
-        int pendingMax = configuration.getInteger(RocketMQSinkOptions.SEND_PENDING_MAX);
+        int corePoolSize = configuration.get(RocketMQSinkOptions.EXECUTOR_NUM);
+        int pendingMax = configuration.get(RocketMQSinkOptions.SEND_PENDING_MAX);
         org.apache.flink.util.Preconditions.checkArgument(
                 corePoolSize > 0 && pendingMax > 0,
                 "executor.num and send.pending.max must be positive");
@@ -121,40 +121,40 @@ public class InnerProducerImpl implements InnerProducer {
                         }));
 
         // Apply send timeout — previously a ghost parameter (P0 fix)
-        long sendTimeout = configuration.getLong(RocketMQSinkOptions.SEND_TIMEOUT);
+        long sendTimeout = configuration.get(RocketMQSinkOptions.SEND_TIMEOUT);
         producer.setSendMsgTimeout((int) sendTimeout);
 
         // Apply retry times — previously a ghost parameter (P0 fix)
-        int retryTimes = configuration.getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES);
+        int retryTimes = configuration.get(RocketMQSinkOptions.SEND_RETRY_TIMES);
         producer.setRetryTimesWhenSendFailed(retryTimes);
         producer.setRetryTimesWhenSendAsyncFailed(retryTimes);
 
         // Apply common client parameters (P2 fix)
-        String namespace = configuration.getString(RocketMQOptions.NAMESPACE);
+        String namespace = configuration.get(RocketMQOptions.NAMESPACE);
         if (namespace != null && !namespace.isEmpty()) {
             producer.setNamespace(namespace);
         }
         if (configuration.contains(RocketMQOptions.OPTIONAL_ACCESS_CHANNEL)) {
             producer.setAccessChannel(configuration.get(RocketMQOptions.OPTIONAL_ACCESS_CHANNEL));
         }
-        boolean unitMode = configuration.getBoolean(RocketMQOptions.OPTIONAL_UNIT_MODE);
+        boolean unitMode = configuration.get(RocketMQOptions.OPTIONAL_UNIT_MODE);
         producer.setUnitMode(unitMode);
-        String unitName = configuration.getString(RocketMQOptions.OPTIONAL_UNIT_NAME);
+        String unitName = configuration.get(RocketMQOptions.OPTIONAL_UNIT_NAME);
         if (unitName != null) {
             producer.setUnitName(unitName);
         }
         if (configuration.contains(RocketMQOptions.CLIENT_CALLBACK_EXECUTOR_THREADS)) {
             producer.setClientCallbackExecutorThreads(
-                    configuration.getInteger(RocketMQOptions.CLIENT_CALLBACK_EXECUTOR_THREADS));
+                    configuration.get(RocketMQOptions.CLIENT_CALLBACK_EXECUTOR_THREADS));
         }
         if (configuration.contains(RocketMQOptions.USE_TLS)) {
-            producer.setUseTLS(configuration.getBoolean(RocketMQOptions.USE_TLS));
+            producer.setUseTLS(configuration.get(RocketMQOptions.USE_TLS));
         }
         if (configuration.contains(RocketMQOptions.MQ_CLIENT_API_TIMEOUT)) {
             producer.setMqClientApiTimeout(
-                    (int) configuration.getLong(RocketMQOptions.MQ_CLIENT_API_TIMEOUT));
+                    configuration.get(RocketMQOptions.MQ_CLIENT_API_TIMEOUT).intValue());
         }
-        boolean debugMode = configuration.getBoolean(RocketMQOptions.GLOBAL_DEBUG_MODE);
+        boolean debugMode = configuration.get(RocketMQOptions.GLOBAL_DEBUG_MODE);
         if (debugMode) {
             System.setProperty(
                     "rocketmq.client.logRoot",

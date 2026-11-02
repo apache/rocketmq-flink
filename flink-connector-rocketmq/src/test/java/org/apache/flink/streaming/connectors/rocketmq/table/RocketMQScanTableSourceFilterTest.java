@@ -19,7 +19,8 @@
 package org.apache.flink.streaming.connectors.rocketmq.table;
 
 import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.Column;
+import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.descriptors.DescriptorProperties;
 
 import org.junit.jupiter.api.Test;
@@ -32,11 +33,10 @@ class RocketMQScanTableSourceFilterTest {
     @Test
     void tagFilterShouldBePreservedOnCopy() {
         DescriptorProperties props = new DescriptorProperties();
-        TableSchema schema =
-                TableSchema.builder()
-                        .field("id", DataTypes.BIGINT())
-                        .field("name", DataTypes.STRING())
-                        .build();
+        ResolvedSchema schema =
+                ResolvedSchema.of(
+                        Column.physical("id", DataTypes.BIGINT()),
+                        Column.physical("name", DataTypes.STRING()));
 
         RocketMQScanTableSource source =
                 new RocketMQScanTableSource(
@@ -55,8 +55,7 @@ class RocketMQScanTableSourceFilterTest {
                         -1L,
                         10000L,
                         "latest",
-                        -1L,
-                        true);
+                        -1L);
 
         RocketMQScanTableSource copy = (RocketMQScanTableSource) source.copy();
         assertThat(copy).isNotNull();
@@ -66,7 +65,7 @@ class RocketMQScanTableSourceFilterTest {
     @Test
     void sqlFilterShouldBePreservedOnCopy() {
         DescriptorProperties props = new DescriptorProperties();
-        TableSchema schema = TableSchema.builder().field("id", DataTypes.BIGINT()).build();
+        ResolvedSchema schema = ResolvedSchema.of(Column.physical("id", DataTypes.BIGINT()));
 
         RocketMQScanTableSource source =
                 new RocketMQScanTableSource(
@@ -85,8 +84,7 @@ class RocketMQScanTableSourceFilterTest {
                         -1L,
                         10000L,
                         "latest",
-                        -1L,
-                        true);
+                        -1L);
 
         RocketMQScanTableSource copy = (RocketMQScanTableSource) source.copy();
         assertThat(copy).isNotNull();
@@ -96,7 +94,7 @@ class RocketMQScanTableSourceFilterTest {
     void wildcardTagShouldMatchAllMessages() {
         // "*" is the default tag and should not filter any messages
         DescriptorProperties props = new DescriptorProperties();
-        TableSchema schema = TableSchema.builder().field("id", DataTypes.BIGINT()).build();
+        ResolvedSchema schema = ResolvedSchema.of(Column.physical("id", DataTypes.BIGINT()));
 
         RocketMQScanTableSource source =
                 new RocketMQScanTableSource(
@@ -115,8 +113,7 @@ class RocketMQScanTableSourceFilterTest {
                         -1L,
                         10000L,
                         "latest",
-                        -1L,
-                        true);
+                        -1L);
 
         assertThat(source).isNotNull();
     }

@@ -74,11 +74,11 @@ public class InnerConsumerImpl implements InnerConsumer {
         this.configuration = configuration;
         this.commonExecutorService = buildExecutorService(configuration);
 
-        String accessKey = configuration.getString(RocketMQSourceOptions.OPTIONAL_ACCESS_KEY);
-        String secretKey = configuration.getString(RocketMQSourceOptions.OPTIONAL_SECRET_KEY);
+        String accessKey = configuration.get(RocketMQSourceOptions.OPTIONAL_ACCESS_KEY);
+        String secretKey = configuration.get(RocketMQSourceOptions.OPTIONAL_SECRET_KEY);
 
-        boolean enableTrace = configuration.getBoolean(RocketMQSourceOptions.ENABLE_MESSAGE_TRACE);
-        String traceTopic = configuration.getString(RocketMQSourceOptions.CUSTOMIZED_TRACE_TOPIC);
+        boolean enableTrace = configuration.get(RocketMQSourceOptions.ENABLE_MESSAGE_TRACE);
+        String traceTopic = configuration.get(RocketMQSourceOptions.CUSTOMIZED_TRACE_TOPIC);
 
         // Note: sync pull thread num may not enough
         if (!StringUtils.isNullOrWhitespaceOnly(accessKey)
@@ -97,8 +97,8 @@ public class InnerConsumerImpl implements InnerConsumer {
             this.consumer.setCustomizedTraceTopic(traceTopic);
         }
 
-        String groupId = configuration.getString(RocketMQSourceOptions.CONSUMER_GROUP);
-        String endPoints = configuration.getString(RocketMQSourceOptions.ENDPOINTS);
+        String groupId = configuration.get(RocketMQSourceOptions.CONSUMER_GROUP);
+        String endPoints = configuration.get(RocketMQSourceOptions.ENDPOINTS);
 
         this.consumer.setNamesrvAddr(endPoints);
         this.consumer.setConsumerGroup(groupId);
@@ -110,68 +110,66 @@ public class InnerConsumerImpl implements InnerConsumer {
                         groupId,
                         UUID.randomUUID().toString()));
 
-        long pullBatchSize = configuration.getLong(RocketMQSourceOptions.PULL_BATCH_SIZE);
+        long pullBatchSize = configuration.get(RocketMQSourceOptions.PULL_BATCH_SIZE);
         if (pullBatchSize > 0) {
             this.consumer.setPullBatchSize((int) pullBatchSize);
         }
-        long pullTimeoutMillis = configuration.getLong(RocketMQSourceOptions.PULL_TIMEOUT_MILLIS);
+        long pullTimeoutMillis = configuration.get(RocketMQSourceOptions.PULL_TIMEOUT_MILLIS);
         if (pullTimeoutMillis > 0) {
             this.consumer.setConsumerPullTimeoutMillis(pullTimeoutMillis);
         }
 
-        String namespace = configuration.getString(RocketMQOptions.NAMESPACE);
+        String namespace = configuration.get(RocketMQOptions.NAMESPACE);
         if (namespace != null && !namespace.isEmpty()) {
             this.consumer.setNamespace(namespace);
         }
 
         // Offsets are driven by Flink checkpoints; the client side auto-commit below only affects
         // what broker side consumer progress reports.
-        boolean autoCommit = configuration.getBoolean(RocketMQSourceOptions.AUTO_COMMIT_OFFSET);
-        long commitInterval =
-                configuration.getLong(RocketMQSourceOptions.AUTO_COMMIT_OFFSET_INTERVAL);
+        boolean autoCommit = configuration.get(RocketMQSourceOptions.AUTO_COMMIT_OFFSET);
+        long commitInterval = configuration.get(RocketMQSourceOptions.AUTO_COMMIT_OFFSET_INTERVAL);
         this.consumer.setAutoCommit(autoCommit);
         this.consumer.setAutoCommitIntervalMillis(commitInterval);
         LOG.info(
                 "Consumer offset commit config: autoCommit={}, commitInterval={}ms, checkpointCommit={}",
                 autoCommit,
                 commitInterval,
-                configuration.getBoolean(RocketMQSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT));
+                configuration.get(RocketMQSourceOptions.COMMIT_OFFSETS_ON_CHECKPOINT));
 
         if (configuration.contains(RocketMQOptions.OPTIONAL_ACCESS_CHANNEL)) {
             this.consumer.setAccessChannel(
                     configuration.get(RocketMQOptions.OPTIONAL_ACCESS_CHANNEL));
         }
-        boolean unitMode = configuration.getBoolean(RocketMQOptions.OPTIONAL_UNIT_MODE);
+        boolean unitMode = configuration.get(RocketMQOptions.OPTIONAL_UNIT_MODE);
         this.consumer.setUnitMode(unitMode);
-        String unitName = configuration.getString(RocketMQOptions.OPTIONAL_UNIT_NAME);
+        String unitName = configuration.get(RocketMQOptions.OPTIONAL_UNIT_NAME);
         if (unitName != null) {
             this.consumer.setUnitName(unitName);
         }
         if (configuration.contains(RocketMQOptions.CLIENT_CALLBACK_EXECUTOR_THREADS)) {
             this.consumer.setClientCallbackExecutorThreads(
-                    configuration.getInteger(RocketMQOptions.CLIENT_CALLBACK_EXECUTOR_THREADS));
+                    configuration.get(RocketMQOptions.CLIENT_CALLBACK_EXECUTOR_THREADS));
         }
         if (configuration.contains(RocketMQOptions.USE_TLS)) {
-            this.consumer.setUseTLS(configuration.getBoolean(RocketMQOptions.USE_TLS));
+            this.consumer.setUseTLS(configuration.get(RocketMQOptions.USE_TLS));
         }
         if (configuration.contains(RocketMQOptions.MQ_CLIENT_API_TIMEOUT)) {
             this.consumer.setMqClientApiTimeout(
-                    (int) configuration.getLong(RocketMQOptions.MQ_CLIENT_API_TIMEOUT));
+                    configuration.get(RocketMQOptions.MQ_CLIENT_API_TIMEOUT).intValue());
         }
         if (configuration.contains(RocketMQSourceOptions.PULL_THRESHOLD_FOR_QUEUE)) {
             this.consumer.setPullThresholdForQueue(
-                    (int) configuration.getLong(RocketMQSourceOptions.PULL_THRESHOLD_FOR_QUEUE));
+                    configuration.get(RocketMQSourceOptions.PULL_THRESHOLD_FOR_QUEUE).intValue());
         }
         if (configuration.contains(RocketMQSourceOptions.PULL_THRESHOLD_FOR_ALL)) {
             this.consumer.setPullThresholdForAll(
-                    (int) configuration.getLong(RocketMQSourceOptions.PULL_THRESHOLD_FOR_ALL));
+                    configuration.get(RocketMQSourceOptions.PULL_THRESHOLD_FOR_ALL).intValue());
         }
         if (configuration.contains(RocketMQSourceOptions.PULL_TIME_DELAY_MILLS_WHEN_EXCEPTION)) {
             this.consumer.setPullTimeDelayMillsWhenException(
-                    configuration.getLong(
-                            RocketMQSourceOptions.PULL_TIME_DELAY_MILLS_WHEN_EXCEPTION));
+                    configuration.get(RocketMQSourceOptions.PULL_TIME_DELAY_MILLS_WHEN_EXCEPTION));
         }
-        boolean debugMode = configuration.getBoolean(RocketMQOptions.GLOBAL_DEBUG_MODE);
+        boolean debugMode = configuration.get(RocketMQOptions.GLOBAL_DEBUG_MODE);
         if (debugMode) {
             System.setProperty(
                     "rocketmq.client.logRoot",
@@ -190,11 +188,11 @@ public class InnerConsumerImpl implements InnerConsumer {
             this.adminExt.setNamespace(namespace);
         }
         if (configuration.contains(RocketMQOptions.USE_TLS)) {
-            this.adminExt.setUseTLS(configuration.getBoolean(RocketMQOptions.USE_TLS));
+            this.adminExt.setUseTLS(configuration.get(RocketMQOptions.USE_TLS));
         }
         if (configuration.contains(RocketMQOptions.MQ_CLIENT_API_TIMEOUT)) {
             this.adminExt.setMqClientApiTimeout(
-                    (int) configuration.getLong(RocketMQOptions.MQ_CLIENT_API_TIMEOUT));
+                    configuration.get(RocketMQOptions.MQ_CLIENT_API_TIMEOUT).intValue());
         }
         this.adminExt.setInstanceName(
                 String.join(
@@ -228,8 +226,7 @@ public class InnerConsumerImpl implements InnerConsumer {
 
     private ExecutorService buildExecutorService(Configuration configuration) {
         int processors = Runtime.getRuntime().availableProcessors();
-        int threadNum =
-                configuration.getInteger(RocketMQSourceOptions.PULL_THREADS_NUM, processors);
+        int threadNum = configuration.get(RocketMQSourceOptions.PULL_THREADS_NUM, processors);
         return new ThreadPoolExecutor(
                 threadNum,
                 threadNum,
@@ -241,7 +238,7 @@ public class InnerConsumerImpl implements InnerConsumer {
 
     @Override
     public String getConsumerGroup() {
-        return configuration.getString(RocketMQSourceOptions.CONSUMER_GROUP);
+        return configuration.get(RocketMQSourceOptions.CONSUMER_GROUP);
     }
 
     @Override

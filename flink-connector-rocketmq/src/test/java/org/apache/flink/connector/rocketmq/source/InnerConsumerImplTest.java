@@ -49,9 +49,9 @@ class InnerConsumerImplTest {
     @Test
     void pullBatchSizeShouldBeAppliedToConsumer() throws Exception {
         Configuration config = new Configuration();
-        config.setString(RocketMQSourceOptions.ENDPOINTS, "127.0.0.1:9876");
-        config.setString(RocketMQSourceOptions.CONSUMER_GROUP, "test-group");
-        config.setLong(RocketMQSourceOptions.PULL_BATCH_SIZE, 64L);
+        config.set(RocketMQSourceOptions.ENDPOINTS, "127.0.0.1:9876");
+        config.set(RocketMQSourceOptions.CONSUMER_GROUP, "test-group");
+        config.set(RocketMQSourceOptions.PULL_BATCH_SIZE, 64L);
 
         try (InnerConsumerImpl impl = new InnerConsumerImpl(config)) {
             DefaultLitePullConsumer consumer = getConsumerViaReflection(impl);
@@ -62,8 +62,8 @@ class InnerConsumerImplTest {
     @Test
     void defaultPullBatchSizeShouldBe32() throws Exception {
         Configuration config = new Configuration();
-        config.setString(RocketMQSourceOptions.ENDPOINTS, "127.0.0.1:9876");
-        config.setString(RocketMQSourceOptions.CONSUMER_GROUP, "test-group");
+        config.set(RocketMQSourceOptions.ENDPOINTS, "127.0.0.1:9876");
+        config.set(RocketMQSourceOptions.CONSUMER_GROUP, "test-group");
 
         try (InnerConsumerImpl impl = new InnerConsumerImpl(config)) {
             DefaultLitePullConsumer consumer = getConsumerViaReflection(impl);
@@ -74,9 +74,9 @@ class InnerConsumerImplTest {
     @Test
     void namespaceConfigShouldBeReadable() throws Exception {
         Configuration config = new Configuration();
-        config.setString(RocketMQSourceOptions.ENDPOINTS, "127.0.0.1:9876");
-        config.setString(RocketMQSourceOptions.CONSUMER_GROUP, "test-group");
-        config.setString(RocketMQOptions.NAMESPACE, "my-namespace");
+        config.set(RocketMQSourceOptions.ENDPOINTS, "127.0.0.1:9876");
+        config.set(RocketMQSourceOptions.CONSUMER_GROUP, "test-group");
+        config.set(RocketMQOptions.NAMESPACE, "my-namespace");
 
         try (InnerConsumerImpl impl = new InnerConsumerImpl(config)) {
 
@@ -151,8 +151,8 @@ class InnerConsumerImplTest {
 
     private InnerConsumerImpl mockedConsumer(DefaultLitePullConsumer consumer) throws Exception {
         Configuration config = new Configuration();
-        config.setString(RocketMQSourceOptions.ENDPOINTS, "127.0.0.1:9876");
-        config.setString(RocketMQSourceOptions.CONSUMER_GROUP, "test-group");
+        config.set(RocketMQSourceOptions.ENDPOINTS, "127.0.0.1:9876");
+        config.set(RocketMQSourceOptions.CONSUMER_GROUP, "test-group");
         InnerConsumerImpl impl = new InnerConsumerImpl(config);
         Field field = InnerConsumerImpl.class.getDeclaredField("consumer");
         field.setAccessible(true);

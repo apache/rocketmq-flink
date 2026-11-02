@@ -63,26 +63,24 @@ class RocketMQParameterChainTest {
         Configuration config = new Configuration();
 
         // P0 Source options
-        config.setString(RocketMQSourceOptions.OPTIONAL_TAG, "TagA");
-        config.setString(RocketMQSourceOptions.OPTIONAL_SQL, "region = 'hangzhou'");
+        config.set(RocketMQSourceOptions.OPTIONAL_TAG, "TagA");
+        config.set(RocketMQSourceOptions.OPTIONAL_SQL, "region = 'hangzhou'");
 
         // P1 Source options
-        config.setLong(RocketMQSourceOptions.PULL_BATCH_SIZE, 64L);
-        config.setBoolean(RocketMQSourceOptions.ENABLE_MESSAGE_TRACE, true);
-        config.setString(RocketMQSourceOptions.CUSTOMIZED_TRACE_TOPIC, "my-trace");
+        config.set(RocketMQSourceOptions.PULL_BATCH_SIZE, 64L);
+        config.set(RocketMQSourceOptions.ENABLE_MESSAGE_TRACE, true);
+        config.set(RocketMQSourceOptions.CUSTOMIZED_TRACE_TOPIC, "my-trace");
 
         // P2 Common options
-        config.setString(RocketMQOptions.NAMESPACE, "my-ns");
+        config.set(RocketMQOptions.NAMESPACE, "my-ns");
 
         // Verify all values preserved
-        assertThat(config.getString(RocketMQSourceOptions.OPTIONAL_TAG)).isEqualTo("TagA");
-        assertThat(config.getString(RocketMQSourceOptions.OPTIONAL_SQL))
-                .isEqualTo("region = 'hangzhou'");
-        assertThat(config.getLong(RocketMQSourceOptions.PULL_BATCH_SIZE)).isEqualTo(64L);
-        assertThat(config.getBoolean(RocketMQSourceOptions.ENABLE_MESSAGE_TRACE)).isTrue();
-        assertThat(config.getString(RocketMQSourceOptions.CUSTOMIZED_TRACE_TOPIC))
-                .isEqualTo("my-trace");
-        assertThat(config.getString(RocketMQOptions.NAMESPACE)).isEqualTo("my-ns");
+        assertThat(config.get(RocketMQSourceOptions.OPTIONAL_TAG)).isEqualTo("TagA");
+        assertThat(config.get(RocketMQSourceOptions.OPTIONAL_SQL)).isEqualTo("region = 'hangzhou'");
+        assertThat(config.get(RocketMQSourceOptions.PULL_BATCH_SIZE)).isEqualTo(64L);
+        assertThat(config.get(RocketMQSourceOptions.ENABLE_MESSAGE_TRACE)).isTrue();
+        assertThat(config.get(RocketMQSourceOptions.CUSTOMIZED_TRACE_TOPIC)).isEqualTo("my-trace");
+        assertThat(config.get(RocketMQOptions.NAMESPACE)).isEqualTo("my-ns");
     }
 
     @Test
@@ -90,17 +88,17 @@ class RocketMQParameterChainTest {
         Configuration config = new Configuration();
 
         // P0 Sink options
-        config.setLong(RocketMQSinkOptions.SEND_TIMEOUT, 8000L);
-        config.setInteger(RocketMQSinkOptions.SEND_RETRY_TIMES, 5);
-        config.setInteger(RocketMQSinkOptions.SEND_PENDING_MAX, 2000);
+        config.set(RocketMQSinkOptions.SEND_TIMEOUT, 8000L);
+        config.set(RocketMQSinkOptions.SEND_RETRY_TIMES, 5);
+        config.set(RocketMQSinkOptions.SEND_PENDING_MAX, 2000);
 
         // P1 Sink options
-        config.setLong(RocketMQSinkOptions.TRANSACTION_TIMEOUT, 600L);
+        config.set(RocketMQSinkOptions.TRANSACTION_TIMEOUT, 600L);
 
         // Verify all values preserved
-        assertThat(config.getLong(RocketMQSinkOptions.SEND_TIMEOUT)).isEqualTo(8000L);
-        assertThat(config.getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES)).isEqualTo(5);
-        assertThat(config.getInteger(RocketMQSinkOptions.SEND_PENDING_MAX)).isEqualTo(2000);
-        assertThat(config.getLong(RocketMQSinkOptions.TRANSACTION_TIMEOUT)).isEqualTo(600L);
+        assertThat(config.get(RocketMQSinkOptions.SEND_TIMEOUT)).isEqualTo(8000L);
+        assertThat(config.get(RocketMQSinkOptions.SEND_RETRY_TIMES)).isEqualTo(5);
+        assertThat(config.get(RocketMQSinkOptions.SEND_PENDING_MAX)).isEqualTo(2000);
+        assertThat(config.get(RocketMQSinkOptions.TRANSACTION_TIMEOUT)).isEqualTo(600L);
     }
 }

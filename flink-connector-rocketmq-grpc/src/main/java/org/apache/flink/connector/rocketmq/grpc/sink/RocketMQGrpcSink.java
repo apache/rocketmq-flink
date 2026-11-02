@@ -59,9 +59,14 @@ public class RocketMQGrpcSink<IN> implements Sink<IN> {
                 context.asSerializationSchemaInitializationContext());
     }
 
-    @Deprecated
+    /**
+     * Flink 1.x still declares the deprecated {@link Sink.InitContext} overload abstract. The 1.x
+     * runtime calls {@link #createWriter(WriterInitContext)}; this bridge serves callers that pass
+     * the old context type.
+     */
     @Override
-    public SinkWriter<IN> createWriter(InitContext context) throws IOException {
+    @Deprecated
+    public SinkWriter<IN> createWriter(Sink.InitContext context) throws IOException {
         return new RocketMQGrpcSinkWriter<>(
                 configuration,
                 serializationSchema,

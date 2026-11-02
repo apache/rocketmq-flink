@@ -18,7 +18,8 @@
 package org.apache.flink.streaming.connectors.rocketmq.table;
 
 import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.Column;
+import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.source.ScanTableSource;
 import org.apache.flink.table.connector.source.SourceProvider;
 import org.apache.flink.table.descriptors.DescriptorProperties;
@@ -37,7 +38,7 @@ class RocketMQScanTableSourceTest {
     @Test
     void scanRuntimeProviderWithNewApiShouldReturnSourceProviderTest() {
         DescriptorProperties properties = createBaseProperties();
-        TableSchema schema = createTableSchema();
+        ResolvedSchema schema = createResolvedSchema();
 
         RocketMQScanTableSource tableSource =
                 new RocketMQScanTableSource(
@@ -56,8 +57,7 @@ class RocketMQScanTableSourceTest {
                         -1L, // startTime
                         10000L, // partitionDiscoveryIntervalMs
                         "latest", // consumerOffsetMode
-                        System.currentTimeMillis(), // consumerOffsetTimestamp
-                        true); // useNewApi
+                        System.currentTimeMillis()); // consumerOffsetTimestamp
 
         ScanTableSource.ScanRuntimeProvider provider =
                 tableSource.getScanRuntimeProvider(ScanRuntimeProviderContext.INSTANCE);
@@ -68,7 +68,7 @@ class RocketMQScanTableSourceTest {
     @Test
     void scanRuntimeProviderWithNewApiAndBoundedShouldSucceedTest() {
         DescriptorProperties properties = createBaseProperties();
-        TableSchema schema = createTableSchema();
+        ResolvedSchema schema = createResolvedSchema();
 
         long stopTime = System.currentTimeMillis() + 3600000L;
 
@@ -89,8 +89,7 @@ class RocketMQScanTableSourceTest {
                         -1L,
                         10000L,
                         "latest",
-                        System.currentTimeMillis(),
-                        true);
+                        System.currentTimeMillis());
 
         ScanTableSource.ScanRuntimeProvider provider =
                 tableSource.getScanRuntimeProvider(ScanRuntimeProviderContext.INSTANCE);
@@ -101,7 +100,7 @@ class RocketMQScanTableSourceTest {
     @Test
     void scanRuntimeProviderWithNewApiAndEarliestOffsetShouldSucceedTest() {
         DescriptorProperties properties = createBaseProperties();
-        TableSchema schema = createTableSchema();
+        ResolvedSchema schema = createResolvedSchema();
 
         RocketMQScanTableSource tableSource =
                 new RocketMQScanTableSource(
@@ -120,8 +119,7 @@ class RocketMQScanTableSourceTest {
                         -1L,
                         10000L,
                         "earliest",
-                        System.currentTimeMillis(),
-                        true);
+                        System.currentTimeMillis());
 
         ScanTableSource.ScanRuntimeProvider provider =
                 tableSource.getScanRuntimeProvider(ScanRuntimeProviderContext.INSTANCE);
@@ -132,7 +130,7 @@ class RocketMQScanTableSourceTest {
     @Test
     void scanRuntimeProviderWithNewApiAndTimestampOffsetShouldSucceedTest() {
         DescriptorProperties properties = createBaseProperties();
-        TableSchema schema = createTableSchema();
+        ResolvedSchema schema = createResolvedSchema();
 
         long timestamp = 1700000000000L;
 
@@ -153,8 +151,7 @@ class RocketMQScanTableSourceTest {
                         timestamp,
                         10000L,
                         "timestamp",
-                        timestamp,
-                        true);
+                        timestamp);
 
         ScanTableSource.ScanRuntimeProvider provider =
                 tableSource.getScanRuntimeProvider(ScanRuntimeProviderContext.INSTANCE);
@@ -170,14 +167,12 @@ class RocketMQScanTableSourceTest {
         props.put("rocketmq.client.endpoints", "127.0.0.1:9876");
         DescriptorProperties descriptorProperties = new DescriptorProperties();
         descriptorProperties.putProperties(props);
-        descriptorProperties.putTableSchema("schema", createTableSchema());
         return descriptorProperties;
     }
 
-    private TableSchema createTableSchema() {
-        return TableSchema.builder()
-                .field("id", DataTypes.BIGINT())
-                .field("name", DataTypes.STRING())
-                .build();
+    private ResolvedSchema createResolvedSchema() {
+        return ResolvedSchema.of(
+                Column.physical("id", DataTypes.BIGINT()),
+                Column.physical("name", DataTypes.STRING()));
     }
 }

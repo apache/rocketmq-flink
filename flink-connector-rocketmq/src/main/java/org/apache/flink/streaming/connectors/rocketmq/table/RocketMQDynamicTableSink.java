@@ -25,7 +25,7 @@ import org.apache.flink.connector.rocketmq.sink.RocketMQSink;
 import org.apache.flink.connector.rocketmq.sink.RocketMQSinkBuilder;
 import org.apache.flink.connector.rocketmq.sink.RocketMQSinkOptions;
 import org.apache.flink.table.api.DataTypes;
-import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.ResolvedSchema;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.SinkV2Provider;
@@ -46,7 +46,7 @@ import java.util.stream.Stream;
 public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWritingMetadata {
 
     private final DescriptorProperties properties;
-    private final TableSchema schema;
+    private final ResolvedSchema schema;
 
     private final String topic;
     private final String producerGroup;
@@ -77,7 +77,7 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
 
     public RocketMQDynamicTableSink(
             DescriptorProperties properties,
-            TableSchema schema,
+            ResolvedSchema schema,
             String topic,
             String producerGroup,
             String nameServerAddress,
@@ -122,7 +122,7 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
 
     public RocketMQDynamicTableSink(
             DescriptorProperties properties,
-            TableSchema schema,
+            ResolvedSchema schema,
             String topic,
             String producerGroup,
             String nameServerAddress,
@@ -198,12 +198,12 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
         }
 
         Configuration sinkConfig = new Configuration();
-        sinkConfig.setString(RocketMQSinkOptions.DELIVERY_GUARANTEE, deliveryGuarantee);
-        sinkConfig.setInteger(RocketMQSinkOptions.SEND_RETRY_TIMES, sendRetryTimes);
-        sinkConfig.setLong(RocketMQSinkOptions.SEND_TIMEOUT, sendTimeout);
-        sinkConfig.setInteger(RocketMQSinkOptions.SEND_PENDING_MAX, sendPendingMax);
-        sinkConfig.setInteger(RocketMQSinkOptions.EXECUTOR_NUM, executorNum);
-        sinkConfig.setLong(RocketMQSinkOptions.OPTIONAL_WRITE_SLEEP_TIME_MS, sleepTime);
+        sinkConfig.set(RocketMQSinkOptions.DELIVERY_GUARANTEE, deliveryGuarantee);
+        sinkConfig.set(RocketMQSinkOptions.SEND_RETRY_TIMES, sendRetryTimes);
+        sinkConfig.set(RocketMQSinkOptions.SEND_TIMEOUT, sendTimeout);
+        sinkConfig.set(RocketMQSinkOptions.SEND_PENDING_MAX, sendPendingMax);
+        sinkConfig.set(RocketMQSinkOptions.EXECUTOR_NUM, executorNum);
+        sinkConfig.set(RocketMQSinkOptions.OPTIONAL_WRITE_SLEEP_TIME_MS, sleepTime);
         sinkBuilder.setConfig(sinkConfig);
 
         return SinkV2Provider.of(sinkBuilder.build());
@@ -265,7 +265,7 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
                                     if (pos < 0) {
                                         return -1;
                                     }
-                                    return schema.getFieldCount() + pos;
+                                    return schema.getColumnCount() + pos;
                                 })
                         .toArray();
         return new RocketMQRowDataConverter(
@@ -278,8 +278,10 @@ public class RocketMQDynamicTableSink implements DynamicTableSink, SupportsWriti
                 isDynamicTagIncluded,
                 writeKeysToBody,
                 keyColumns,
-                convertToRowTypeInfo(schema.toRowDataType(), schema.getFieldNames()),
-                schema.getFieldDataTypes(),
+                convertToRowTypeInfo(
+                        schema.toSinkRowDataType(),
+                        schema.getColumnNames().toArray(new String[0])),
+                schema.getColumnDataTypes().toArray(new DataType[0]),
                 metadataKeys.size() > 0,
                 metadataPositions);
     }
