@@ -79,12 +79,13 @@ class RocketMQWriterQueueSelectorTest {
         Configuration configuration = new Configuration();
         configuration.setString(
                 RocketMQSinkOptions.DELIVERY_GUARANTEE, DeliveryGuarantee.AT_LEAST_ONCE.name());
+        Sink.InitContext initContext = Mockito.mock(Sink.InitContext.class);
+        Mockito.when(initContext.metricGroup())
+                .thenReturn(
+                        org.apache.flink.metrics.groups.UnregisteredMetricsGroup
+                                .createSinkWriterMetricGroup());
         return new RocketMQWriter<>(
-                configuration,
-                selector,
-                new StringToMessageSchema(),
-                Mockito.mock(Sink.InitContext.class),
-                producer);
+                configuration, selector, new StringToMessageSchema(), initContext, producer);
     }
 
     /** Wraps the record into a message body so the send call can be inspected. */

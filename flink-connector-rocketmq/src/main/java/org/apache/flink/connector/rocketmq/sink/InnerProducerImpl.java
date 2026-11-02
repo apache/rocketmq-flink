@@ -29,6 +29,7 @@ import org.apache.rocketmq.acl.common.SessionCredentials;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.impl.factory.MQClientInstance;
 import org.apache.rocketmq.client.producer.LocalTransactionState;
+import org.apache.rocketmq.client.producer.SendCallback;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.client.producer.SendStatus;
 import org.apache.rocketmq.client.producer.TransactionListener;
@@ -60,6 +61,7 @@ public class InnerProducerImpl implements InnerProducer {
 
     private final Configuration configuration;
     private final TransactionMQProducer producer;
+    private final ThreadPoolExecutor asyncSenderExecutor;
     private MQClientInstance mqClientInstance;
 
     private final String endPoints;
@@ -92,6 +94,19 @@ public class InnerProducerImpl implements InnerProducer {
                         UUID.randomUUID().toString()));
 
         int corePoolSize = configuration.getInteger(RocketMQSinkOptions.EXECUTOR_NUM);
+        int pendingMax = configuration.getInteger(RocketMQSinkOptions.SEND_PENDING_MAX);
+        org.apache.flink.util.Preconditions.checkArgument(
+                corePoolSize > 0 && pendingMax > 0,
+                "executor.num and send.pending.max must be positive");
+        asyncSenderExecutor =
+                new ThreadPoolExecutor(
+                        corePoolSize,
+                        corePoolSize,
+                        100,
+                        TimeUnit.SECONDS,
+                        new ArrayBlockingQueue<>(pendingMax),
+                        r -> new Thread(r, groupId + "-async-send"));
+        producer.setAsyncSenderExecutor(asyncSenderExecutor);
         producer.setExecutorService(
                 new ThreadPoolExecutor(
                         corePoolSize,
@@ -208,42 +223,45 @@ public class InnerProducerImpl implements InnerProducer {
 
     @Override
     public CompletableFuture<SendResult> send(Message message) {
-        return CompletableFuture.supplyAsync(
-                () -> {
-                    try {
-                        SendResult sendResult = producer.send(message);
-                        LOG.debug(
-                                "Send message successfully, topic={}, messageId={}",
-                                message.getTopic(),
-                                sendResult.getMsgId());
-                        return sendResult;
-                    } catch (Exception e) {
-                        LOG.error("Failed to send message, topic={}", message.getTopic(), e);
-                        throw new RuntimeException(e);
-                    }
-                },
-                Runnable::run);
+        return send(message, null, null);
     }
 
     @Override
     public CompletableFuture<SendResult> send(
             Message message, MessageQueueSelector selector, Object arg) {
-        return CompletableFuture.supplyAsync(
-                () -> {
-                    try {
-                        SendResult sendResult = producer.send(message, selector, arg);
-                        LOG.debug(
-                                "Send message successfully, topic={}, messageId={}, queue={}",
-                                message.getTopic(),
-                                sendResult.getMsgId(),
-                                sendResult.getMessageQueue());
-                        return sendResult;
-                    } catch (Exception e) {
-                        LOG.error("Failed to send message, topic={}", message.getTopic(), e);
-                        throw new RuntimeException(e);
+        CompletableFuture<SendResult> future = new CompletableFuture<>();
+        SendCallback callback =
+                new SendCallback() {
+                    @Override
+                    public void onSuccess(SendResult result) {
+                        if (result.getSendStatus() == SendStatus.SEND_OK) {
+                            future.complete(result);
+                        } else {
+                            future.completeExceptionally(
+                                    new IllegalStateException(
+                                            "Send was not acknowledged: "
+                                                    + result.getSendStatus()));
+                        }
                     }
-                },
-                Runnable::run);
+
+                    @Override
+                    public void onException(Throwable throwable) {
+                        future.completeExceptionally(throwable);
+                    }
+                };
+        try {
+            if (selector == null) {
+                producer.send(message, callback);
+            } else {
+                producer.send(message, selector, arg, callback);
+            }
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            future.completeExceptionally(e);
+        }
+        return future;
     }
 
     @Override
@@ -463,7 +481,18 @@ public class InnerProducerImpl implements InnerProducer {
 
     @Override
     public void close() throws Exception {
-        if (producer != null) {
+        asyncSenderExecutor.shutdown();
+        try {
+            if (!asyncSenderExecutor.awaitTermination(
+                    producer.getSendMsgTimeout(), TimeUnit.MILLISECONDS)) {
+                asyncSenderExecutor.shutdownNow();
+                throw new IllegalStateException("Timed out stopping the async sender");
+            }
+        } catch (InterruptedException e) {
+            asyncSenderExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+            throw e;
+        } finally {
             String clientId = producer.getInstanceName();
             producer.shutdown();
             mqClientInstance = null;

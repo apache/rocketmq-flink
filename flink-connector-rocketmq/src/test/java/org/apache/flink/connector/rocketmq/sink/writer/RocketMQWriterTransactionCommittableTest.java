@@ -73,12 +73,13 @@ class RocketMQWriterTransactionCommittableTest {
         Configuration configuration = new Configuration();
         configuration.setString(
                 RocketMQSinkOptions.DELIVERY_GUARANTEE, DeliveryGuarantee.EXACTLY_ONCE.name());
+        Sink.InitContext initContext = Mockito.mock(Sink.InitContext.class);
+        Mockito.when(initContext.metricGroup())
+                .thenReturn(
+                        org.apache.flink.metrics.groups.UnregisteredMetricsGroup
+                                .createSinkWriterMetricGroup());
         return new RocketMQWriter<>(
-                configuration,
-                null,
-                new StringToMessageSchema(),
-                Mockito.mock(Sink.InitContext.class),
-                producer);
+                configuration, null, new StringToMessageSchema(), initContext, producer);
     }
 
     /** Wraps the record into a message body so the send call can be inspected. */

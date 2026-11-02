@@ -19,13 +19,22 @@ package org.apache.flink.connector.rocketmq.source;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.common.config.RocketMQOptions;
+import org.apache.flink.util.FlinkRuntimeException;
 
 import org.apache.rocketmq.client.consumer.DefaultLitePullConsumer;
+import org.apache.rocketmq.client.exception.MQClientException;
+import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /** Tests for verifying that configuration parameters are applied to the RocketMQ consumer. */
 class InnerConsumerImplTest {
@@ -73,5 +82,81 @@ class InnerConsumerImplTest {
 
             assertThat(impl).isNotNull(); // setNamespace verified by successful construction
         }
+    }
+
+    @Test
+    void seekRecoversFromTransportFailureTest() throws Exception {
+        DefaultLitePullConsumer consumer = mock(DefaultLitePullConsumer.class);
+        MessageQueue queue = new MessageQueue("topic", "broker", 0);
+        MQClientException failure =
+                new MQClientException("transport", new RemotingSendRequestException("broker"));
+        doThrow(failure).doThrow(failure).doNothing().when(consumer).seek(queue, 42L);
+
+        try (InnerConsumerImpl impl = mockedConsumer(consumer)) {
+            impl.seek(queue, 42L);
+            verify(consumer, times(3)).seek(queue, 42L);
+        }
+    }
+
+    @Test
+    void seekExhaustedTransportRetriesTest() throws Exception {
+        DefaultLitePullConsumer consumer = mock(DefaultLitePullConsumer.class);
+        MessageQueue queue = new MessageQueue("topic", "broker", 0);
+        MQClientException failure =
+                new MQClientException("transport", new RemotingSendRequestException("broker"));
+        doThrow(failure).when(consumer).seek(queue, 42L);
+
+        try (InnerConsumerImpl impl = mockedConsumer(consumer)) {
+            assertThatThrownBy(() -> impl.seek(queue, 42L))
+                    .isInstanceOf(FlinkRuntimeException.class)
+                    .hasCause(failure);
+            verify(consumer, times(3)).seek(queue, 42L);
+        }
+    }
+
+    @Test
+    void seekNonTransportFailureIsNotRetriedTest() throws Exception {
+        DefaultLitePullConsumer consumer = mock(DefaultLitePullConsumer.class);
+        MessageQueue queue = new MessageQueue("topic", "broker", 0);
+        MQClientException failure = new MQClientException(16, "permission denied");
+        doThrow(failure).when(consumer).seek(queue, 42L);
+
+        try (InnerConsumerImpl impl = mockedConsumer(consumer)) {
+            assertThatThrownBy(() -> impl.seek(queue, 42L))
+                    .isInstanceOf(FlinkRuntimeException.class)
+                    .hasCause(failure);
+            verify(consumer).seek(queue, 42L);
+        }
+    }
+
+    @Test
+    void seekRetryPreservesInterruptionTest() throws Exception {
+        DefaultLitePullConsumer consumer = mock(DefaultLitePullConsumer.class);
+        MessageQueue queue = new MessageQueue("topic", "broker", 0);
+        doThrow(new MQClientException("transport", new RemotingSendRequestException("broker")))
+                .when(consumer)
+                .seek(queue, 42L);
+
+        try (InnerConsumerImpl impl = mockedConsumer(consumer)) {
+            Thread.currentThread().interrupt();
+            assertThatThrownBy(() -> impl.seek(queue, 42L))
+                    .isInstanceOf(FlinkRuntimeException.class)
+                    .hasCauseInstanceOf(InterruptedException.class);
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            verify(consumer).seek(queue, 42L);
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    private InnerConsumerImpl mockedConsumer(DefaultLitePullConsumer consumer) throws Exception {
+        Configuration config = new Configuration();
+        config.setString(RocketMQSourceOptions.ENDPOINTS, "127.0.0.1:9876");
+        config.setString(RocketMQSourceOptions.CONSUMER_GROUP, "test-group");
+        InnerConsumerImpl impl = new InnerConsumerImpl(config);
+        Field field = InnerConsumerImpl.class.getDeclaredField("consumer");
+        field.setAccessible(true);
+        field.set(impl, consumer);
+        return impl;
     }
 }

@@ -36,6 +36,9 @@ import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.common.ThreadFactoryImpl;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageQueue;
+import org.apache.rocketmq.remoting.exception.RemotingConnectException;
+import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
+import org.apache.rocketmq.remoting.exception.RemotingTimeoutException;
 import org.apache.rocketmq.tools.admin.DefaultMQAdminExt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -300,14 +303,36 @@ public class InnerConsumerImpl implements InnerConsumer {
 
     @Override
     public void seek(MessageQueue messageQueue, long offset) {
-        try {
-            this.consumer.seek(messageQueue, offset);
-            LOG.info(
-                    "Consumer current offset has been reset, mq={}, next poll will start from offset={}",
-                    UtilAll.getQueueDescription(messageQueue),
-                    offset);
-        } catch (MQClientException e) {
-            throw new FlinkRuntimeException(e);
+        for (int attempt = 0; ; attempt++) {
+            try {
+                this.consumer.seek(messageQueue, offset);
+                LOG.info(
+                        "Consumer current offset has been reset, mq={}, next poll will start from offset={}",
+                        UtilAll.getQueueDescription(messageQueue),
+                        offset);
+                return;
+            } catch (MQClientException e) {
+                Throwable cause = e.getCause();
+                boolean transientFailure =
+                        cause instanceof RemotingConnectException
+                                || cause instanceof RemotingSendRequestException
+                                || cause instanceof RemotingTimeoutException;
+                if (!transientFailure || attempt >= 2) {
+                    throw new FlinkRuntimeException(e);
+                }
+                LOG.warn(
+                        "Retrying seek after a transport failure, mq={}, offset={}, retry={}",
+                        UtilAll.getQueueDescription(messageQueue),
+                        offset,
+                        attempt + 1,
+                        e);
+                try {
+                    Thread.sleep(100L);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new FlinkRuntimeException("Interrupted while retrying seek", interrupted);
+                }
+            }
         }
     }
 
