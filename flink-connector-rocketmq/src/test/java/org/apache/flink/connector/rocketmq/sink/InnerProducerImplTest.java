@@ -19,10 +19,16 @@ package org.apache.flink.connector.rocketmq.sink;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.rocketmq.sink.committer.SendCommittable;
+import org.apache.flink.streaming.connectors.rocketmq.common.selector.MessageQueueSelector;
 
+import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.impl.MQClientAPIImpl;
 import org.apache.rocketmq.client.impl.factory.MQClientInstance;
+import org.apache.rocketmq.client.producer.SendCallback;
+import org.apache.rocketmq.client.producer.SendResult;
+import org.apache.rocketmq.client.producer.SendStatus;
 import org.apache.rocketmq.client.producer.TransactionMQProducer;
+import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.remoting.exception.RemotingSendRequestException;
 import org.apache.rocketmq.remoting.netty.NettyRemotingClient;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
@@ -196,6 +202,115 @@ class InnerProducerImplTest {
             CompletableFuture<Void> future = impl.commit(committable("10.0.26.60:8080"));
             assertThat(future).isCompletedExceptionally();
         }
+    }
+
+    @Test
+    void plainSendCompletesOnlyOnCallbackTest() throws Exception {
+        TransactionMQProducer producer = Mockito.mock(TransactionMQProducer.class);
+        List<SendCallback> callbacks = new ArrayList<>();
+        Mockito.doAnswer(
+                        invocation -> {
+                            callbacks.add(invocation.getArgument(1));
+                            return null;
+                        })
+                .when(producer)
+                .send(Mockito.any(Message.class), Mockito.any(SendCallback.class));
+        try (InnerProducerImpl impl = mockedProducer(producer)) {
+            CompletableFuture<SendResult> first = impl.send(new Message("topic", new byte[4]));
+            CompletableFuture<SendResult> second = impl.send(new Message("topic", new byte[4]));
+            assertThat(first).isNotDone();
+            assertThat(second).isNotDone();
+            assertThat(callbacks).hasSize(2);
+            SendResult result = new SendResult();
+            result.setSendStatus(SendStatus.SEND_OK);
+            callbacks.get(1).onSuccess(result);
+            callbacks.get(0).onSuccess(result);
+            assertThat(first.get()).isSameAs(result);
+            assertThat(second.get()).isSameAs(result);
+            Mockito.verify(producer, Mockito.never()).send(Mockito.any(Message.class));
+        }
+    }
+
+    @Test
+    void selectorAsyncSendRetainsArgumentTest() throws Exception {
+        TransactionMQProducer producer = Mockito.mock(TransactionMQProducer.class);
+        Message message = new Message("topic", new byte[4]);
+        MessageQueueSelector selector = Mockito.mock(MessageQueueSelector.class);
+        Mockito.doAnswer(
+                        invocation -> {
+                            SendCallback callback = invocation.getArgument(3);
+                            callback.onException(new IllegalStateException("callback failure"));
+                            return null;
+                        })
+                .when(producer)
+                .send(
+                        Mockito.eq(message),
+                        Mockito.eq(selector),
+                        Mockito.eq("key"),
+                        Mockito.any(SendCallback.class));
+        try (InnerProducerImpl impl = mockedProducer(producer)) {
+            assertThat(impl.send(message, selector, "key")).isCompletedExceptionally();
+            Mockito.verify(producer)
+                    .send(
+                            Mockito.eq(message),
+                            Mockito.eq(selector),
+                            Mockito.eq("key"),
+                            Mockito.any(SendCallback.class));
+        }
+    }
+
+    @Test
+    void nonAcknowledgedSendFailsFutureTest() throws Exception {
+        TransactionMQProducer producer = Mockito.mock(TransactionMQProducer.class);
+        Mockito.doAnswer(
+                        invocation -> {
+                            SendResult result = new SendResult();
+                            result.setSendStatus(SendStatus.FLUSH_DISK_TIMEOUT);
+                            ((SendCallback) invocation.getArgument(1)).onSuccess(result);
+                            return null;
+                        })
+                .when(producer)
+                .send(Mockito.any(Message.class), Mockito.any(SendCallback.class));
+        try (InnerProducerImpl impl = mockedProducer(producer)) {
+            assertThat(impl.send(new Message("topic", new byte[4]))).isCompletedExceptionally();
+        }
+    }
+
+    @Test
+    void synchronousSubmissionErrorFailsFutureTest() throws Exception {
+        TransactionMQProducer producer = Mockito.mock(TransactionMQProducer.class);
+        Mockito.doThrow(new MQClientException("invalid topic", null))
+                .when(producer)
+                .send(Mockito.any(Message.class), Mockito.any(SendCallback.class));
+        try (InnerProducerImpl impl = mockedProducer(producer)) {
+            assertThat(impl.send(new Message("topic", new byte[4]))).isCompletedExceptionally();
+        }
+    }
+
+    @Test
+    void asyncSenderUsesConfiguredBoundAndClosesTest() throws Exception {
+        Configuration config = configuration();
+        config.setInteger(RocketMQSinkOptions.EXECUTOR_NUM, 2);
+        config.setInteger(RocketMQSinkOptions.SEND_PENDING_MAX, 16);
+        InnerProducerImpl impl = new InnerProducerImpl(config);
+        Field field = InnerProducerImpl.class.getDeclaredField("asyncSenderExecutor");
+        field.setAccessible(true);
+        java.util.concurrent.ThreadPoolExecutor executor =
+                (java.util.concurrent.ThreadPoolExecutor) field.get(impl);
+        assertThat(executor.getCorePoolSize()).isEqualTo(2);
+        assertThat(executor.getQueue().remainingCapacity()).isEqualTo(16);
+        impl.close();
+        assertThat(executor.isTerminated()).isTrue();
+    }
+
+    private static InnerProducerImpl mockedProducer(TransactionMQProducer producer)
+            throws Exception {
+        InnerProducerImpl impl = new InnerProducerImpl(configuration());
+        Field field = InnerProducerImpl.class.getDeclaredField("producer");
+        field.setAccessible(true);
+        field.set(impl, producer);
+        Mockito.when(producer.getSendMsgTimeout()).thenReturn(5000);
+        return impl;
     }
 
     private static Configuration configuration() {

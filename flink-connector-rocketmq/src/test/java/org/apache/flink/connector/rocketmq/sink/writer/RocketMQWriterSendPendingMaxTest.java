@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests that {@code send.pending.max} bounds the in-flight async sends. The option ships a
@@ -71,7 +72,93 @@ class RocketMQWriterSendPendingMaxTest {
         second.join(5000);
         assertThat(second.isAlive()).as("releasing the send must unblock the writer").isFalse();
         assertThat(producer.sends).hasSize(2);
+        producer.completeAll();
         writer.close();
+    }
+
+    @Test
+    @Timeout(10)
+    void failedCallbackUnblocksAndFailsWaitingWriteTest() throws Exception {
+        GatedProducer producer = new GatedProducer();
+        RocketMQWriter<String> writer = newWriter(producer, 1);
+        writer.write("first", null);
+        java.util.concurrent.atomic.AtomicReference<Throwable> error =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Thread waiting =
+                new Thread(
+                        () -> {
+                            try {
+                                writer.write("second", null);
+                            } catch (Exception e) {
+                                error.set(e);
+                            }
+                        });
+        waiting.start();
+        waiting.join(100);
+        assertThat(waiting.isAlive()).isTrue();
+        producer.sends.get(0).completeExceptionally(new IllegalStateException("send failed"));
+        waiting.join(2000);
+        assertThat(waiting.isAlive()).isFalse();
+        assertThat(error.get()).isInstanceOf(java.io.IOException.class);
+        assertThat(producer.sends).hasSize(1);
+        assertThatThrownBy(() -> writer.flush(false)).isInstanceOf(java.io.IOException.class);
+        assertThatThrownBy(() -> writer.write("third", null))
+                .isInstanceOf(java.io.IOException.class);
+        assertThatThrownBy(writer::close).isInstanceOf(java.io.IOException.class);
+    }
+
+    @Test
+    @Timeout(10)
+    void flushWaitsForAllCallbacksTest() throws Exception {
+        GatedProducer producer = new GatedProducer();
+        RocketMQWriter<String> writer = newWriter(producer, 2);
+        writer.write("first", null);
+        writer.write("second", null);
+        java.util.concurrent.atomic.AtomicBoolean finished =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        Thread flush =
+                new Thread(
+                        () -> {
+                            try {
+                                writer.flush(false);
+                                finished.set(true);
+                            } catch (Exception e) {
+                                throw new RuntimeException(e);
+                            }
+                        });
+        flush.start();
+        flush.join(100);
+        assertThat(finished.get()).isFalse();
+        producer.sends.get(1).complete(new SendResult());
+        flush.join(100);
+        assertThat(finished.get()).isFalse();
+        producer.sends.get(0).complete(new SendResult());
+        flush.join(2000);
+        assertThat(finished.get()).isTrue();
+        writer.close();
+    }
+
+    @Test
+    void submissionExceptionReturnsPermitTest() throws Exception {
+        InnerProducer producer = Mockito.mock(InnerProducer.class);
+        Mockito.when(producer.send(Mockito.any(Message.class)))
+                .thenThrow(new IllegalStateException("submission rejected"))
+                .thenReturn(CompletableFuture.completedFuture(new SendResult()));
+        Configuration config = new Configuration();
+        config.setInteger(RocketMQSinkOptions.SEND_PENDING_MAX, 1);
+        Sink.InitContext context = Mockito.mock(Sink.InitContext.class);
+        Mockito.when(context.metricGroup())
+                .thenReturn(
+                        org.apache.flink.metrics.groups.UnregisteredMetricsGroup
+                                .createSinkWriterMetricGroup());
+        RocketMQWriter<String> writer =
+                new RocketMQWriter<>(config, null, new StringToMessageSchema(), context, producer);
+        assertThatThrownBy(() -> writer.write("first", null))
+                .isInstanceOf(IllegalStateException.class);
+        writer.write("second", null);
+        writer.flush(false);
+        writer.close();
+        Mockito.verify(producer, Mockito.times(2)).send(Mockito.any(Message.class));
     }
 
     private static void uncheckedWrite(RocketMQWriter<String> writer, String record) {
@@ -87,12 +174,13 @@ class RocketMQWriterSendPendingMaxTest {
         configuration.setString(
                 RocketMQSinkOptions.DELIVERY_GUARANTEE, DeliveryGuarantee.AT_LEAST_ONCE.name());
         configuration.setInteger(RocketMQSinkOptions.SEND_PENDING_MAX, pendingMax);
+        Sink.InitContext initContext = Mockito.mock(Sink.InitContext.class);
+        Mockito.when(initContext.metricGroup())
+                .thenReturn(
+                        org.apache.flink.metrics.groups.UnregisteredMetricsGroup
+                                .createSinkWriterMetricGroup());
         return new RocketMQWriter<>(
-                configuration,
-                null,
-                new StringToMessageSchema(),
-                Mockito.mock(Sink.InitContext.class),
-                producer);
+                configuration, null, new StringToMessageSchema(), initContext, producer);
     }
 
     /** Wraps the record into a message body so the send call can be inspected. */

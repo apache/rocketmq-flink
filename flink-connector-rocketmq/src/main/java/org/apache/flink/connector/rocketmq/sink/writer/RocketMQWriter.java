@@ -66,6 +66,7 @@ public class RocketMQWriter<IN>
     private final Map<String, SendCommittable> committableMap;
     private final int sendRetryTimes;
     private final long sendSleepTimeMs;
+    private final long sendTimeoutMs;
     private final AtomicLong pendingRecords = new AtomicLong(0);
     /**
      * Bounds the in-flight async sends. {@code send.pending.max} was declared with exactly this
@@ -74,6 +75,7 @@ public class RocketMQWriter<IN>
     private final Semaphore sendPermits;
 
     private final AtomicReference<Throwable> asyncSendException = new AtomicReference<>();
+    private final SendCompletionMetrics sendCompletionMetrics = new SendCompletionMetrics();
 
     public RocketMQWriter(
             Configuration configuration,
@@ -102,8 +104,15 @@ public class RocketMQWriter<IN>
         this.sendRetryTimes = configuration.getInteger(RocketMQSinkOptions.SEND_RETRY_TIMES);
         this.sendSleepTimeMs =
                 configuration.getLong(RocketMQSinkOptions.OPTIONAL_WRITE_SLEEP_TIME_MS);
-        this.sendPermits =
-                new Semaphore(configuration.getInteger(RocketMQSinkOptions.SEND_PENDING_MAX));
+        this.sendTimeoutMs = configuration.getLong(RocketMQSinkOptions.SEND_TIMEOUT);
+        org.apache.flink.util.Preconditions.checkArgument(
+                sendTimeoutMs > 0, "send.timeout must be positive");
+        int pendingMax = configuration.getInteger(RocketMQSinkOptions.SEND_PENDING_MAX);
+        org.apache.flink.util.Preconditions.checkArgument(
+                pendingMax > 0, "send.pending.max must be positive");
+        this.sendPermits = new Semaphore(pendingMax);
+        initContext.metricGroup().gauge("sendCompletionRt", sendCompletionMetrics::snapshot);
+        initContext.metricGroup().gauge("sendPendingRecords", pendingRecords::get);
         try {
             serializationSchema.open(
                     initContext.asSerializationSchemaInitializationContext(), rocketmqSinkContext);
@@ -136,7 +145,14 @@ public class RocketMQWriter<IN>
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while waiting for send capacity", e);
         }
+        try {
+            checkAsyncException();
+        } catch (IOException e) {
+            sendPermits.release();
+            throw e;
+        }
         pendingRecords.incrementAndGet();
+        long sendStart = System.nanoTime();
         // The element is handed to the selector as its sharding argument, which is what lets a
         // HashMessageQueueSelector route records that share a key to the same queue.
         CompletableFuture<SendResult> sendFuture;
@@ -154,6 +170,7 @@ public class RocketMQWriter<IN>
         }
         sendFuture.whenComplete(
                 (sendResult, throwable) -> {
+                    sendCompletionMetrics.record(System.nanoTime() - sendStart, throwable == null);
                     if (throwable != null) {
                         asyncSendException.compareAndSet(null, throwable);
                     }
@@ -204,15 +221,23 @@ public class RocketMQWriter<IN>
 
     @Override
     public void flush(boolean endOfInput) throws IOException, InterruptedException {
+        long deadline =
+                System.nanoTime()
+                        + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(sendTimeoutMs);
         while (pendingRecords.get() > 0) {
             checkAsyncException();
+            if (System.nanoTime() >= deadline) {
+                IOException failure = new IOException("Timed out waiting for pending sends");
+                asyncSendException.compareAndSet(null, failure);
+                throw failure;
+            }
             Thread.sleep(10);
         }
         checkAsyncException();
     }
 
     private void checkAsyncException() throws IOException {
-        Throwable throwable = asyncSendException.getAndSet(null);
+        Throwable throwable = asyncSendException.get();
         if (throwable != null) {
             throw new IOException("Async send message failed", throwable);
         }
@@ -237,8 +262,36 @@ public class RocketMQWriter<IN>
 
     @Override
     public void close() throws Exception {
-        if (producer != null) {
+        try {
+            flush(true);
+        } finally {
             producer.close();
+        }
+    }
+
+    private static class SendCompletionMetrics {
+        private final long[] buckets = new long[1024];
+        private long count;
+        private long nanos;
+        private long failed;
+
+        synchronized void record(long duration, boolean success) {
+            if (!success) {
+                failed++;
+                return;
+            }
+            count++;
+            nanos += duration;
+            buckets[(int) Math.min(duration / 250_000L, buckets.length - 1L)]++;
+        }
+
+        synchronized String snapshot() {
+            StringBuilder value = new StringBuilder();
+            value.append(count).append(',').append(nanos).append(',').append(failed);
+            for (long bucket : buckets) {
+                value.append(',').append(bucket);
+            }
+            return value.toString();
         }
     }
 }
