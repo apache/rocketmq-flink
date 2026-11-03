@@ -467,7 +467,7 @@ class RocketMQGrpcITCase extends AbstractTestBase {
      */
     @SuppressWarnings("deprecation")
     private static class CollectingSinkFunction
-            extends org.apache.flink.streaming.api.functions.sink.RichSinkFunction<String> {
+            extends org.apache.flink.streaming.api.functions.sink.legacy.RichSinkFunction<String> {
 
         private static final long serialVersionUID = 1L;
 
