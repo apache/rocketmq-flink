@@ -18,6 +18,7 @@
 package org.apache.flink.connector.rocketmq.source.util;
 
 import org.apache.flink.table.data.DecimalData;
+import org.apache.flink.table.data.TimestampData;
 import org.apache.flink.table.data.binary.BinaryStringData;
 import org.apache.flink.table.data.util.DataFormatConverters;
 import org.apache.flink.table.data.util.DataFormatConverters.TimestampConverter;
@@ -29,6 +30,9 @@ import java.math.BigInteger;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Base64;
 import java.util.Set;
 
@@ -113,6 +117,17 @@ public class StringSerializer {
                         ? null
                         : DataFormatConverters.TimeConverter.INSTANCE.toInternal(
                                 new Time(Long.parseLong(value)));
+            case V_LocalDateTime: // java.time.LocalDateTime, ISO-8601 or a SQL timestamp literal
+                return null == value
+                        ? null
+                        : TimestampData.fromLocalDateTime(
+                                LocalDateTime.parse(value.trim().replace(' ', 'T')));
+            case V_LocalDate: // java.time.LocalDate encoded as days since epoch
+                return null == value ? null : (int) LocalDate.parse(value.trim()).toEpochDay();
+            case V_LocalTime: // java.time.LocalTime encoded as milliseconds of the day
+                return null == value
+                        ? null
+                        : (int) (LocalTime.parse(value.trim()).toNanoOfDay() / 1_000_000);
             case V_BigDecimal:
                 DecimalType decimalType = (DecimalType) dataType.getLogicalType();
                 return value == null
