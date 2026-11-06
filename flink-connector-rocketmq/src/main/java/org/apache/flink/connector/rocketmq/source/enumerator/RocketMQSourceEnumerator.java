@@ -83,6 +83,13 @@ public class RocketMQSourceEnumerator
 
     // Used for queue dynamic allocation
     private final Map<MessageQueue, Long> checkedOffsets;
+
+    // Last checkpointed offsets of revoked queues, retained so a queue that reappears (broker
+    // rolling restart, scale-down then scale-up) resumes from checkpointed progress instead of
+    // the configured starting selector. Coordinator-local; lost on failover, where the selector
+    // applies again.
+    private final Map<MessageQueue, Long> revokedQueueOffsets;
+
     private boolean[] initTask;
 
     // The internal states of the enumerator.
@@ -136,6 +143,7 @@ public class RocketMQSourceEnumerator
 
         // Support allocate splits to reader
         this.checkedOffsets = new ConcurrentHashMap<>();
+        this.revokedQueueOffsets = new ConcurrentHashMap<>();
         this.reflectedQueueToTaskId = new ConcurrentHashMap<>();
         this.pendingSplitAssignmentMap = new ConcurrentHashMap<>();
         this.allocatedSet = new ConcurrentHashMap<>();
@@ -258,7 +266,7 @@ public class RocketMQSourceEnumerator
 
     // ----------------- private methods -------------------
 
-    private Set<MessageQueue> requestServiceDiscovery() {
+    private ServiceDiscoveryResult requestServiceDiscovery() {
         // Ensure all subtasks have been initialized
         try {
             if (initTask != null) {
@@ -294,8 +302,9 @@ public class RocketMQSourceEnumerator
             // A failed fetch says nothing about the current route: the topic may be perfectly
             // healthy behind an unreachable nameserver. Reporting its queues as gone would
             // revoke and later re-initialize their splits (mass rebalance plus an offset
-            // rewind once the nameserver is back), so failed topics are excluded from this
-            // round instead, and a round where every topic failed is skipped entirely.
+            // rewind once the nameserver is back), so the coordinator excludes their queues
+            // from the decrease evaluation instead, and a round where every topic failed is
+            // skipped entirely.
             log.warn(
                     "Skipping partition decrease evaluation for topics whose route fetch failed: {}",
                     failedTopics);
@@ -303,17 +312,18 @@ public class RocketMQSourceEnumerator
                 return null;
             }
         }
-        return fetchedQueues;
+        return new ServiceDiscoveryResult(fetchedQueues, failedTopics);
     }
 
     // This method should only be invoked in the coordinator executor thread.
-    private void handleSourceQueueChange(Set<MessageQueue> latestSet, Throwable t) {
+    private void handleSourceQueueChange(ServiceDiscoveryResult discoveryResult, Throwable t) {
         if (t != null) {
             throw new FlinkRuntimeException("Failed to handle source splits change due to ", t);
         }
-        if (latestSet == null) {
+        if (discoveryResult == null) {
             return;
         }
+        Set<MessageQueue> latestSet = discoveryResult.queues;
         if (latestSet.isEmpty() && !allocatedSet.isEmpty()) {
             // An empty discovery result while queues are allocated is indistinguishable from
             // "every route fetch failed" and almost never a real route deletion; treating it
@@ -326,7 +336,8 @@ public class RocketMQSourceEnumerator
             return;
         }
 
-        final SourceChangeResult sourceChangeResult = getSourceChangeResult(latestSet);
+        final SourceChangeResult sourceChangeResult =
+                getSourceChangeResult(latestSet, discoveryResult.failedTopics);
         if (sourceChangeResult.isEmpty()) {
             log.debug("Skip handle source allocated due to not queue change");
             return;
@@ -346,8 +357,22 @@ public class RocketMQSourceEnumerator
         OffsetsSelector.MessageQueueOffsetsRetriever offsetsRetriever =
                 new InnerConsumerImpl.RemotingOffsetsRetrieverImpl(consumer);
 
-        Map<MessageQueue, Long> increaseStartingOffsets =
-                startingOffsetsSelector.getMessageQueueOffsets(increaseSet, offsetsRetriever);
+        // A reappearing queue resumes from its last checkpointed offset, the same rule the
+        // migration path applies to surviving queues; re-resolving with the configured
+        // selector (e.g. EARLIEST) would replay the whole queue. Only genuinely new queues
+        // go through the selector.
+        Map<MessageQueue, Long> increaseStartingOffsets = new HashMap<>();
+        Set<MessageQueue> unseenQueues = new HashSet<>();
+        for (MessageQueue mq : increaseSet) {
+            Long checkpointedOffset = revokedQueueOffsets.get(mq);
+            if (checkpointedOffset != null) {
+                increaseStartingOffsets.put(mq, checkpointedOffset);
+            } else {
+                unseenQueues.add(mq);
+            }
+        }
+        increaseStartingOffsets.putAll(
+                startingOffsetsSelector.getMessageQueueOffsets(unseenQueues, offsetsRetriever));
         Map<MessageQueue, Long> increaseStoppingOffsets =
                 stoppingOffsetsSelector.getMessageQueueOffsets(increaseSet, offsetsRetriever);
         Map<MessageQueue, Long> decreaseStoppingOffsets =
@@ -384,11 +409,18 @@ public class RocketMQSourceEnumerator
                                             decreaseStoppingOffsets.getOrDefault(
                                                     mq, RocketMQSourceSplit.NO_STOPPING_OFFSET);
                                     allocatedSet.remove(mq);
-                                    checkedOffsets.remove(mq);
+                                    Long lastCheckpointedOffset = checkedOffsets.remove(mq);
+                                    if (lastCheckpointedOffset != null
+                                            && lastCheckpointedOffset >= 0) {
+                                        revokedQueueOffsets.put(mq, lastCheckpointedOffset);
+                                    }
                                     return new RocketMQSourceSplit(
                                             mq, startingOffset, stoppingOffset, false);
                                 })
                         .collect(Collectors.toSet());
+
+        // The re-added queues are tracked in checkedOffsets again.
+        increaseSet.forEach(revokedQueueOffsets::remove);
 
         return new SourceSplitChangeResult(increaseSplitSet, decreaseSplitSet);
     }
@@ -686,6 +718,18 @@ public class RocketMQSourceEnumerator
         }
     }
 
+    /** The queues discovered in one round plus the topics whose route fetch failed. */
+    @VisibleForTesting
+    static class ServiceDiscoveryResult {
+        final Set<MessageQueue> queues;
+        final Set<String> failedTopics;
+
+        ServiceDiscoveryResult(Set<MessageQueue> queues, Set<String> failedTopics) {
+            this.queues = queues;
+            this.failedTopics = failedTopics;
+        }
+    }
+
     /** A container class to hold the newly added partitions and removed partitions. */
     @VisibleForTesting
     private static class SourceChangeResult {
@@ -737,12 +781,16 @@ public class RocketMQSourceEnumerator
     }
 
     @VisibleForTesting
-    private SourceChangeResult getSourceChangeResult(Set<MessageQueue> latestSet) {
+    private SourceChangeResult getSourceChangeResult(
+            Set<MessageQueue> latestSet, Set<String> failedTopics) {
         Set<MessageQueue> currentSet = Collections.unmodifiableSet(this.allocatedSet.keySet());
         Set<MessageQueue> increaseSet = new HashSet<>(latestSet);
         increaseSet.removeAll(currentSet);
         Set<MessageQueue> decreaseSet = new HashSet<>(currentSet);
         decreaseSet.removeAll(latestSet);
+        // A failed route fetch is no evidence that the topic's queues are gone: keep them
+        // allocated until a successful fetch shows they are really absent.
+        decreaseSet.removeIf(mq -> failedTopics.contains(mq.getTopic()));
 
         SourceChangeResult changeResult = new SourceChangeResult(increaseSet, decreaseSet);
 
